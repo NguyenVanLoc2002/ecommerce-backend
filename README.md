@@ -191,117 +191,95 @@ Các file cấu hình gợi ý:
 
 Dưới đây là cấu hình mẫu.
 
-**application.yml**
+**application.properties**
 
-```yaml
-server:
-  port: 8080
+```properties
+# SERVER
+server.port=8080
 
-spring:
-  application:
-    name: fashion-shop-backend
+# APP
+spring.application.name=fashion-shop-backend
+spring.profiles.active=dev
 
-  profiles:
-    active: dev
+# DATASOURCE
+spring.datasource.driver-class-name=org.mariadb.jdbc.Driver
 
-  datasource:
-    driver-class-name: org.mariadb.jdbc.Driver
+# JPA
+spring.jpa.open-in-view=false
+spring.jpa.hibernate.ddl-auto=validate
+spring.jpa.properties.hibernate.format_sql=true
 
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: validate
-    properties:
-      hibernate:
-        format_sql: true
+# FLYWAY
+spring.flyway.enabled=true
+spring.flyway.locations=classpath:db/migration
 
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
+# SWAGGER
+springdoc.api-docs.enabled=true
+springdoc.swagger-ui.enabled=true
 
-springdoc:
-  api-docs:
-    enabled: true
-  swagger-ui:
-    enabled: true
-
-logging:
-  level:
-    root: INFO
+# LOGGING
+logging.level.root=INFO
 ```
 
-**application-dev.yml**
+**application-dev.properties**
 
-```yaml
-server:
-  port: 8080
+```properties
+# SERVER
+server.port=8080
 
-spring:
-  datasource:
-    url: jdbc:mariadb://localhost:3306/fashion_shop_dev
-    username: root
-    password: your_password
+# DATABASE
+spring.datasource.url=jdbc:mariadb://localhost:3306/fashion_shop_dev
+spring.datasource.username=root
+spring.datasource.password=your_password
 
-  data:
-    redis:
-      host: localhost
-      port: 6379
+# REDIS
+spring.data.redis.host=localhost
+spring.data.redis.port=6379
 
-  jpa:
-    show-sql: true
+# JPA
+spring.jpa.show-sql=true
 
-logging:
-  level:
-    org.hibernate.SQL: DEBUG
-    org.springframework.security: INFO
+# LOGGING
+logging.level.org.hibernate.SQL=DEBUG
+logging.level.org.springframework.security=INFO
 
-app:
-  cors:
-    allowed-origins:
-      - http://localhost:3000
-      - http://localhost:5173
-      - http://localhost:8081
+# CORS (list dạng CSV)
+app.cors.allowed-origins=http://localhost:3000,http://localhost:5173,http://localhost:8081
 
-security:
-  jwt:
-    secret-key: your_dev_secret_key
-    access-token-expiration-ms: 3600000
-    refresh-token-expiration-ms: 2592000000
+# JWT
+security.jwt.secret-key=your_dev_secret_key
+security.jwt.access-token-expiration-ms=3600000
+security.jwt.refresh-token-expiration-ms=2592000000
 ```
 
-**application-prod.yml**
+**application-prod.properties**
 
-```yaml
-server:
-  port: 8080
+```properties
+# SERVER
+server.port=8080
 
-spring:
-  datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+# DATABASE (ENV VARIABLE)
+spring.datasource.url=${DB_URL}
+spring.datasource.username=${DB_USERNAME}
+spring.datasource.password=${DB_PASSWORD}
 
-  data:
-    redis:
-      host: ${REDIS_HOST}
-      port: ${REDIS_PORT}
+# REDIS
+spring.data.redis.host=${REDIS_HOST}
+spring.data.redis.port=${REDIS_PORT}
 
-  jpa:
-    show-sql: false
+# JPA
+spring.jpa.show-sql=false
 
-logging:
-  level:
-    root: INFO
+# LOGGING
+logging.level.root=INFO
 
-app:
-  cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+# CORS
+app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS}
 
-security:
-  jwt:
-    secret-key: ${JWT_SECRET_KEY}
-    access-token-expiration-ms: 3600000
-    refresh-token-expiration-ms: 2592000000
+# JWT
+security.jwt.secret-key=${JWT_SECRET_KEY}
+security.jwt.access-token-expiration-ms=3600000
+security.jwt.refresh-token-expiration-ms=2592000000
 ```
 
 ---
