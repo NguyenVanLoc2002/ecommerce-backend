@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.domains.product.dto.ProductFilter;
 import com.locnguyen.ecommerce.domains.product.entity.Product;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import jakarta.persistence.criteria.*;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -49,40 +50,30 @@ public final class ProductSpecification {
                 predicates.add(cb.equal(root.get("featured"), filter.getFeatured()));
             }
 
-            // Price range — subquery against variant prices
+            // Price range — EXISTS subquery on variant effective price (coalesce sale/base)
             if (filter.getMinPrice() != null) {
-                predicates.add(cb.exists(variantPriceSubquery(root, cb,
-                        cb.ge(filter.getMinPrice()))));
+                Subquery<Long> sq = query.subquery(Long.class);
+                Root<ProductVariant> pv = sq.from(ProductVariant.class);
+                Expression<BigDecimal> price = cb.coalesce(pv.get("salePrice"), pv.get("basePrice"));
+                sq.select(cb.literal(1L))
+                  .where(cb.equal(pv.get("product"), root),
+                         cb.ge(price, filter.getMinPrice()));
+                predicates.add(cb.exists(sq));
             }
+
             if (filter.getMaxPrice() != null) {
-                predicates.add(cb.exists(variantPriceSubquery(root, cb,
-                        cb.le(filter.getMaxPrice()))));
+                Subquery<Long> sq = query.subquery(Long.class);
+                Root<ProductVariant> pv = sq.from(ProductVariant.class);
+                Expression<BigDecimal> price = cb.coalesce(pv.get("salePrice"), pv.get("basePrice"));
+                sq.select(cb.literal(1L))
+                  .where(cb.equal(pv.get("product"), root),
+                         cb.le(price, filter.getMaxPrice()));
+                predicates.add(cb.exists(sq));
             }
 
             return predicates.isEmpty()
                     ? null
                     : cb.and(predicates.toArray(new Predicate[0]));
         };
-    }
-
-    /**
-     * Builds a subquery: "EXISTS (SELECT 1 FROM product_variants WHERE product_id = :id AND price_op)"
-     * Uses COALESCE(sale_price, base_price) — sale_price if set, otherwise base_price.
-     */
-    private static Subquery<Long> variantPriceSubquery(
-            Root<Product> root, CriteriaBuilder cb, Predicate priceOp) {
-
-        Subquery<Long> sq = query.subquery(Long.class);
-        Root<ProductVariant> pv = sq.from(ProductVariant.class);
-
-        Expression<BigDecimal> effectivePrice = cb.coalesce(
-                pv.get("salePrice"), pv.get("basePrice"));
-
-        sq.select(cb.literal(1L));
-        sq.where(
-                cb.equal(pv.get("product"), root),
-                priceOp
-        );
-        return sq;
     }
 }

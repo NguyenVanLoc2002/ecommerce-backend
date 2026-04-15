@@ -18,7 +18,7 @@ import java.util.Set;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = "variants")
+@ToString
 public class ProductAttributeValue extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

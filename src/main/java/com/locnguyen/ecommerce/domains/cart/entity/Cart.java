@@ -30,11 +30,12 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = "customer")
+@ToString
 public class Cart extends BaseEntity {
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "customer_id", nullable = false, unique = true)
+    @ToString.Exclude
     private Customer customer;
 
     @Enumerated(EnumType.STRING)

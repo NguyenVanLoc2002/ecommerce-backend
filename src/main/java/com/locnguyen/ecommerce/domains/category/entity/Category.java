@@ -20,7 +20,7 @@ import java.util.Set;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = {"children", "products"})
+@ToString
 public class Category extends SoftDeleteEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)

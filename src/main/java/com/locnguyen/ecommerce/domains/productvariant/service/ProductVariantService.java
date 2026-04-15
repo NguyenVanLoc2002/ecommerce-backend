@@ -9,6 +9,7 @@ import com.locnguyen.ecommerce.domains.product.dto.VariantResponse;
 import com.locnguyen.ecommerce.domains.product.entity.Product;
 import com.locnguyen.ecommerce.domains.product.entity.ProductAttributeValue;
 import com.locnguyen.ecommerce.domains.product.mapper.ProductVariantMapper;
+import com.locnguyen.ecommerce.domains.product.repository.ProductAttributeRepository;
 import com.locnguyen.ecommerce.domains.product.repository.ProductAttributeValueRepository;
 import com.locnguyen.ecommerce.domains.product.repository.ProductRepository;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
@@ -31,6 +32,7 @@ public class ProductVariantService {
     private final ProductVariantRepository variantRepository;
     private final ProductRepository productRepository;
     private final ProductAttributeValueRepository attributeValueRepository;
+    private final ProductAttributeRepository attributeRepository;
     private final ProductVariantMapper variantMapper;
 
     @Transactional
@@ -124,25 +126,26 @@ public class ProductVariantService {
     private Set<ProductAttributeValue> resolveAttributeValues(List<AttributeRequest> requests) {
         Set<ProductAttributeValue> values = new HashSet<>();
         for (AttributeRequest ar : requests) {
+            String attrName = ar.getAttributeName().trim();
+            String valueStr = ar.getValue().trim();
             ProductAttributeValue value = attributeValueRepository
-                    .findByAttributeCodeAndValue(ar.getAttributeName().trim(), ar.getValue().trim())
+                    .findByAttributeCodeAndValue(attrName, valueStr)
                     .orElseGet(() -> {
                         com.locnguyen.ecommerce.domains.product.entity.ProductAttribute attr =
-                                com.locnguyen.ecommerce.domains.product.repository.ProductAttributeRepository
-                                        .findByCode(ar.getAttributeName().trim())
+                                attributeRepository.findByCode(attrName)
                                         .orElseGet(() -> {
                                             com.locnguyen.ecommerce.domains.product.entity.ProductAttribute newAttr =
                                                     new com.locnguyen.ecommerce.domains.product.entity.ProductAttribute();
-                                            newAttr.setName(ar.getAttributeName().trim());
-                                            newAttr.setCode(ar.getAttributeName().trim().toLowerCase().replace(" ", "_"));
-                                            return com.locnguyen.ecommerce.domains.product.repository.ProductAttributeRepository.save(newAttr);
+                                            newAttr.setName(attrName);
+                                            newAttr.setCode(attrName.toLowerCase().replace(" ", "_"));
+                                            return attributeRepository.save(newAttr);
                                         });
                         com.locnguyen.ecommerce.domains.product.entity.ProductAttributeValue newValue =
                                 new com.locnguyen.ecommerce.domains.product.entity.ProductAttributeValue();
                         newValue.setAttribute(attr);
-                        newValue.setValue(ar.getValue().trim());
-                        newValue.setDisplayValue(ar.getValue().trim());
-                        return com.locnguyen.ecommerce.domains.product.repository.ProductAttributeValueRepository.save(newValue);
+                        newValue.setValue(valueStr);
+                        newValue.setDisplayValue(valueStr);
+                        return attributeValueRepository.save(newValue);
                     });
             values.add(value);
         }

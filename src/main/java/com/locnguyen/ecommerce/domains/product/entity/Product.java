@@ -23,7 +23,7 @@ import java.util.Set;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = {"variants", "media", "categories"})
+@ToString
 public class Product extends SoftDeleteEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)

@@ -33,11 +33,12 @@ import java.util.List;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = {"order", "transactions"})
+@ToString
 public class Payment extends BaseEntity {
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "order_id", nullable = false, unique = true)
+    @ToString.Exclude
     private Order order;
 
     @Column(name = "payment_code", length = 50, nullable = false, unique = true)

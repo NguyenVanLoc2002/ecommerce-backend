@@ -100,7 +100,12 @@ public class OrderService {
         Order order = new Order();
         order.setCustomer(customer);
         order.setOrderCode(orderCode);
-        order.setStatus(OrderStatus.PENDING);
+        // ONLINE orders move directly to AWAITING_PAYMENT — inventory is reserved
+        // and we are now waiting for the customer to complete payment.
+        // COD orders start at PENDING — admin confirms on delivery.
+        order.setStatus(paymentMethod == PaymentMethod.ONLINE
+                ? OrderStatus.AWAITING_PAYMENT
+                : OrderStatus.PENDING);
         order.setPaymentMethod(paymentMethod);
         order.setPaymentStatus(PaymentStatus.PENDING);
         order.setCustomerNote(request.getCustomerNote());
@@ -186,8 +191,12 @@ public class OrderService {
         cart.setStatus(CartStatus.CHECKED_OUT);
         cartRepository.save(cart);
 
-        // 9. Create payment record (COD or ONLINE)
-        paymentService.createCodPayment(order);
+        // 9. Create payment record
+        // COD: payment record created immediately (customer pays on delivery).
+        // ONLINE: payment record is created later when customer calls initiatePayment.
+        if (paymentMethod == PaymentMethod.COD) {
+            paymentService.createCodPayment(order);
+        }
 
         log.info("Order created: code={} customerId={} items={} total={} payment={} by={}",
                 orderCode, customer.getId(), cartItems.size(), order.getTotalAmount(),

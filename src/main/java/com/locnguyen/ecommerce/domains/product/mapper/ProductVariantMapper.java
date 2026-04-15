@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.domains.product.dto.AttributeResponse;
 import com.locnguyen.ecommerce.domains.product.dto.VariantResponse;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 
 import java.util.Comparator;
@@ -27,9 +28,5 @@ public interface ProductVariantMapper {
                         .build())
                 .sorted(Comparator.comparing(AttributeResponse::getName))
                 .collect(Collectors.toList());
-    }
-
-    default List<VariantResponse> toResponseList(List<ProductVariant> variants) {
-        return variants.stream().map(this::toResponse).toList();
     }
 }

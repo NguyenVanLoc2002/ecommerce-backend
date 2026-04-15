@@ -20,7 +20,6 @@ public interface OrderMapper {
 
     List<OrderItemResponse> toItemResponses(List<OrderItem> items);
 
-    @Mapping(target = "customerId", source = "customer.id")
     @Mapping(target = "totalItems", expression = "java(calculateTotalItems(order))")
     OrderListItemResponse toListItemResponse(Order order);
 

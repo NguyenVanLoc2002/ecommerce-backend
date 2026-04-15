@@ -19,6 +19,9 @@ public class PaymentCallbackRequest {
     @Schema(example = "TXN_GW_12345", description = "Provider's transaction ID")
     private String providerTxnId;
 
+    @Schema(example = "VNPAY", description = "Payment provider identifier")
+    private String provider;
+
     @Schema(description = "Raw callback payload from gateway (JSON)")
     private String payload;
 }

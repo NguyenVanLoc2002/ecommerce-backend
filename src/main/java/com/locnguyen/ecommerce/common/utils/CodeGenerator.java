@@ -40,6 +40,10 @@ public final class CodeGenerator {
         return generate("SHP");
     }
 
+    public static String generatePaymentCode() {
+        return generate("PAY");
+    }
+
     public static String generatePaymentTransactionCode() {
         return generate("TXN");
     }

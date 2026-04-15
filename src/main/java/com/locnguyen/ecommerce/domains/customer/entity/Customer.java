@@ -27,7 +27,7 @@ import java.util.Set;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = "addresses")
+@ToString
 public class Customer extends SoftDeleteEntity {
 
     @OneToOne(fetch = FetchType.LAZY, optional = false)

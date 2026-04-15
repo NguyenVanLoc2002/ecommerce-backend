@@ -1,30 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
 
-    <!-- ═══════════════════════════════════════════════════════ -->
-    <!-- Properties                                              -->
-    <!-- ═══════════════════════════════════════════════════════ -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
 
     <springProperty scope="context" name="APP_NAME"
                     source="spring.application.name" defaultValue="ecommerce"/>
 
-    <!--
-        Dev pattern: colored output for readability in IDE / terminal
-        Uses Spring Boot's %clr() extension for ANSI colors.
-    -->
     <property name="CONSOLE_PATTERN"
               value="%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p) %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"/>
 
-    <!--
-        File pattern: timestamp + level + thread + logger + message (no color).
-        Suitable for log aggregators (ELK, Grafana Loki, Datadog).
-    -->
     <property name="FILE_PATTERN"
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%5p] [%t] %-40.40logger{39} : %m%n"/>
-
-    <!-- ═══════════════════════════════════════════════════════ -->
-    <!-- Appenders                                               -->
-    <!-- ═══════════════════════════════════════════════════════ -->
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
@@ -36,7 +23,6 @@
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>logs/${APP_NAME}.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <!-- Daily rotation + compress old files -->
             <fileNamePattern>logs/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
             <maxFileSize>100MB</maxFileSize>
             <maxHistory>30</maxHistory>
@@ -48,7 +34,6 @@
         </encoder>
     </appender>
 
-    <!-- Async file appender to avoid blocking request threads on I/O -->
     <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
         <appender-ref ref="FILE"/>
         <queueSize>512</queueSize>
@@ -56,20 +41,15 @@
         <includeCallerData>false</includeCallerData>
     </appender>
 
-    <!-- ═══════════════════════════════════════════════════════ -->
-    <!-- DEV profile — colored console, verbose SQL              -->
-    <!-- ═══════════════════════════════════════════════════════ -->
     <springProfile name="dev">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
 
-        <!-- Application code — DEBUG for full traceability in dev -->
         <logger name="com.locnguyen.ecommerce" level="DEBUG" additivity="false">
             <appender-ref ref="CONSOLE"/>
         </logger>
 
-        <!-- SQL logging -->
         <logger name="org.hibernate.SQL" level="DEBUG" additivity="false">
             <appender-ref ref="CONSOLE"/>
         </logger>
@@ -77,47 +57,37 @@
             <appender-ref ref="CONSOLE"/>
         </logger>
 
-        <!-- Security filter chain — helpful for debugging JWT issues -->
         <logger name="org.springframework.security" level="DEBUG" additivity="false">
             <appender-ref ref="CONSOLE"/>
         </logger>
 
-        <!-- Flyway migration logs -->
         <logger name="org.flywaydb" level="INFO" additivity="false">
             <appender-ref ref="CONSOLE"/>
         </logger>
 
-        <!-- Reduce noise from framework internals -->
         <logger name="org.springframework.web.servlet.mvc.method.annotation" level="WARN"/>
         <logger name="org.springframework.boot.autoconfigure" level="WARN"/>
         <logger name="com.zaxxer.hikari" level="INFO"/>
     </springProfile>
 
-    <!-- ═══════════════════════════════════════════════════════ -->
-    <!-- PROD profile — async file + minimal console             -->
-    <!-- ═══════════════════════════════════════════════════════ -->
     <springProfile name="prod">
         <root level="WARN">
             <appender-ref ref="CONSOLE"/>
             <appender-ref ref="ASYNC_FILE"/>
         </root>
 
-        <!-- Application code — INFO in prod -->
         <logger name="com.locnguyen.ecommerce" level="INFO" additivity="false">
             <appender-ref ref="ASYNC_FILE"/>
         </logger>
 
-        <!-- Security — WARN only; avoid logging sensitive token data -->
         <logger name="org.springframework.security" level="WARN" additivity="false">
             <appender-ref ref="ASYNC_FILE"/>
         </logger>
 
-        <!-- Flyway -->
         <logger name="org.flywaydb" level="INFO" additivity="false">
             <appender-ref ref="ASYNC_FILE"/>
         </logger>
 
-        <!-- Suppress Hibernate SQL in prod — never log queries in production -->
         <logger name="org.hibernate.SQL" level="OFF"/>
         <logger name="org.hibernate.orm.jdbc.bind" level="OFF"/>
     </springProfile>

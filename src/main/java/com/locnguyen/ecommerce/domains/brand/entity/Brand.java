@@ -17,7 +17,7 @@ import java.util.Set;
 @Getter
 @Setter
 @NoArgsConstructor
-@ToString(exclude = "products")
+@ToString
 public class Brand extends SoftDeleteEntity {
 
     @Column(name = "name", length = 100, nullable = false)
@@ -31,6 +31,9 @@ public class Brand extends SoftDeleteEntity {
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
+
+    @Column(name = "sort_order", nullable = false)
+    private Integer sortOrder = 0;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50, nullable = false)

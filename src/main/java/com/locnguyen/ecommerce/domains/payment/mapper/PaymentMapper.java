@@ -11,10 +11,14 @@ import java.util.List;
 @Mapper(componentModel = "spring")
 public interface PaymentMapper {
 
+    /**
+     * Full response — includes the transaction audit trail.
+     * Use for single-item GET endpoints (within an active transaction).
+     */
     default PaymentResponse toResponse(Payment payment) {
         if (payment == null) return null;
 
-        PaymentResponse.PaymentResponseBuilder builder = PaymentResponse.builder()
+        return PaymentResponse.builder()
                 .id(payment.getId())
                 .orderId(payment.getOrder().getId())
                 .orderCode(payment.getOrder().getOrderCode())
@@ -23,13 +27,29 @@ public interface PaymentMapper {
                 .status(payment.getStatus().name())
                 .amount(payment.getAmount())
                 .paidAt(payment.getPaidAt())
-                .createdAt(payment.getCreatedAt());
+                .createdAt(payment.getCreatedAt())
+                .transactions(toTransactionResponses(payment.getTransactions()))
+                .build();
+    }
 
-        if (payment.getTransactions() != null) {
-            builder.transactions(toTransactionResponses(payment.getTransactions()));
-        }
+    /**
+     * Lightweight response — excludes transactions.
+     * Use for paginated list views to avoid N+1 on the transaction collection.
+     */
+    default PaymentResponse toListItemResponse(Payment payment) {
+        if (payment == null) return null;
 
-        return builder.build();
+        return PaymentResponse.builder()
+                .id(payment.getId())
+                .orderId(payment.getOrder().getId())
+                .orderCode(payment.getOrder().getOrderCode())
+                .paymentCode(payment.getPaymentCode())
+                .method(payment.getMethod())
+                .status(payment.getStatus().name())
+                .amount(payment.getAmount())
+                .paidAt(payment.getPaidAt())
+                .createdAt(payment.getCreatedAt())
+                .build();
     }
 
     TransactionResponse toTransactionResponse(PaymentTransaction transaction);

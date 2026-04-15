@@ -7,10 +7,13 @@ import com.locnguyen.ecommerce.domains.brand.entity.Brand;
 import com.locnguyen.ecommerce.domains.brand.repository.BrandRepository;
 import com.locnguyen.ecommerce.domains.category.entity.Category;
 import com.locnguyen.ecommerce.domains.category.repository.CategoryRepository;
+import com.locnguyen.ecommerce.domains.brand.mapper.BrandMapper;
+import com.locnguyen.ecommerce.domains.category.mapper.CategoryMapper;
 import com.locnguyen.ecommerce.domains.product.dto.*;
 import com.locnguyen.ecommerce.domains.product.entity.Product;
 import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
 import com.locnguyen.ecommerce.domains.product.mapper.ProductMapper;
+import com.locnguyen.ecommerce.domains.product.mapper.ProductVariantMapper;
 import com.locnguyen.ecommerce.domains.product.repository.ProductRepository;
 import com.locnguyen.ecommerce.domains.product.specification.ProductSpecification;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
@@ -19,9 +22,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -33,6 +37,9 @@ public class ProductService {
     private final BrandRepository brandRepository;
     private final CategoryRepository categoryRepository;
     private final ProductMapper productMapper;
+    private final BrandMapper brandMapper;
+    private final CategoryMapper categoryMapper;
+    private final ProductVariantMapper productVariantMapper;
 
     // ─── Public ───────────────────────────────────────────────────────────────
 
@@ -191,13 +198,13 @@ public class ProductService {
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())
                 .brand(product.getBrand() != null
-                        ? com.locnguyen.ecommerce.domains.brand.mapper.BrandMapper.INSTANCE.toResponse(product.getBrand())
+                        ? brandMapper.toResponse(product.getBrand())
                         : null)
                 .categories(product.getCategories().stream()
-                        .map(c -> com.locnguyen.ecommerce.domains.category.mapper.CategoryMapper.INSTANCE.toResponse(c))
+                        .map(categoryMapper::toResponse)
                         .toList())
                 .variants(product.getVariants().stream()
-                        .map(v -> com.locnguyen.ecommerce.domains.product.mapper.ProductVariantMapper.INSTANCE.toResponse(v))
+                        .map(productVariantMapper::toResponse)
                         .toList())
                 .media(product.getMedia().stream()
                         .map(m -> MediaResponse.builder()
