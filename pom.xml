@@ -65,6 +65,12 @@
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
 
+        <!-- ===== ACTUATOR ===== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- ===== DATABASE ===== -->
         <dependency>
             <groupId>org.mariadb.jdbc</groupId>

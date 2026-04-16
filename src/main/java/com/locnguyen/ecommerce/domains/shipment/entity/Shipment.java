@@ -61,7 +61,9 @@ public class Shipment extends BaseEntity {
     @Column(name = "note", length = 500)
     private String note;
 
-    @OneToMany(mappedBy = "shipment", cascade = CascadeType.ALL, orphanRemoval = true,
+    // orphanRemoval = false — ShipmentEvent entries are an immutable audit trail;
+    // removing an event from the collection must NOT delete the row from the database.
+    @OneToMany(mappedBy = "shipment", cascade = CascadeType.ALL, orphanRemoval = false,
                fetch = FetchType.LAZY)
     @OrderBy("eventTime ASC")
     private List<ShipmentEvent> events = new ArrayList<>();

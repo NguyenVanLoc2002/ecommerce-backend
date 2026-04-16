@@ -26,14 +26,26 @@ public final class AppConstants {
     public static final String ROLE_CUSTOMER = "CUSTOMER";
 
     // ─── Cache keys ─────────────────────────────────────────────────────────
-    public static final String CACHE_PRODUCTS = "products";
-    public static final String CACHE_CATEGORIES = "categories";
-    public static final String CACHE_BRANDS = "brands";
+    public static final String CACHE_PRODUCTS      = "products";
+    public static final String CACHE_PRODUCT_DETAIL = "product_detail";
+    public static final String CACHE_CATEGORIES    = "categories";
+    public static final String CACHE_BRANDS        = "brands";
 
     // ─── Redis key prefixes ──────────────────────────────────────────────────
-    public static final String REDIS_REFRESH_TOKEN_PREFIX = "refresh_token:";
-    public static final String REDIS_OTP_PREFIX = "otp:";
+    public static final String REDIS_REFRESH_TOKEN_PREFIX  = "refresh_token:";
+    public static final String REDIS_OTP_PREFIX            = "otp:";
     public static final String REDIS_BLACKLIST_TOKEN_PREFIX = "blacklist:";
+
+    // ─── MDC (Mapped Diagnostic Context) keys ───────────────────────────────
+    public static final String MDC_REQUEST_ID = "requestId";
+    public static final String MDC_USER       = "user";
+    public static final String MDC_METHOD     = "method";
+    public static final String MDC_URI        = "uri";
+    public static final String MDC_STATUS     = "status";
+    public static final String MDC_DURATION   = "duration";
+
+    // ─── HTTP headers ────────────────────────────────────────────────────────
+    public static final String HEADER_REQUEST_ID = "X-Request-ID";
 
     // ─── Audit source ────────────────────────────────────────────────────────
     public static final String SYSTEM_USER = "system";

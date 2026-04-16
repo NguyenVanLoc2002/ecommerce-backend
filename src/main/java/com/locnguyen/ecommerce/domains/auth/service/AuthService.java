@@ -4,6 +4,8 @@ import com.locnguyen.ecommerce.common.config.AppProperties;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.security.JwtTokenProvider;
+import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
+import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.auth.dto.*;
 import com.locnguyen.ecommerce.domains.auth.mapper.UserMapper;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
@@ -56,6 +58,7 @@ public class AuthService {
     private final CustomerRepository customerRepository;
     private final UserMapper userMapper;
     private final AppProperties appProperties;
+    private final AuditLogService auditLogService;
 
     // ─── Register ────────────────────────────────────────────────────────────
 
@@ -106,6 +109,8 @@ public class AuthService {
         customerRepository.save(customer);
 
         log.info("User registered: id={} email={} customerId={}", user.getId(), user.getEmail(), customer.getId());
+        auditLogService.log(AuditAction.USER_REGISTERED, "USER",
+                String.valueOf(user.getId()), "email=" + user.getEmail());
 
         // Auto-login: generate tokens so the client can start immediately
         TokenResponse tokens = generateTokenPair(user);
@@ -142,10 +147,16 @@ public class AuthService {
                     )
             );
         } catch (DisabledException e) {
+            auditLogService.logWithActor(AuditAction.LOGIN_FAILURE, "USER",
+                    request.getEmail(), request.getEmail(), "reason=ACCOUNT_DISABLED");
             throw new AppException(ErrorCode.ACCOUNT_DISABLED);
         } catch (LockedException e) {
+            auditLogService.logWithActor(AuditAction.LOGIN_FAILURE, "USER",
+                    request.getEmail(), request.getEmail(), "reason=ACCOUNT_LOCKED");
             throw new AppException(ErrorCode.ACCOUNT_DISABLED);
         } catch (BadCredentialsException e) {
+            auditLogService.logWithActor(AuditAction.LOGIN_FAILURE, "USER",
+                    request.getEmail(), request.getEmail(), "reason=INVALID_CREDENTIALS");
             throw new AppException(ErrorCode.INVALID_CREDENTIALS);
         }
 
@@ -158,6 +169,8 @@ public class AuthService {
         userRepository.save(user);
 
         log.info("User logged in: id={} email={}", user.getId(), user.getEmail());
+        auditLogService.log(AuditAction.LOGIN_SUCCESS, "USER",
+                String.valueOf(user.getId()), "email=" + user.getEmail());
 
         TokenResponse tokens = generateTokenPair(user);
         return AuthResponse.builder()

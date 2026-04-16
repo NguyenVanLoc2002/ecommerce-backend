@@ -17,6 +17,13 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
 
     List<Inventory> findByVariantId(Long variantId);
 
+    /**
+     * Batch-load inventories for multiple variants in one query.
+     * Use this in order creation to avoid N+1 selects per cart item.
+     */
+    @Query("SELECT i FROM Inventory i JOIN FETCH i.warehouse WHERE i.variant.id IN :variantIds")
+    List<Inventory> findByVariantIdIn(@Param("variantIds") List<Long> variantIds);
+
     List<Inventory> findByWarehouseId(Long warehouseId);
 
     /**

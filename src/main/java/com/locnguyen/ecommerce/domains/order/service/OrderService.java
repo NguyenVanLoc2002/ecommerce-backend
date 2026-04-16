@@ -26,6 +26,8 @@ import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.mapper.OrderMapper;
 import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
+import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -53,6 +57,7 @@ public class OrderService {
     private final InventoryService inventoryService;
     private final InventoryRepository inventoryRepository;
     private final PaymentService paymentService;
+    private final AuditLogService auditLogService;
 
     // ─── Create order from cart ─────────────────────────────────────────────
 
@@ -159,11 +164,20 @@ public class OrderService {
         // 6. Persist order (cascades to order items)
         order = orderRepository.save(order);
 
-        // 7. Reserve inventory for each item
+        // 7. Reserve inventory for each item — batch-load to avoid N+1 per cart item
+        List<Long> variantIds = cartItems.stream()
+                .map(ci -> ci.getVariant().getId())
+                .toList();
+
+        List<Inventory> allInventories = inventoryRepository.findByVariantIdIn(variantIds);
+
+        // Group inventories by variant ID for O(1) lookup per item
+        Map<Long, List<Inventory>> inventoriesByVariant = allInventories.stream()
+                .collect(Collectors.groupingBy(inv -> inv.getVariant().getId()));
+
         for (CartItem ci : cartItems) {
-            // Find the inventory record for this variant (use first available warehouse)
-            List<Inventory> inventories = inventoryRepository.findByVariantId(ci.getVariant().getId());
-            if (inventories.isEmpty()) {
+            List<Inventory> inventories = inventoriesByVariant.get(ci.getVariant().getId());
+            if (inventories == null || inventories.isEmpty()) {
                 throw new AppException(ErrorCode.INVENTORY_NOT_FOUND,
                         "No inventory record found for variant " + ci.getVariant().getId());
             }
@@ -201,6 +215,8 @@ public class OrderService {
         log.info("Order created: code={} customerId={} items={} total={} payment={} by={}",
                 orderCode, customer.getId(), cartItems.size(), order.getTotalAmount(),
                 paymentMethod, SecurityUtils.getCurrentUsernameOrSystem());
+        auditLogService.log(AuditAction.ORDER_CREATED, "ORDER", orderCode,
+                "items=" + cartItems.size() + " total=" + order.getTotalAmount());
 
         return buildOrderResponse(order);
     }
@@ -268,20 +284,48 @@ public class OrderService {
         order = orderRepository.save(order);
 
         log.info("Order confirmed: code={} by={}", order.getOrderCode(), actor);
+        auditLogService.log(AuditAction.ORDER_CONFIRMED, "ORDER", order.getOrderCode());
         return buildOrderResponse(order);
     }
 
     /**
-     * Cancel order — releases reserved stock back to available.
+     * Cancel order (admin/staff) — no ownership check.
      *
-     * <p>Per order-lifecycle.md: cancellable from PENDING, AWAITING_PAYMENT, CONFIRMED.
+     * <p>Cancellable from PENDING, AWAITING_PAYMENT, CONFIRMED.
      * CONFIRMED orders can still be cancelled (before shipment).
      */
     @Transactional
     public OrderResponse cancelOrder(Long orderId) {
         Order order = findOrThrow(orderId);
-        String actor = SecurityUtils.getCurrentUsernameOrSystem();
+        return doCancelOrder(order);
+    }
 
+    /**
+     * Cancel a customer's own order — enforces ownership and restricts cancellable statuses.
+     *
+     * <p>Customers may only cancel from PENDING or AWAITING_PAYMENT.
+     * CONFIRMED orders require admin intervention.
+     */
+    @Transactional
+    public OrderResponse cancelMyOrder(Long orderId, Customer customer) {
+        Order order = findOrThrow(orderId);
+
+        if (!order.getCustomer().getId().equals(customer.getId())) {
+            throw new AppException(ErrorCode.ORDER_NOT_FOUND);
+        }
+
+        // Customers may not cancel after admin has confirmed the order
+        if (order.getStatus() == OrderStatus.CONFIRMED
+                || !order.getStatus().canTransitionTo(OrderStatus.CANCELLED)) {
+            throw new AppException(ErrorCode.ORDER_CANNOT_CANCEL,
+                    "You can only cancel orders that are PENDING or AWAITING_PAYMENT");
+        }
+
+        return doCancelOrder(order);
+    }
+
+    private OrderResponse doCancelOrder(Order order) {
+        String actor = SecurityUtils.getCurrentUsernameOrSystem();
         OrderStatus target = OrderStatus.CANCELLED;
 
         if (!order.getStatus().canTransitionTo(target)) {
@@ -295,8 +339,8 @@ public class OrderService {
         // Release all reserved stock for this order
         inventoryService.releaseStock("ORDER", order.getOrderCode());
 
-        log.info("Order cancelled: code={} previousStatus={} by={}",
-                order.getOrderCode(), order.getStatus(), actor);
+        log.info("Order cancelled: code={} by={}", order.getOrderCode(), actor);
+        auditLogService.log(AuditAction.ORDER_CANCELLED, "ORDER", order.getOrderCode());
         return buildOrderResponse(order);
     }
 
@@ -325,6 +369,7 @@ public class OrderService {
         inventoryService.completeOrder("ORDER", order.getOrderCode());
 
         log.info("Order completed: code={} by={}", order.getOrderCode(), actor);
+        auditLogService.log(AuditAction.ORDER_COMPLETED, "ORDER", order.getOrderCode());
         return buildOrderResponse(order);
     }
 

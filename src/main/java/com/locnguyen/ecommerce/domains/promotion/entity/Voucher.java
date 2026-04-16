@@ -24,6 +24,15 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class Voucher extends SoftDeleteEntity {
 
+    /**
+     * JPA optimistic lock version — prevents concurrent {@code applyVoucher} calls
+     * from bypassing the usage limit without a database-level lock.
+     * The column must exist in the DDL; added in V11 migration.
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
+
     /** User-facing code, e.g. {@code SUMMER20}. Unique, case-insensitive by convention. */
     @Column(name = "code", length = 100, nullable = false, unique = true)
     private String code;

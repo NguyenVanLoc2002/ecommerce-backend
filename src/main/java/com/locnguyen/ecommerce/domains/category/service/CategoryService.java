@@ -1,8 +1,11 @@
 package com.locnguyen.ecommerce.domains.category.service;
 
+import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
-import com.locnguyen.ecommerce.common.utils.SlugUtils;
+import com.locnguyen.ecommerce.common.utils.SecurityUtils;
+import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
+import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.category.dto.CategoryResponse;
 import com.locnguyen.ecommerce.domains.category.dto.CreateCategoryRequest;
 import com.locnguyen.ecommerce.domains.category.dto.UpdateCategoryRequest;
@@ -12,6 +15,9 @@ import com.locnguyen.ecommerce.domains.category.mapper.CategoryMapper;
 import com.locnguyen.ecommerce.domains.category.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,15 +30,26 @@ public class CategoryService {
 
     private final CategoryRepository categoryRepository;
     private final CategoryMapper categoryMapper;
+    private final AuditLogService auditLogService;
 
     // ─── Public ───────────────────────────────────────────────────────────────
 
+    /**
+     * List all active categories ordered by sort order.
+     * Cached for 30 minutes — evicted whenever any category is mutated.
+     */
+    @Cacheable(value = AppConstants.CACHE_CATEGORIES, key = "'active'")
     @Transactional(readOnly = true)
     public List<CategoryResponse> getActiveCategories() {
         return categoryRepository.findByStatusOrderBySortOrderAsc(CategoryStatus.ACTIVE)
                 .stream().map(categoryMapper::toResponse).toList();
     }
 
+    /**
+     * Get category by ID.
+     * Cached by ID for 30 minutes.
+     */
+    @Cacheable(value = AppConstants.CACHE_CATEGORIES, key = "'id:' + #id")
     @Transactional(readOnly = true)
     public CategoryResponse getCategoryById(Long id) {
         return categoryMapper.toResponse(findOrThrow(id));
@@ -40,6 +57,7 @@ public class CategoryService {
 
     // ─── Admin CRUD ──────────────────────────────────────────────────────────
 
+    @CacheEvict(value = AppConstants.CACHE_CATEGORIES, allEntries = true)
     @Transactional
     public CategoryResponse createCategory(CreateCategoryRequest request) {
         if (categoryRepository.existsBySlug(request.getSlug())) {
@@ -62,9 +80,12 @@ public class CategoryService {
 
         category = categoryRepository.save(category);
         log.info("Category created: id={} name={}", category.getId(), category.getName());
+        auditLogService.log(AuditAction.CATEGORY_CREATED, "CATEGORY",
+                String.valueOf(category.getId()), "name=" + category.getName());
         return categoryMapper.toResponse(category);
     }
 
+    @CacheEvict(value = AppConstants.CACHE_CATEGORIES, allEntries = true)
     @Transactional
     public CategoryResponse updateCategory(Long id, UpdateCategoryRequest request) {
         Category category = findOrThrow(id);
@@ -102,16 +123,19 @@ public class CategoryService {
 
         category = categoryRepository.save(category);
         log.info("Category updated: id={}", id);
+        auditLogService.log(AuditAction.CATEGORY_UPDATED, "CATEGORY", String.valueOf(id));
         return categoryMapper.toResponse(category);
     }
 
+    @CacheEvict(value = AppConstants.CACHE_CATEGORIES, allEntries = true)
     @Transactional
     public void deleteCategory(Long id) {
         Category category = findOrThrow(id);
-        String actor = com.locnguyen.ecommerce.common.utils.SecurityUtils.getCurrentUsernameOrSystem();
+        String actor = SecurityUtils.getCurrentUsernameOrSystem();
         category.softDelete(actor);
         categoryRepository.save(category);
         log.info("Category deleted: id={} by={}", id, actor);
+        auditLogService.log(AuditAction.CATEGORY_DELETED, "CATEGORY", String.valueOf(id));
     }
 
     // ─── Internal ────────────────────────────────────────────────────────────

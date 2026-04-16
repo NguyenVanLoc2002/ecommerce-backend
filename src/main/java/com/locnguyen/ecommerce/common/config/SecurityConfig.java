@@ -79,13 +79,17 @@ public class SecurityConfig {
             "/api/v1/brands/**",
     };
 
-    /** Developer tooling and infrastructure. */
+    /** Developer tooling and open actuator endpoints. */
     private static final String[] OPEN_ENDPOINTS = {
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/v3/api-docs/**",
-            "/actuator/health",
+            "/actuator/health",  // liveness probe — always public
+            "/actuator/info",    // basic build info — public
     };
+
+    /** Actuator management endpoints — restricted to admins. */
+    private static final String ACTUATOR_SENSITIVE = "/actuator/**";
 
     // ─── Security filter chain ───────────────────────────────────────────────
 
@@ -114,6 +118,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST).permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET).permitAll()
                         .requestMatchers(OPEN_ENDPOINTS).permitAll()
+
+                        // Sensitive actuator endpoints — admin only
+                        .requestMatchers(ACTUATOR_SENSITIVE).hasAnyRole("ADMIN", "SUPER_ADMIN")
 
                         // Admin-only management API
                         // Role hierarchy ensures SUPER_ADMIN also qualifies

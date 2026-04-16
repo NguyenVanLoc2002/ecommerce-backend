@@ -140,7 +140,13 @@ public enum ErrorCode {
     REVIEW_NOT_ELIGIBLE(HttpStatus.UNPROCESSABLE_ENTITY, "REVIEW_NOT_ELIGIBLE",
             "You can only review products from completed orders"),
     REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "REVIEW_ALREADY_EXISTS",
-            "You have already reviewed this product");
+            "You have already reviewed this product"),
+    REVIEW_ALREADY_MODERATED(HttpStatus.CONFLICT, "REVIEW_ALREADY_MODERATED",
+            "Review has already been moderated"),
+
+    // ─── Notification ───────────────────────────────────────────────────────
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND",
+            "Notification not found");
 
     // ────────────────────────────────────────────────────────────────────────
 
