@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(./mvnw compile:*)",
-      "Bash(mvn clean *)"
+      "Bash(mvn clean *)",
+      "Bash(xargs ls:*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }

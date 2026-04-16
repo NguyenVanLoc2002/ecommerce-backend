@@ -114,12 +114,26 @@ public enum ErrorCode {
             "Voucher is not applicable to this order"),
     VOUCHER_MIN_ORDER_NOT_MET(HttpStatus.UNPROCESSABLE_ENTITY, "VOUCHER_MIN_ORDER_NOT_MET",
             "Order amount does not meet the minimum required for this voucher"),
+    VOUCHER_CODE_ALREADY_EXISTS(HttpStatus.CONFLICT, "VOUCHER_CODE_ALREADY_EXISTS",
+            "Voucher code is already in use"),
+    VOUCHER_USER_LIMIT_EXCEEDED(HttpStatus.UNPROCESSABLE_ENTITY, "VOUCHER_USER_LIMIT_EXCEEDED",
+            "You have reached the per-user usage limit for this voucher"),
     PROMOTION_NOT_FOUND(HttpStatus.NOT_FOUND, "PROMOTION_NOT_FOUND",
             "Promotion not found"),
+    PROMOTION_RULE_NOT_FOUND(HttpStatus.NOT_FOUND, "PROMOTION_RULE_NOT_FOUND",
+            "Promotion rule not found"),
 
     // ─── Shipment / Invoice ─────────────────────────────────────────────────
     SHIPMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "SHIPMENT_NOT_FOUND", "Shipment not found"),
+    SHIPMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "SHIPMENT_ALREADY_EXISTS",
+            "A shipment already exists for this order"),
+    SHIPMENT_STATUS_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "SHIPMENT_STATUS_INVALID",
+            "Invalid shipment status transition"),
     INVOICE_NOT_FOUND(HttpStatus.NOT_FOUND, "INVOICE_NOT_FOUND", "Invoice not found"),
+    INVOICE_ALREADY_EXISTS(HttpStatus.CONFLICT, "INVOICE_ALREADY_EXISTS",
+            "An invoice already exists for this order"),
+    INVOICE_STATUS_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "INVOICE_STATUS_INVALID",
+            "Invalid invoice status or transition"),
 
     // ─── Review ─────────────────────────────────────────────────────────────
     REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "REVIEW_NOT_FOUND", "Review not found"),

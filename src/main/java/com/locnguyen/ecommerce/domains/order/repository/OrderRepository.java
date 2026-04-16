@@ -22,4 +22,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Page<Order> filter(@Param("customerId") Long customerId,
                        @Param("status") com.locnguyen.ecommerce.domains.order.enums.OrderStatus status,
                        Pageable pageable);
+
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.customer.id = :customerId " +
+           "AND o.status = com.locnguyen.ecommerce.domains.order.enums.OrderStatus.COMPLETED")
+    long countCompletedByCustomerId(@Param("customerId") Long customerId);
 }
