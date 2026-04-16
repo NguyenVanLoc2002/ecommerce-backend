@@ -14,21 +14,26 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Order", description = "Order management")
+/**
+ * Customer-facing order endpoints.
+ * Admin order management lives in
+ * {@link com.locnguyen.ecommerce.domains.admin.controller.AdminOrderController}.
+ */
+@Tag(name = "Order", description = "Customer order endpoints")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping(AppConstants.API_V1 + "/orders")
+@SecurityRequirement(name = "bearerAuth")
 public class OrderController {
 
     private final OrderService orderService;
     private final UserService userService;
 
     @Operation(summary = "Create order from cart")
-    @SecurityRequirement(name = "bearerAuth")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping
     public ApiResponse<OrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request) {
@@ -36,49 +41,24 @@ public class OrderController {
     }
 
     @Operation(summary = "List my orders (paginated)")
-    @SecurityRequirement(name = "bearerAuth")
     @GetMapping
-    public ApiResponse<PagedResponse<OrderListItemResponse>> getMyOrders(Pageable pageable) {
+    public ApiResponse<PagedResponse<OrderListItemResponse>> getMyOrders(
+            @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE) Pageable pageable) {
         return ApiResponse.success(orderService.getMyOrders(userService.getCurrentCustomer(), pageable));
     }
 
-    @Operation(summary = "Get order by ID")
-    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Get my order by ID")
     @GetMapping("/{id}")
     public ApiResponse<OrderResponse> getOrderById(@PathVariable Long id) {
         return ApiResponse.success(orderService.getOrderById(id, userService.getCurrentCustomer()));
     }
 
-    @Operation(summary = "Confirm order (admin/staff only)")
-    @SecurityRequirement(name = "bearerAuth")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'STAFF')")
-    @PostMapping("/{id}/confirm")
-    public ApiResponse<OrderResponse> confirmOrder(@PathVariable Long id) {
-        return ApiResponse.success(orderService.confirmOrder(id));
-    }
-
-    @Operation(summary = "Cancel order (admin/staff only — customers use /my/{id}/cancel)")
-    @SecurityRequirement(name = "bearerAuth")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'STAFF')")
-    @PostMapping("/{id}/cancel")
-    public ApiResponse<OrderResponse> cancelOrder(@PathVariable Long id) {
-        return ApiResponse.success(orderService.cancelOrder(id));
-    }
-
-    @Operation(summary = "Complete order (admin/staff only)")
-    @SecurityRequirement(name = "bearerAuth")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'STAFF')")
-    @PostMapping("/{id}/complete")
-    public ApiResponse<OrderResponse> completeOrder(@PathVariable Long id) {
-        return ApiResponse.success(orderService.completeOrder(id));
-    }
-
-    @Operation(summary = "Cancel my own order",
-               description = "Customers may cancel their own order if it is still PENDING or AWAITING_PAYMENT.")
-    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+        summary = "Cancel my own order",
+        description = "Only allowed when status is PENDING or AWAITING_PAYMENT."
+    )
     @PostMapping("/my/{id}/cancel")
     public ApiResponse<OrderResponse> cancelMyOrder(@PathVariable Long id) {
-        return ApiResponse.success(
-                orderService.cancelMyOrder(id, userService.getCurrentCustomer()));
+        return ApiResponse.success(orderService.cancelMyOrder(id, userService.getCurrentCustomer()));
     }
 }

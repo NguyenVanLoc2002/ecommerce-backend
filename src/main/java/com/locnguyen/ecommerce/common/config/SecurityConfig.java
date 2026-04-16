@@ -122,10 +122,12 @@ public class SecurityConfig {
                         // Sensitive actuator endpoints — admin only
                         .requestMatchers(ACTUATOR_SENSITIVE).hasAnyRole("ADMIN", "SUPER_ADMIN")
 
-                        // Admin-only management API
-                        // Role hierarchy ensures SUPER_ADMIN also qualifies
+                        // Admin management API — STAFF and above
+                        // Role hierarchy: SUPER_ADMIN > ADMIN > STAFF
+                        // Fine-grained restrictions (e.g. ADMIN-only destructive ops)
+                        // are enforced via @PreAuthorize on individual endpoints.
                         .requestMatchers("/api/v1/admin/**")
-                        .hasAnyRole("ADMIN", "SUPER_ADMIN")
+                        .hasAnyRole("STAFF", "ADMIN", "SUPER_ADMIN")
 
                         // All other endpoints require a valid token (any role)
                         .anyRequest().authenticated()

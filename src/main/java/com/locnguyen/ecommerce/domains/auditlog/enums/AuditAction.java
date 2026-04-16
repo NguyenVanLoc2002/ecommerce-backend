@@ -38,6 +38,9 @@ public enum AuditAction {
     // ─── Order ───────────────────────────────────────────────────────────────
     ORDER_CREATED,
     ORDER_CONFIRMED,
+    ORDER_PROCESSING,
+    ORDER_SHIPPED,
+    ORDER_DELIVERED,
     ORDER_CANCELLED,
     ORDER_COMPLETED,
 

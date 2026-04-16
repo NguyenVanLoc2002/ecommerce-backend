@@ -17,9 +17,11 @@ import com.locnguyen.ecommerce.domains.inventory.dto.ReserveStockRequest;
 import com.locnguyen.ecommerce.domains.inventory.entity.Inventory;
 import com.locnguyen.ecommerce.domains.inventory.repository.InventoryRepository;
 import com.locnguyen.ecommerce.domains.inventory.service.InventoryService;
+import com.locnguyen.ecommerce.domains.admin.dto.AdminOrderListItemResponse;
 import com.locnguyen.ecommerce.domains.order.dto.*;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.entity.OrderItem;
+import com.locnguyen.ecommerce.domains.order.dto.OrderAdminFilter;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
@@ -28,6 +30,8 @@ import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
+import com.locnguyen.ecommerce.domains.notification.enums.NotificationType;
+import com.locnguyen.ecommerce.domains.notification.service.NotificationService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +61,7 @@ public class OrderService {
     private final InventoryService inventoryService;
     private final InventoryRepository inventoryRepository;
     private final PaymentService paymentService;
+    private final NotificationService notificationService;
     private final AuditLogService auditLogService;
 
     // ─── Create order from cart ─────────────────────────────────────────────
@@ -248,6 +253,27 @@ public class OrderService {
         return buildOrderResponse(order);
     }
 
+    // ─── Admin read operations ───────────────────────────────────────────────
+
+    /**
+     * List all orders with optional filters — admin / staff view.
+     * Eagerly fetches customer + user in a single query to avoid N+1.
+     */
+    @Transactional(readOnly = true)
+    public PagedResponse<AdminOrderListItemResponse> getAllOrders(OrderAdminFilter filter, Pageable pageable) {
+        OrderStatus status = parseEnum(filter.getStatus(), OrderStatus.class);
+        PaymentStatus paymentStatus = parseEnum(filter.getPaymentStatus(), PaymentStatus.class);
+
+        Page<Order> page = orderRepository.adminFilter(filter.getCustomerId(), status, paymentStatus, pageable);
+        return PagedResponse.of(page.map(this::buildAdminListItemResponse));
+    }
+
+    /** Get any order by ID without ownership check — admin use only. */
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderByIdAdmin(Long orderId) {
+        return buildOrderResponse(findOrThrow(orderId));
+    }
+
     // ─── State machine transitions ──────────────────────────────────────────
 
     /**
@@ -285,6 +311,16 @@ public class OrderService {
 
         log.info("Order confirmed: code={} by={}", order.getOrderCode(), actor);
         auditLogService.log(AuditAction.ORDER_CONFIRMED, "ORDER", order.getOrderCode());
+
+        notificationService.send(
+                order.getCustomer(),
+                NotificationType.ORDER_CONFIRMED,
+                "Order confirmed",
+                "Your order " + order.getOrderCode() + " has been confirmed and is being prepared.",
+                order.getId(),
+                "ORDER"
+        );
+
         return buildOrderResponse(order);
     }
 
@@ -341,6 +377,16 @@ public class OrderService {
 
         log.info("Order cancelled: code={} by={}", order.getOrderCode(), actor);
         auditLogService.log(AuditAction.ORDER_CANCELLED, "ORDER", order.getOrderCode());
+
+        notificationService.send(
+                order.getCustomer(),
+                NotificationType.ORDER_CANCELLED,
+                "Order cancelled",
+                "Your order " + order.getOrderCode() + " has been cancelled.",
+                order.getId(),
+                "ORDER"
+        );
+
         return buildOrderResponse(order);
     }
 
@@ -370,6 +416,58 @@ public class OrderService {
 
         log.info("Order completed: code={} by={}", order.getOrderCode(), actor);
         auditLogService.log(AuditAction.ORDER_COMPLETED, "ORDER", order.getOrderCode());
+
+        notificationService.send(
+                order.getCustomer(),
+                NotificationType.ORDER_COMPLETED,
+                "Order completed",
+                "Your order " + order.getOrderCode() + " is complete. You can now leave a review!",
+                order.getId(),
+                "ORDER"
+        );
+
+        return buildOrderResponse(order);
+    }
+
+    /**
+     * Mark order as PROCESSING — CONFIRMED → PROCESSING.
+     * Represents staff starting to pick/pack the order.
+     */
+    @Transactional
+    public OrderResponse processOrder(Long orderId) {
+        Order order = findOrThrow(orderId);
+        String actor = SecurityUtils.getCurrentUsernameOrSystem();
+        applyTransition(order, OrderStatus.PROCESSING, ErrorCode.ORDER_STATUS_INVALID);
+        order = orderRepository.save(order);
+
+        log.info("Order processing: code={} by={}", order.getOrderCode(), actor);
+        auditLogService.log(AuditAction.ORDER_PROCESSING, "ORDER", order.getOrderCode());
+        return buildOrderResponse(order);
+    }
+
+    /**
+     * Mark order as DELIVERED — SHIPPED → DELIVERED.
+     * Represents confirmed delivery to the customer.
+     */
+    @Transactional
+    public OrderResponse deliverOrder(Long orderId) {
+        Order order = findOrThrow(orderId);
+        String actor = SecurityUtils.getCurrentUsernameOrSystem();
+        applyTransition(order, OrderStatus.DELIVERED, ErrorCode.ORDER_STATUS_INVALID);
+        order = orderRepository.save(order);
+
+        log.info("Order delivered: code={} by={}", order.getOrderCode(), actor);
+        auditLogService.log(AuditAction.ORDER_DELIVERED, "ORDER", order.getOrderCode());
+
+        notificationService.send(
+                order.getCustomer(),
+                NotificationType.ORDER_DELIVERED,
+                "Order delivered",
+                "Your order " + order.getOrderCode() + " has been delivered. Enjoy your purchase!",
+                order.getId(),
+                "ORDER"
+        );
+
         return buildOrderResponse(order);
     }
 
@@ -422,5 +520,41 @@ public class OrderService {
                 .totalAmount(order.getTotalAmount())
                 .createdAt(order.getCreatedAt())
                 .build();
+    }
+
+    private AdminOrderListItemResponse buildAdminListItemResponse(Order order) {
+        var user = order.getCustomer().getUser();
+        return AdminOrderListItemResponse.builder()
+                .id(order.getId())
+                .orderCode(order.getOrderCode())
+                .customerId(order.getCustomer().getId())
+                .customerName(user.getFirstName() + " " + user.getLastName())
+                .customerEmail(user.getEmail())
+                .status(order.getStatus().name())
+                .paymentMethod(order.getPaymentMethod().name())
+                .paymentStatus(order.getPaymentStatus().name())
+                .totalItems(order.getItems().stream().mapToInt(OrderItem::getQuantity).sum())
+                .totalAmount(order.getTotalAmount())
+                .createdAt(order.getCreatedAt())
+                .build();
+    }
+
+    /** Validates and applies an order status transition. */
+    private void applyTransition(Order order, OrderStatus target, ErrorCode errorCode) {
+        if (!order.getStatus().canTransitionTo(target)) {
+            throw new AppException(errorCode,
+                    "Cannot transition from " + order.getStatus() + " to " + target);
+        }
+        order.setStatus(target);
+    }
+
+    /** Safely parses a nullable String into an enum constant; returns null if blank. */
+    private <T extends Enum<T>> T parseEnum(String value, Class<T> enumClass) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return Enum.valueOf(enumClass, value.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Invalid value '" + value + "' for " + enumClass.getSimpleName());
+        }
     }
 }
