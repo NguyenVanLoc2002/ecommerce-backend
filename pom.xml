@@ -11,7 +11,7 @@
     </parent>
 
     <groupId>com.locnguyen</groupId>
-    <artifactId>ecommerce-platform</artifactId>
+    <artifactId>ecommerce-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>ecommerce-platform</name>
     <description>Fashion E-Commerce Platform Backend - Modular Monolith</description>
