@@ -153,7 +153,8 @@ public class PromotionService {
 
     // ─── Internal helpers ─────────────────────────────────────────────────────
 
-    public Promotion findByIdOrThrow(Long promotionId) {
+    // Intentionally package-private — only VoucherService (same package) and internal methods need this.
+    Promotion findByIdOrThrow(Long promotionId) {
         return promotionRepository.findById(promotionId)
                 .orElseThrow(() -> new AppException(ErrorCode.PROMOTION_NOT_FOUND));
     }
@@ -164,22 +165,22 @@ public class PromotionService {
      */
     @Transactional
     public void incrementUsageCount(Long promotionId) {
-        Promotion promotion = findByIdOrThrow(promotionId);
-        promotion.setUsageCount(promotion.getUsageCount() + 1);
-        promotionRepository.save(promotion);
+        if (!promotionRepository.existsById(promotionId)) {
+            throw new AppException(ErrorCode.PROMOTION_NOT_FOUND);
+        }
+        promotionRepository.incrementUsageCount(promotionId);
     }
 
     /**
-     * Decrements the promotion usage counter on order cancellation.
-     * Counter will not go below zero.
+     * Atomically decrements the promotion usage counter on order cancellation.
+     * Floored at zero by the repository query.
      */
     @Transactional
     public void decrementUsageCount(Long promotionId) {
-        Promotion promotion = findByIdOrThrow(promotionId);
-        if (promotion.getUsageCount() > 0) {
-            promotion.setUsageCount(promotion.getUsageCount() - 1);
-            promotionRepository.save(promotion);
+        if (!promotionRepository.existsById(promotionId)) {
+            throw new AppException(ErrorCode.PROMOTION_NOT_FOUND);
         }
+        promotionRepository.decrementUsageCount(promotionId);
     }
 
     private void validateDateRange(LocalDateTime start, LocalDateTime end) {

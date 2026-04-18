@@ -5,25 +5,23 @@ import com.locnguyen.ecommerce.domains.review.enums.ReviewStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
-public interface ReviewRepository extends JpaRepository<Review, Long>,
-        JpaSpecificationExecutor<Review> {
+public interface ReviewRepository extends JpaRepository<Review, Long> {
 
-    boolean existsByCustomerIdAndProductId(Long customerId, Long productId);
+    /** Check whether an order item has already been reviewed (prevents duplicates). */
+    boolean existsByOrderItemId(Long orderItemId);
 
+    /** All reviews by a customer, newest first — for "my reviews" feed. */
     Page<Review> findByCustomerIdOrderByCreatedAtDesc(Long customerId, Pageable pageable);
 
+    /** Approved reviews for a product — shown on the public product page. */
     Page<Review> findByProductIdAndStatusOrderByCreatedAtDesc(
             Long productId, ReviewStatus status, Pageable pageable);
 
-    @Query("SELECT COALESCE(AVG(r.rating), 0) FROM Review r " +
-           "WHERE r.product.id = :productId AND r.status = 'APPROVED'")
-    double findAverageRatingByProductId(@Param("productId") Long productId);
+    /** Approved reviews for a specific variant. */
+    Page<Review> findByVariantIdAndStatusOrderByCreatedAtDesc(
+            Long variantId, ReviewStatus status, Pageable pageable);
 
-    @Query("SELECT COUNT(r) FROM Review r " +
-           "WHERE r.product.id = :productId AND r.status = 'APPROVED'")
-    long countApprovedByProductId(@Param("productId") Long productId);
+    /** All reviews pending moderation — for the admin moderation queue. */
+    Page<Review> findByStatusOrderByCreatedAtAsc(ReviewStatus status, Pageable pageable);
 }

@@ -45,7 +45,7 @@ public class PaymentController {
     @PostMapping("/order/{orderId}/initiate")
     public ApiResponse<PaymentResponse> initiateOnlinePayment(
             @PathVariable Long orderId,
-            @RequestBody(required = false) InitPaymentRequest request) {
+            @Valid @RequestBody(required = false) InitPaymentRequest request) {
         if (request == null) {
             request = new InitPaymentRequest();
         }

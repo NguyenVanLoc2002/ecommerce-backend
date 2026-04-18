@@ -1,29 +1,23 @@
 package com.locnguyen.ecommerce.domains.review.dto;
 
-import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Getter
 @Setter
-@Schema(description = "Request to submit a product review")
+@NoArgsConstructor
 public class CreateReviewRequest {
 
-    @NotNull
-    @Schema(description = "ID of the order item being reviewed. " +
-            "The order must be COMPLETED and belong to the current customer.")
+    @NotNull(message = "Order item ID is required")
     private Long orderItemId;
 
-    @NotNull
-    @Min(1)
-    @Max(5)
-    @Schema(description = "Star rating from 1 (worst) to 5 (best)")
+    @NotNull(message = "Rating is required")
+    @Min(value = 1, message = "Rating must be at least 1")
+    @Max(value = 5, message = "Rating must be at most 5")
     private Integer rating;
 
-    @Size(max = 255)
-    private String title;
-
-    @Size(max = 5000)
-    private String body;
+    @Size(max = 2000, message = "Comment must not exceed 2000 characters")
+    private String comment;
 }

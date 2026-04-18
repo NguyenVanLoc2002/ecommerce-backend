@@ -4,49 +4,45 @@ import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.notification.dto.NotificationResponse;
+import com.locnguyen.ecommerce.domains.notification.dto.UnreadCountResponse;
 import com.locnguyen.ecommerce.domains.notification.service.NotificationService;
 import com.locnguyen.ecommerce.domains.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
-
-@Tag(name = "Notifications", description = "In-app notification inbox for customers")
+@Tag(name = "Notification")
 @RestController
-@RequiredArgsConstructor
-@SecurityRequirement(name = "bearerAuth")
 @RequestMapping(AppConstants.API_V1 + "/notifications")
+@RequiredArgsConstructor
 public class NotificationController {
 
     private final NotificationService notificationService;
     private final UserService userService;
 
-    @Operation(summary = "Get my notifications (newest first)")
+    @Operation(summary = "Get my notifications")
     @GetMapping
+    @PreAuthorize("hasRole('CUSTOMER')")
     public ApiResponse<PagedResponse<NotificationResponse>> getMyNotifications(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = PageRequest.of(page, size,
-                Sort.by(Sort.Direction.DESC, "createdAt"));
+            @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE) Pageable pageable) {
         return ApiResponse.success(
                 notificationService.getMyNotifications(userService.getCurrentCustomer(), pageable));
     }
 
-    @Operation(summary = "Get unread notification count (for badge)")
+    @Operation(summary = "Get unread notification count")
     @GetMapping("/unread-count")
-    public ApiResponse<Map<String, Long>> getUnreadCount() {
-        long count = notificationService.countUnread(userService.getCurrentCustomer());
-        return ApiResponse.success(Map.of("unreadCount", count));
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<UnreadCountResponse> getUnreadCount() {
+        return ApiResponse.success(notificationService.getUnreadCount(userService.getCurrentCustomer()));
     }
 
     @Operation(summary = "Mark a notification as read")
     @PatchMapping("/{id}/read")
+    @PreAuthorize("hasRole('CUSTOMER')")
     public ApiResponse<NotificationResponse> markAsRead(@PathVariable Long id) {
         return ApiResponse.success(
                 notificationService.markAsRead(id, userService.getCurrentCustomer()));
@@ -54,8 +50,9 @@ public class NotificationController {
 
     @Operation(summary = "Mark all notifications as read")
     @PatchMapping("/read-all")
-    public ApiResponse<Map<String, Integer>> markAllAsRead() {
-        int updated = notificationService.markAllAsRead(userService.getCurrentCustomer());
-        return ApiResponse.success(Map.of("updated", updated));
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<Void> markAllAsRead() {
+        notificationService.markAllAsRead(userService.getCurrentCustomer());
+        return ApiResponse.noContent();
     }
 }

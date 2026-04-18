@@ -17,15 +17,21 @@ import com.locnguyen.ecommerce.domains.inventory.dto.ReserveStockRequest;
 import com.locnguyen.ecommerce.domains.inventory.entity.Inventory;
 import com.locnguyen.ecommerce.domains.inventory.repository.InventoryRepository;
 import com.locnguyen.ecommerce.domains.inventory.service.InventoryService;
+import com.locnguyen.ecommerce.domains.admin.dto.AdminOrderListItemResponse;
 import com.locnguyen.ecommerce.domains.order.dto.*;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.entity.OrderItem;
+import com.locnguyen.ecommerce.domains.order.dto.OrderAdminFilter;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.mapper.OrderMapper;
 import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
+import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
+import com.locnguyen.ecommerce.domains.notification.enums.NotificationType;
+import com.locnguyen.ecommerce.domains.notification.service.NotificationService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +44,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -53,6 +61,8 @@ public class OrderService {
     private final InventoryService inventoryService;
     private final InventoryRepository inventoryRepository;
     private final PaymentService paymentService;
+    private final NotificationService notificationService;
+    private final AuditLogService auditLogService;
 
     // ─── Create order from cart ─────────────────────────────────────────────
 
@@ -159,11 +169,20 @@ public class OrderService {
         // 6. Persist order (cascades to order items)
         order = orderRepository.save(order);
 
-        // 7. Reserve inventory for each item
+        // 7. Reserve inventory for each item — batch-load to avoid N+1 per cart item
+        List<Long> variantIds = cartItems.stream()
+                .map(ci -> ci.getVariant().getId())
+                .toList();
+
+        List<Inventory> allInventories = inventoryRepository.findByVariantIdIn(variantIds);
+
+        // Group inventories by variant ID for O(1) lookup per item
+        Map<Long, List<Inventory>> inventoriesByVariant = allInventories.stream()
+                .collect(Collectors.groupingBy(inv -> inv.getVariant().getId()));
+
         for (CartItem ci : cartItems) {
-            // Find the inventory record for this variant (use first available warehouse)
-            List<Inventory> inventories = inventoryRepository.findByVariantId(ci.getVariant().getId());
-            if (inventories.isEmpty()) {
+            List<Inventory> inventories = inventoriesByVariant.get(ci.getVariant().getId());
+            if (inventories == null || inventories.isEmpty()) {
                 throw new AppException(ErrorCode.INVENTORY_NOT_FOUND,
                         "No inventory record found for variant " + ci.getVariant().getId());
             }
@@ -201,6 +220,8 @@ public class OrderService {
         log.info("Order created: code={} customerId={} items={} total={} payment={} by={}",
                 orderCode, customer.getId(), cartItems.size(), order.getTotalAmount(),
                 paymentMethod, SecurityUtils.getCurrentUsernameOrSystem());
+        auditLogService.log(AuditAction.ORDER_CREATED, "ORDER", orderCode,
+                "items=" + cartItems.size() + " total=" + order.getTotalAmount());
 
         return buildOrderResponse(order);
     }
@@ -230,6 +251,27 @@ public class OrderService {
         Order order = orderRepository.findByOrderCode(orderCode)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
         return buildOrderResponse(order);
+    }
+
+    // ─── Admin read operations ───────────────────────────────────────────────
+
+    /**
+     * List all orders with optional filters — admin / staff view.
+     * Eagerly fetches customer + user in a single query to avoid N+1.
+     */
+    @Transactional(readOnly = true)
+    public PagedResponse<AdminOrderListItemResponse> getAllOrders(OrderAdminFilter filter, Pageable pageable) {
+        OrderStatus status = parseEnum(filter.getStatus(), OrderStatus.class);
+        PaymentStatus paymentStatus = parseEnum(filter.getPaymentStatus(), PaymentStatus.class);
+
+        Page<Order> page = orderRepository.adminFilter(filter.getCustomerId(), status, paymentStatus, pageable);
+        return PagedResponse.of(page.map(this::buildAdminListItemResponse));
+    }
+
+    /** Get any order by ID without ownership check — admin use only. */
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderByIdAdmin(Long orderId) {
+        return buildOrderResponse(findOrThrow(orderId));
     }
 
     // ─── State machine transitions ──────────────────────────────────────────
@@ -268,20 +310,58 @@ public class OrderService {
         order = orderRepository.save(order);
 
         log.info("Order confirmed: code={} by={}", order.getOrderCode(), actor);
+        auditLogService.log(AuditAction.ORDER_CONFIRMED, "ORDER", order.getOrderCode());
+
+        notificationService.send(
+                order.getCustomer(),
+                NotificationType.ORDER_CONFIRMED,
+                "Order confirmed",
+                "Your order " + order.getOrderCode() + " has been confirmed and is being prepared.",
+                order.getId(),
+                "ORDER"
+        );
+
         return buildOrderResponse(order);
     }
 
     /**
-     * Cancel order — releases reserved stock back to available.
+     * Cancel order (admin/staff) — no ownership check.
      *
-     * <p>Per order-lifecycle.md: cancellable from PENDING, AWAITING_PAYMENT, CONFIRMED.
+     * <p>Cancellable from PENDING, AWAITING_PAYMENT, CONFIRMED.
      * CONFIRMED orders can still be cancelled (before shipment).
      */
     @Transactional
     public OrderResponse cancelOrder(Long orderId) {
         Order order = findOrThrow(orderId);
-        String actor = SecurityUtils.getCurrentUsernameOrSystem();
+        return doCancelOrder(order);
+    }
 
+    /**
+     * Cancel a customer's own order — enforces ownership and restricts cancellable statuses.
+     *
+     * <p>Customers may only cancel from PENDING or AWAITING_PAYMENT.
+     * CONFIRMED orders require admin intervention.
+     */
+    @Transactional
+    public OrderResponse cancelMyOrder(Long orderId, Customer customer) {
+        Order order = findOrThrow(orderId);
+
+        if (!order.getCustomer().getId().equals(customer.getId())) {
+            throw new AppException(ErrorCode.ORDER_NOT_FOUND);
+        }
+
+        // Customers may not cancel after admin has confirmed the order
+        if (order.getStatus() == OrderStatus.CONFIRMED
+                || !order.getStatus().canTransitionTo(OrderStatus.CANCELLED)) {
+            throw new AppException(ErrorCode.ORDER_CANNOT_CANCEL,
+                    "You can only cancel orders that are PENDING or AWAITING_PAYMENT");
+        }
+
+        return doCancelOrder(order);
+    }
+
+    private OrderResponse doCancelOrder(Order order) {
+        String actor = SecurityUtils.getCurrentUsernameOrSystem();
         OrderStatus target = OrderStatus.CANCELLED;
 
         if (!order.getStatus().canTransitionTo(target)) {
@@ -295,8 +375,18 @@ public class OrderService {
         // Release all reserved stock for this order
         inventoryService.releaseStock("ORDER", order.getOrderCode());
 
-        log.info("Order cancelled: code={} previousStatus={} by={}",
-                order.getOrderCode(), order.getStatus(), actor);
+        log.info("Order cancelled: code={} by={}", order.getOrderCode(), actor);
+        auditLogService.log(AuditAction.ORDER_CANCELLED, "ORDER", order.getOrderCode());
+
+        notificationService.send(
+                order.getCustomer(),
+                NotificationType.ORDER_CANCELLED,
+                "Order cancelled",
+                "Your order " + order.getOrderCode() + " has been cancelled.",
+                order.getId(),
+                "ORDER"
+        );
+
         return buildOrderResponse(order);
     }
 
@@ -325,6 +415,59 @@ public class OrderService {
         inventoryService.completeOrder("ORDER", order.getOrderCode());
 
         log.info("Order completed: code={} by={}", order.getOrderCode(), actor);
+        auditLogService.log(AuditAction.ORDER_COMPLETED, "ORDER", order.getOrderCode());
+
+        notificationService.send(
+                order.getCustomer(),
+                NotificationType.ORDER_COMPLETED,
+                "Order completed",
+                "Your order " + order.getOrderCode() + " is complete. You can now leave a review!",
+                order.getId(),
+                "ORDER"
+        );
+
+        return buildOrderResponse(order);
+    }
+
+    /**
+     * Mark order as PROCESSING — CONFIRMED → PROCESSING.
+     * Represents staff starting to pick/pack the order.
+     */
+    @Transactional
+    public OrderResponse processOrder(Long orderId) {
+        Order order = findOrThrow(orderId);
+        String actor = SecurityUtils.getCurrentUsernameOrSystem();
+        applyTransition(order, OrderStatus.PROCESSING, ErrorCode.ORDER_STATUS_INVALID);
+        order = orderRepository.save(order);
+
+        log.info("Order processing: code={} by={}", order.getOrderCode(), actor);
+        auditLogService.log(AuditAction.ORDER_PROCESSING, "ORDER", order.getOrderCode());
+        return buildOrderResponse(order);
+    }
+
+    /**
+     * Mark order as DELIVERED — SHIPPED → DELIVERED.
+     * Represents confirmed delivery to the customer.
+     */
+    @Transactional
+    public OrderResponse deliverOrder(Long orderId) {
+        Order order = findOrThrow(orderId);
+        String actor = SecurityUtils.getCurrentUsernameOrSystem();
+        applyTransition(order, OrderStatus.DELIVERED, ErrorCode.ORDER_STATUS_INVALID);
+        order = orderRepository.save(order);
+
+        log.info("Order delivered: code={} by={}", order.getOrderCode(), actor);
+        auditLogService.log(AuditAction.ORDER_DELIVERED, "ORDER", order.getOrderCode());
+
+        notificationService.send(
+                order.getCustomer(),
+                NotificationType.ORDER_DELIVERED,
+                "Order delivered",
+                "Your order " + order.getOrderCode() + " has been delivered. Enjoy your purchase!",
+                order.getId(),
+                "ORDER"
+        );
+
         return buildOrderResponse(order);
     }
 
@@ -377,5 +520,41 @@ public class OrderService {
                 .totalAmount(order.getTotalAmount())
                 .createdAt(order.getCreatedAt())
                 .build();
+    }
+
+    private AdminOrderListItemResponse buildAdminListItemResponse(Order order) {
+        var user = order.getCustomer().getUser();
+        return AdminOrderListItemResponse.builder()
+                .id(order.getId())
+                .orderCode(order.getOrderCode())
+                .customerId(order.getCustomer().getId())
+                .customerName(user.getFirstName() + " " + user.getLastName())
+                .customerEmail(user.getEmail())
+                .status(order.getStatus().name())
+                .paymentMethod(order.getPaymentMethod().name())
+                .paymentStatus(order.getPaymentStatus().name())
+                .totalItems(order.getItems().stream().mapToInt(OrderItem::getQuantity).sum())
+                .totalAmount(order.getTotalAmount())
+                .createdAt(order.getCreatedAt())
+                .build();
+    }
+
+    /** Validates and applies an order status transition. */
+    private void applyTransition(Order order, OrderStatus target, ErrorCode errorCode) {
+        if (!order.getStatus().canTransitionTo(target)) {
+            throw new AppException(errorCode,
+                    "Cannot transition from " + order.getStatus() + " to " + target);
+        }
+        order.setStatus(target);
+    }
+
+    /** Safely parses a nullable String into an enum constant; returns null if blank. */
+    private <T extends Enum<T>> T parseEnum(String value, Class<T> enumClass) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return Enum.valueOf(enumClass, value.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Invalid value '" + value + "' for " + enumClass.getSimpleName());
+        }
     }
 }

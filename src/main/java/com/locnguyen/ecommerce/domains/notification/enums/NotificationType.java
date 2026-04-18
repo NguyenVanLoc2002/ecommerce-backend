@@ -1,32 +1,30 @@
 package com.locnguyen.ecommerce.domains.notification.enums;
 
 /**
- * Categories of in-app notifications.
- *
- * <p>Used both to drive notification template selection and to allow
- * customers to filter or mute specific notification categories.
+ * Categories of in-app notifications sent to customers.
  */
 public enum NotificationType {
 
     // ─── Order lifecycle ────────────────────────────────────────────────────
+    ORDER_PLACED,
     ORDER_CONFIRMED,
-    ORDER_PROCESSING,
+    ORDER_CANCELLED,
     ORDER_SHIPPED,
     ORDER_DELIVERED,
     ORDER_COMPLETED,
-    ORDER_CANCELLED,
 
-    // ─── Payment ────────────────────────────────────────────────────────────
-    PAYMENT_CONFIRMED,
-    PAYMENT_FAILED,
-
-    // ─── Review moderation ───────────────────────────────────────────────────
+    // ─── Review ─────────────────────────────────────────────────────────────
+    REVIEW_SUBMITTED,
     REVIEW_APPROVED,
     REVIEW_REJECTED,
 
-    // ─── Promotions ─────────────────────────────────────────────────────────
-    VOUCHER_ISSUED,
+    // ─── Payment ────────────────────────────────────────────────────────────
+    PAYMENT_RECEIVED,
+    PAYMENT_FAILED,
 
-    // ─── General ────────────────────────────────────────────────────────────
+    // ─── Promotion ──────────────────────────────────────────────────────────
+    VOUCHER_RECEIVED,
+
+    // ─── System ─────────────────────────────────────────────────────────────
     SYSTEM
 }

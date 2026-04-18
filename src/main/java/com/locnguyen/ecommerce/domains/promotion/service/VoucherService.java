@@ -144,7 +144,7 @@ public class VoucherService {
     @Transactional(readOnly = true)
     public ValidateVoucherResponse validateVoucher(String code, Customer customer,
                                                     ValidateVoucherRequest request) {
-        Voucher voucher = findByCodeOrThrow(code);
+        Voucher voucher = findByCodeWithRulesOrThrow(code);
         doValidate(voucher, customer, request.getOrderAmount(),
                 safeList(request.getProductIds()),
                 safeList(request.getCategoryIds()),
@@ -190,7 +190,8 @@ public class VoucherService {
             return BigDecimal.ZERO;
         }
 
-        Voucher voucher = findByCodeOrThrow(voucherCode);
+        // Eager-load promotion + rules to avoid N+1 during doValidate()
+        Voucher voucher = findByCodeWithRulesOrThrow(voucherCode);
 
         // Idempotent: usage already recorded for this order
         if (voucherUsageRepository.existsByVoucherIdAndOrderId(voucher.getId(), orderId)) {
@@ -212,10 +213,8 @@ public class VoucherService {
         usage.setDiscountAmount(discount);
         voucherUsageRepository.save(usage);
 
-        // Increment counters
-        voucher.setUsageCount(voucher.getUsageCount() + 1);
-        voucherRepository.save(voucher);
-
+        // Atomically increment counters — no read-modify-write race
+        voucherRepository.incrementUsageCount(voucher.getId());
         promotionService.incrementUsageCount(voucher.getPromotion().getId());
 
         log.info("Voucher applied: code={} orderId={} discount={}", voucherCode, orderId, discount);
@@ -242,11 +241,8 @@ public class VoucherService {
             return;
         }
 
-        if (voucher.getUsageCount() > 0) {
-            voucher.setUsageCount(voucher.getUsageCount() - 1);
-            voucherRepository.save(voucher);
-        }
-
+        // Atomically decrement counters — floored at zero by repository query
+        voucherRepository.decrementUsageCount(voucher.getId());
         promotionService.decrementUsageCount(voucher.getPromotion().getId());
 
         log.info("Voucher usage released: code={} orderId={}", voucherCode, orderId);
@@ -375,7 +371,7 @@ public class VoucherService {
      * For PERCENTAGE: applies the rate and respects {@code maxDiscountAmount} cap.
      * For FIXED_AMOUNT: returns the fixed value, capped at orderAmount.
      */
-    BigDecimal calculateDiscount(Promotion promotion, BigDecimal orderAmount) {
+    private BigDecimal calculateDiscount(Promotion promotion, BigDecimal orderAmount) {
         if (promotion.getDiscountType() == DiscountType.PERCENTAGE) {
             // discountValue is a percentage e.g. 20 means 20%
             BigDecimal rate = promotion.getDiscountValue()
@@ -404,6 +400,12 @@ public class VoucherService {
                 .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_NOT_FOUND));
     }
 
+    /** Finds a voucher with its promotion and rules eagerly loaded (avoids N+1 in doValidate). */
+    private Voucher findByCodeWithRulesOrThrow(String code) {
+        return voucherRepository.findByCodeWithRules(code)
+                .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_NOT_FOUND));
+    }
+
     private String resolveCode(String requested) {
         if (requested != null && !requested.isBlank()) {
             return requested.trim().toUpperCase();
@@ -419,8 +421,10 @@ public class VoucherService {
                     .map(Long::parseLong)
                     .toList();
         } catch (NumberFormatException e) {
-            log.warn("Failed to parse rule value as IDs: {}", commaSeparated);
-            return Collections.emptyList();
+            // A malformed rule value is a data integrity problem, not a user error.
+            // Silently returning empty would bypass product/category/brand restrictions.
+            throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR,
+                    "Malformed promotion rule value: " + commaSeparated);
         }
     }
 

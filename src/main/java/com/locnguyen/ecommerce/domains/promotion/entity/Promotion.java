@@ -67,6 +67,14 @@ public class Promotion extends SoftDeleteEntity {
     @Column(name = "usage_count", nullable = false)
     private int usageCount = 0;
 
+    /**
+     * JPA optimistic lock version — guards concurrent voucher redemptions that
+     * increment the promotion-level usage counter.
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
+
     @OneToMany(mappedBy = "promotion", cascade = CascadeType.ALL, orphanRemoval = true,
                fetch = FetchType.LAZY)
     private List<PromotionRule> rules = new ArrayList<>();

@@ -142,9 +142,9 @@ public enum ErrorCode {
     REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "REVIEW_ALREADY_EXISTS",
             "You have already reviewed this product"),
     REVIEW_ALREADY_MODERATED(HttpStatus.CONFLICT, "REVIEW_ALREADY_MODERATED",
-            "This review has already been moderated"),
+            "Review has already been moderated"),
 
-    // ─── Notification ────────────────────────────────────────────────────────
+    // ─── Notification ───────────────────────────────────────────────────────
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND",
             "Notification not found");
 

@@ -1,7 +1,11 @@
 package com.locnguyen.ecommerce.domains.brand.service;
 
+import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
+import com.locnguyen.ecommerce.common.utils.SecurityUtils;
+import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
+import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.brand.dto.BrandResponse;
 import com.locnguyen.ecommerce.domains.brand.dto.CreateBrandRequest;
 import com.locnguyen.ecommerce.domains.brand.dto.UpdateBrandRequest;
@@ -11,6 +15,8 @@ import com.locnguyen.ecommerce.domains.brand.mapper.BrandMapper;
 import com.locnguyen.ecommerce.domains.brand.repository.BrandRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,18 +29,30 @@ public class BrandService {
 
     private final BrandRepository brandRepository;
     private final BrandMapper brandMapper;
+    private final AuditLogService auditLogService;
 
+    /**
+     * List all active brands.
+     * Cached for 30 minutes — evicted when any brand mutates.
+     */
+    @Cacheable(value = AppConstants.CACHE_BRANDS, key = "'active'")
     @Transactional(readOnly = true)
     public List<BrandResponse> getActiveBrands() {
         return brandRepository.findByStatusOrderBySortOrderAsc(BrandStatus.ACTIVE)
                 .stream().map(brandMapper::toResponse).toList();
     }
 
+    /**
+     * Get brand by ID.
+     * Cached by ID for 30 minutes.
+     */
+    @Cacheable(value = AppConstants.CACHE_BRANDS, key = "'id:' + #id")
     @Transactional(readOnly = true)
     public BrandResponse getBrandById(Long id) {
         return brandMapper.toResponse(findOrThrow(id));
     }
 
+    @CacheEvict(value = AppConstants.CACHE_BRANDS, allEntries = true)
     @Transactional
     public BrandResponse createBrand(CreateBrandRequest request) {
         if (brandRepository.existsBySlug(request.getSlug())) {
@@ -48,9 +66,12 @@ public class BrandService {
         brand.setStatus(BrandStatus.ACTIVE);
         brand = brandRepository.save(brand);
         log.info("Brand created: id={} name={}", brand.getId(), brand.getName());
+        auditLogService.log(AuditAction.BRAND_CREATED, "BRAND",
+                String.valueOf(brand.getId()), "name=" + brand.getName());
         return brandMapper.toResponse(brand);
     }
 
+    @CacheEvict(value = AppConstants.CACHE_BRANDS, allEntries = true)
     @Transactional
     public BrandResponse updateBrand(Long id, UpdateBrandRequest request) {
         Brand brand = findOrThrow(id);
@@ -67,16 +88,19 @@ public class BrandService {
         if (request.getStatus() != null) brand.setStatus(BrandStatus.valueOf(request.getStatus()));
         brand = brandRepository.save(brand);
         log.info("Brand updated: id={}", id);
+        auditLogService.log(AuditAction.BRAND_UPDATED, "BRAND", String.valueOf(id));
         return brandMapper.toResponse(brand);
     }
 
+    @CacheEvict(value = AppConstants.CACHE_BRANDS, allEntries = true)
     @Transactional
     public void deleteBrand(Long id) {
         Brand brand = findOrThrow(id);
-        String actor = com.locnguyen.ecommerce.common.utils.SecurityUtils.getCurrentUsernameOrSystem();
+        String actor = SecurityUtils.getCurrentUsernameOrSystem();
         brand.softDelete(actor);
         brandRepository.save(brand);
         log.info("Brand deleted: id={} by={}", id, actor);
+        auditLogService.log(AuditAction.BRAND_DELETED, "BRAND", String.valueOf(id));
     }
 
     private Brand findOrThrow(Long id) {

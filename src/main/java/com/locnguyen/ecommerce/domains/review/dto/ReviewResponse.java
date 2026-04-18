@@ -1,41 +1,43 @@
 package com.locnguyen.ecommerce.domains.review.dto;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.Builder;
-import lombok.Getter;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
 @Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
-@JsonInclude(JsonInclude.Include.NON_NULL)
-@Schema(description = "Product review")
 public class ReviewResponse {
 
-    private final Long id;
+    private Long id;
 
-    // ─── Product info ────────────────────────────────────────────────────────
-    private final Long productId;
-    private final String productName;
+    // ─── Customer ───────────────────────────────────────────────────────────
+    private Long customerId;
+    private String customerName;
 
-    // ─── Order link ──────────────────────────────────────────────────────────
-    private final Long orderItemId;
-    private final Long orderId;
-    private final String orderCode;
+    // ─── Product / Variant ──────────────────────────────────────────────────
+    private Long productId;
+    private String productName;
+    private Long variantId;
+    private String variantName;
+    private String sku;
 
-    // ─── Customer info (visible in admin views; hidden in public listing) ────
-    private final Long customerId;
-    private final String customerName;
+    // ─── Source order item ──────────────────────────────────────────────────
+    private Long orderItemId;
 
-    // ─── Review content ──────────────────────────────────────────────────────
-    private final int rating;
-    private final String title;
-    private final String body;
-    private final String status;
+    // ─── Review content ─────────────────────────────────────────────────────
+    private Integer rating;
+    private String comment;
 
-    /** Internal note — only populated for admin responses. */
-    private final String adminNote;
+    // ─── Moderation ─────────────────────────────────────────────────────────
+    private String status;
+    private String adminNote;
+    private LocalDateTime moderatedAt;
+    private String moderatedBy;
 
-    private final LocalDateTime createdAt;
+    // ─── Audit ──────────────────────────────────────────────────────────────
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

@@ -4,72 +4,86 @@ import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.review.dto.CreateReviewRequest;
+import com.locnguyen.ecommerce.domains.review.dto.ModerateReviewRequest;
 import com.locnguyen.ecommerce.domains.review.dto.ReviewResponse;
 import com.locnguyen.ecommerce.domains.review.service.ReviewService;
 import com.locnguyen.ecommerce.domains.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.http.HttpStatus;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Reviews", description = "Product reviews — submission (customers) and public listing")
+@Tag(name = "Review")
 @RestController
-@RequiredArgsConstructor
 @RequestMapping(AppConstants.API_V1 + "/reviews")
+@RequiredArgsConstructor
 public class ReviewController {
 
     private final ReviewService reviewService;
     private final UserService userService;
 
-    @Operation(
-            summary = "Submit a product review",
-            description = "Only allowed after the order containing the product is COMPLETED. " +
-                    "One review per customer per product. New reviews are PENDING until moderated."
-    )
-    @SecurityRequirement(name = "bearerAuth")
-    @ResponseStatus(HttpStatus.CREATED)
+    // ─── Customer ────────────────────────────────────────────────────────────
+
+    @Operation(summary = "Submit a review for a completed order item")
     @PostMapping
-    public ApiResponse<ReviewResponse> create(@Valid @RequestBody CreateReviewRequest request) {
-        return ApiResponse.created(
-                reviewService.createReview(request, userService.getCurrentCustomer()));
+    @PreAuthorize("hasRole('CUSTOMER')")
+    public ApiResponse<ReviewResponse> createReview(@Valid @RequestBody CreateReviewRequest request) {
+        return ApiResponse.created(reviewService.createReview(userService.getCurrentCustomer(), request));
     }
 
     @Operation(summary = "Get my submitted reviews")
-    @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/my")
+    @PreAuthorize("hasRole('CUSTOMER')")
     public ApiResponse<PagedResponse<ReviewResponse>> getMyReviews(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = PageRequest.of(page, size,
-                Sort.by(Sort.Direction.DESC, "createdAt"));
-        return ApiResponse.success(
-                reviewService.getMyReviews(userService.getCurrentCustomer(), pageable));
+            @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE) Pageable pageable) {
+        return ApiResponse.success(reviewService.getMyReviews(userService.getCurrentCustomer(), pageable));
     }
 
-    @Operation(
-            summary = "Get approved reviews for a product",
-            description = "Public endpoint — returns only APPROVED reviews, newest first."
-    )
+    // ─── Public ──────────────────────────────────────────────────────────────
+
+    @Operation(summary = "Get approved reviews for a product")
     @GetMapping("/product/{productId}")
     public ApiResponse<PagedResponse<ReviewResponse>> getProductReviews(
             @PathVariable Long productId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        Pageable pageable = PageRequest.of(page, size,
-                Sort.by(Sort.Direction.DESC, "createdAt"));
-        return ApiResponse.success(
-                reviewService.getApprovedReviewsForProduct(productId, pageable));
+            @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE) Pageable pageable) {
+        return ApiResponse.success(reviewService.getProductReviews(productId, pageable));
     }
 
-    @Operation(summary = "Get average rating for a product")
-    @GetMapping("/product/{productId}/rating")
-    public ApiResponse<Double> getAverageRating(@PathVariable Long productId) {
-        return ApiResponse.success(reviewService.getAverageRating(productId));
+    // ─── Admin / Staff ───────────────────────────────────────────────────────
+
+    @Operation(summary = "Get reviews pending moderation")
+    @GetMapping("/pending")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'STAFF')")
+    public ApiResponse<PagedResponse<ReviewResponse>> getPendingReviews(
+            @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE) Pageable pageable) {
+        return ApiResponse.success(reviewService.getPendingReviews(pageable));
+    }
+
+    @Operation(summary = "Get a review by ID")
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'STAFF')")
+    public ApiResponse<ReviewResponse> getReviewById(@PathVariable Long id) {
+        return ApiResponse.success(reviewService.getReviewById(id));
+    }
+
+    @Operation(summary = "Approve or reject a pending review")
+    @PatchMapping("/{id}/moderate")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'STAFF')")
+    public ApiResponse<ReviewResponse> moderateReview(
+            @PathVariable Long id,
+            @Valid @RequestBody ModerateReviewRequest request) {
+        return ApiResponse.success(reviewService.moderateReview(id, request));
+    }
+
+    @Operation(summary = "Soft-delete a review")
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    public ApiResponse<Void> deleteReview(@PathVariable Long id) {
+        reviewService.deleteReview(id);
+        return ApiResponse.noContent();
     }
 }

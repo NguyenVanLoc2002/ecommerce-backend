@@ -4,7 +4,11 @@
       "Bash(./mvnw compile:*)",
       "Bash(mvn clean *)",
       "Bash(xargs ls:*)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(grep -v \"^T:/Project/ecommerce-platform/src/main/java/com/locnguyen/ecommerce/domains$\")",
+      "Bash(mvn test-compile *)",
+      "Bash(mvn test *)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }

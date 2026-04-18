@@ -79,13 +79,17 @@ public class SecurityConfig {
             "/api/v1/brands/**",
     };
 
-    /** Developer tooling and infrastructure. */
+    /** Developer tooling and open actuator endpoints. */
     private static final String[] OPEN_ENDPOINTS = {
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/v3/api-docs/**",
-            "/actuator/health",
+            "/actuator/health",  // liveness probe — always public
+            "/actuator/info",    // basic build info — public
     };
+
+    /** Actuator management endpoints — restricted to admins. */
+    private static final String ACTUATOR_SENSITIVE = "/actuator/**";
 
     // ─── Security filter chain ───────────────────────────────────────────────
 
@@ -115,10 +119,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET).permitAll()
                         .requestMatchers(OPEN_ENDPOINTS).permitAll()
 
-                        // Admin-only management API
-                        // Role hierarchy ensures SUPER_ADMIN also qualifies
+                        // Sensitive actuator endpoints — admin only
+                        .requestMatchers(ACTUATOR_SENSITIVE).hasAnyRole("ADMIN", "SUPER_ADMIN")
+
+                        // Admin management API — STAFF and above
+                        // Role hierarchy: SUPER_ADMIN > ADMIN > STAFF
+                        // Fine-grained restrictions (e.g. ADMIN-only destructive ops)
+                        // are enforced via @PreAuthorize on individual endpoints.
                         .requestMatchers("/api/v1/admin/**")
-                        .hasAnyRole("ADMIN", "SUPER_ADMIN")
+                        .hasAnyRole("STAFF", "ADMIN", "SUPER_ADMIN")
 
                         // All other endpoints require a valid token (any role)
                         .anyRequest().authenticated()

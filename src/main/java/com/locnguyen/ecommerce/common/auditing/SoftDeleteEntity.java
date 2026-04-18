@@ -36,7 +36,7 @@ public abstract class SoftDeleteEntity extends BaseEntity {
     public void softDelete(String actor) {
         this.deleted = true;
         this.deletedAt = LocalDateTime.now();
-        this.deletedBy = actor;
+        this.deletedBy = (actor != null && !actor.isBlank()) ? actor : "system";
     }
 
     public boolean isActive() {

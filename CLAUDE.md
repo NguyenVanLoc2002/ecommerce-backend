@@ -5,7 +5,7 @@
 Đây là backend cho hệ thống **Web bán quần áo đa nền tảng**, phục vụ:
 
 - **Admin Web**: ReactJS
-- **Mobile App**: mobile client trong tương lai
+- **Mobile App**: React Native
 - **Backend API**: Java Spring Boot (triển khai trước)
 
 Kiến trúc hiện tại ưu tiên theo hướng **Modular Monolith**, dễ phát triển nhanh trong giai đoạn đầu, nhưng vẫn có cấu trúc đủ tốt để tách module hoặc chuyển hướng microservices sau này nếu hệ thống tăng trưởng mạnh.

@@ -2,16 +2,22 @@
 <configuration>
 
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
-    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
 
     <springProperty scope="context" name="APP_NAME"
                     source="spring.application.name" defaultValue="ecommerce"/>
 
+    <!--
+        %X{key} reads from MDC (Mapped Diagnostic Context).
+        RequestLoggingFilter populates: requestId, user, method, uri.
+        A dash is printed when the key is absent (e.g., background threads).
+    -->
     <property name="CONSOLE_PATTERN"
-              value="%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p) %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"/>
+              value="%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p) %clr([%X{requestId:--}]){blue} %clr([%X{user:--}]){yellow} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"/>
 
     <property name="FILE_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%5p] [%t] %-40.40logger{39} : %m%n"/>
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%5p] [%X{requestId:--}] [%X{user:--}] [%t] %-40.40logger{39} : %m%n"/>
+
+    <!-- ─── Appenders ───────────────────────────────────────────────────────── -->
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
@@ -34,6 +40,21 @@
         </encoder>
     </appender>
 
+    <!-- Separate file just for ACCESS logs (method URI status duration) -->
+    <appender name="ACCESS_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/${APP_NAME}-access.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/${APP_NAME}-access.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>200MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>5GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%X{requestId:--}] [%X{user:--}] %m%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
         <appender-ref ref="FILE"/>
         <queueSize>512</queueSize>
@@ -41,12 +62,27 @@
         <includeCallerData>false</includeCallerData>
     </appender>
 
+    <appender name="ASYNC_ACCESS_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="ACCESS_FILE"/>
+        <queueSize>1024</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <includeCallerData>false</includeCallerData>
+    </appender>
+
+    <!-- ─── Dev profile ─────────────────────────────────────────────────────── -->
+
     <springProfile name="dev">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
 
         <logger name="com.locnguyen.ecommerce" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+
+        <!-- Access log (RequestLoggingFilter) goes to console only in dev -->
+        <logger name="com.locnguyen.ecommerce.common.filter.RequestLoggingFilter"
+                level="INFO" additivity="false">
             <appender-ref ref="CONSOLE"/>
         </logger>
 
@@ -68,7 +104,12 @@
         <logger name="org.springframework.web.servlet.mvc.method.annotation" level="WARN"/>
         <logger name="org.springframework.boot.autoconfigure" level="WARN"/>
         <logger name="com.zaxxer.hikari" level="INFO"/>
+
+        <!-- Suppress noisy cache debug output in dev -->
+        <logger name="org.springframework.cache" level="WARN"/>
     </springProfile>
+
+    <!-- ─── Prod profile ─────────────────────────────────────────────────────── -->
 
     <springProfile name="prod">
         <root level="WARN">
@@ -80,6 +121,12 @@
             <appender-ref ref="ASYNC_FILE"/>
         </logger>
 
+        <!-- Access log goes to its own rolling file for easy analysis -->
+        <logger name="com.locnguyen.ecommerce.common.filter.RequestLoggingFilter"
+                level="INFO" additivity="false">
+            <appender-ref ref="ASYNC_ACCESS_FILE"/>
+        </logger>
+
         <logger name="org.springframework.security" level="WARN" additivity="false">
             <appender-ref ref="ASYNC_FILE"/>
         </logger>
@@ -88,8 +135,13 @@
             <appender-ref ref="ASYNC_FILE"/>
         </logger>
 
+        <logger name="com.zaxxer.hikari" level="WARN" additivity="false">
+            <appender-ref ref="ASYNC_FILE"/>
+        </logger>
+
         <logger name="org.hibernate.SQL" level="OFF"/>
         <logger name="org.hibernate.orm.jdbc.bind" level="OFF"/>
+        <logger name="org.springframework.cache" level="WARN"/>
     </springProfile>
 
 </configuration>

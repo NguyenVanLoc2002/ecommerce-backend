@@ -30,6 +30,10 @@ public class InventoryReservation extends BaseEntity {
     @JoinColumn(name = "variant_id", nullable = false)
     private ProductVariant variant;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
+
     @Column(name = "reference_type", length = 50)
     private String referenceType;
 

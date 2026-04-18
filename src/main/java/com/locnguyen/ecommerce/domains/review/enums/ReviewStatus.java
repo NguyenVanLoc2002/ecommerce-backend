@@ -1,22 +1,16 @@
 package com.locnguyen.ecommerce.domains.review.enums;
 
 /**
- * Moderation status of a customer review.
+ * Lifecycle status of a customer review.
  *
- * <pre>
- * PENDING ──► APPROVED
- *    │
- *    └──────► REJECTED
- * </pre>
- *
- * <p>Only {@link #APPROVED} reviews are visible to the public.
- * {@link #PENDING} reviews are visible to their author and admins only.
+ * <ul>
+ *   <li>{@code PENDING}  — newly submitted, awaiting moderation</li>
+ *   <li>{@code APPROVED} — visible on the product page</li>
+ *   <li>{@code REJECTED} — hidden; customer is notified with optional admin note</li>
+ * </ul>
  */
 public enum ReviewStatus {
-    /** Submitted, awaiting admin moderation. */
     PENDING,
-    /** Moderated and published. Visible to all. */
     APPROVED,
-    /** Rejected during moderation. Not publicly visible. */
     REJECTED
 }

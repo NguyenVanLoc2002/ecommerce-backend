@@ -219,7 +219,7 @@ public class InventoryService {
     @Transactional
     public InventoryReservation reserveStock(ReserveStockRequest request) {
         validateVariant(request.getVariantId());
-        warehouseService.findOrThrow(request.getWarehouseId());
+        Warehouse warehouse = warehouseService.findOrThrow(request.getWarehouseId());
 
         Inventory inventory = inventoryRepository
                 .findByVariantIdAndWarehouseIdWithLock(request.getVariantId(), request.getWarehouseId())
@@ -253,6 +253,7 @@ public class InventoryService {
 
         InventoryReservation reservation = new InventoryReservation();
         reservation.setVariant(inventory.getVariant());
+        reservation.setWarehouse(warehouse);
         reservation.setReferenceType(request.getReferenceType());
         reservation.setReferenceId(request.getReferenceId());
         reservation.setQuantity(request.getQuantity());
@@ -284,7 +285,7 @@ public class InventoryService {
             Inventory inventory = inventoryRepository
                     .findByVariantIdAndWarehouseIdWithLock(
                             reservation.getVariant().getId(),
-                            findWarehouseIdForReservation(reservation))
+                            reservation.getWarehouse().getId())
                     .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_NOT_FOUND));
 
             int beforeOnHand = inventory.getOnHand();
@@ -335,7 +336,7 @@ public class InventoryService {
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
         Inventory inventory = inventoryRepository
                 .findByVariantIdAndWarehouseIdWithLock(
-                        variantId, findWarehouseIdForReservation(reservation))
+                        variantId, reservation.getWarehouse().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_NOT_FOUND));
 
         int beforeOnHand = inventory.getOnHand();
@@ -384,7 +385,7 @@ public class InventoryService {
             Inventory inventory = inventoryRepository
                     .findByVariantIdAndWarehouseIdWithLock(
                             reservation.getVariant().getId(),
-                            findWarehouseIdForReservation(reservation))
+                            reservation.getWarehouse().getId())
                     .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_NOT_FOUND));
 
             int beforeOnHand = inventory.getOnHand();
@@ -487,10 +488,16 @@ public class InventoryService {
                 }
             }
             case ADJUST -> {
-                // ADJUST is a special case — admin explicitly sets a new value
-                // For now, treat positive as increase, negative as decrease
-                // The full implementation would need a targetValue approach
-                inventoryRepository.increaseOnHand(inventory.getId(), quantity);
+                // Positive quantity: increase on_hand. Negative: decrease on_hand (admin correction).
+                if (quantity >= 0) {
+                    inventoryRepository.increaseOnHand(inventory.getId(), quantity);
+                } else {
+                    int updated = inventoryRepository.decreaseOnHand(inventory.getId(), -quantity);
+                    if (updated == 0) {
+                        throw new AppException(ErrorCode.INVENTORY_NOT_ENOUGH,
+                                "Cannot adjust: would leave on_hand below reserved count");
+                    }
+                }
             }
             case RESERVE -> {
                 int updated = inventoryRepository.increaseReserved(inventory.getId(), quantity);
@@ -540,30 +547,4 @@ public class InventoryService {
         return stockMovementRepository.save(movement);
     }
 
-    /**
-     * Find the warehouse ID associated with a reservation by looking at stock movements.
-     * Falls back to searching all inventories for the variant.
-     */
-    private Long findWarehouseIdForReservation(InventoryReservation reservation) {
-        // Look at RESERVE movement for this reference to find the warehouse
-        List<StockMovement> movements = stockMovementRepository
-                .findByReferenceTypeAndReferenceIdOrderByCreatedAtDesc(
-                        reservation.getReferenceType(), reservation.getReferenceId());
-
-        for (StockMovement sm : movements) {
-            if (sm.getMovementType() == StockMovementType.RESERVE
-                    && sm.getVariant().getId().equals(reservation.getVariant().getId())) {
-                return sm.getWarehouse().getId();
-            }
-        }
-
-        // Fallback: find any inventory for this variant
-        List<Inventory> inventories = inventoryRepository.findByVariantId(reservation.getVariant().getId());
-        if (!inventories.isEmpty()) {
-            return inventories.get(0).getWarehouse().getId();
-        }
-
-        throw new AppException(ErrorCode.INVENTORY_NOT_FOUND,
-                "Cannot determine warehouse for reservation " + reservation.getId());
-    }
 }
