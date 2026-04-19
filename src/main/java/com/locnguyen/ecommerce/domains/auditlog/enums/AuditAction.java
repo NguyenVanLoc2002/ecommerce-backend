@@ -11,10 +11,12 @@ public enum AuditAction {
     // ─── Auth ────────────────────────────────────────────────────────────────
     LOGIN_SUCCESS,
     LOGIN_FAILURE,
+    LOGOUT,
     TOKEN_REFRESH,
 
     // ─── User ────────────────────────────────────────────────────────────────
     USER_REGISTERED,
+    USER_CREATED,
     USER_UPDATED,
     USER_DISABLED,
     USER_ENABLED,

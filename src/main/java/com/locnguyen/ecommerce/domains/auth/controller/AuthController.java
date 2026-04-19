@@ -1,6 +1,8 @@
 package com.locnguyen.ecommerce.domains.auth.controller;
 
 import com.locnguyen.ecommerce.common.constants.AppConstants;
+import com.locnguyen.ecommerce.common.exception.AppException;
+import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.domains.auth.dto.*;
 import com.locnguyen.ecommerce.domains.auth.service.AuthService;
@@ -8,10 +10,13 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "Authentication", description = "Register, login, and token management")
@@ -81,5 +86,33 @@ public class AuthController {
     public ApiResponse<TokenResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         TokenResponse response = authService.refreshToken(request);
         return ApiResponse.success(response);
+    }
+
+    @Operation(
+            summary = "Logout",
+            description = "Invalidates the current access token. The token is added to a Redis blacklist " +
+                    "and rejected on all subsequent requests until its natural expiry.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "Logged out successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "Token is missing or invalid",
+                    content = @Content(schema = @Schema(implementation = com.locnguyen.ecommerce.common.response.ErrorResponse.class)))
+    })
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(HttpServletRequest request) {
+        String token = extractBearerToken(request);
+        authService.logout(token);
+        return ApiResponse.noContent();
+    }
+
+    private String extractBearerToken(HttpServletRequest request) {
+        String header = request.getHeader(AppConstants.AUTH_HEADER);
+        if (StringUtils.hasText(header) && header.startsWith(AppConstants.BEARER_PREFIX)) {
+            return header.substring(AppConstants.BEARER_PREFIX.length());
+        }
+        throw new AppException(ErrorCode.TOKEN_INVALID, "Authorization header is missing or malformed");
     }
 }
