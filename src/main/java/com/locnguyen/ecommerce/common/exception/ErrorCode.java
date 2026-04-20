@@ -28,6 +28,8 @@ public enum ErrorCode {
     TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "TOKEN_INVALID", "Token is invalid"),
     REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "REFRESH_TOKEN_INVALID",
             "Refresh token is invalid or expired"),
+    TOKEN_BLACKLISTED(HttpStatus.UNAUTHORIZED, "TOKEN_BLACKLISTED",
+            "Token has been invalidated — please log in again"),
     ACCOUNT_DISABLED(HttpStatus.FORBIDDEN, "ACCOUNT_DISABLED",
             "Your account has been disabled"),
     ACCOUNT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ACCOUNT_ALREADY_EXISTS",

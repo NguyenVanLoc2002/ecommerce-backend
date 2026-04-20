@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.common.config.AppProperties;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.security.JwtTokenProvider;
+import com.locnguyen.ecommerce.common.security.TokenBlacklistService;
 import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.auth.dto.*;
@@ -52,6 +53,7 @@ public class AuthService {
 
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
+    private final TokenBlacklistService tokenBlacklistService;
     private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -59,6 +61,26 @@ public class AuthService {
     private final UserMapper userMapper;
     private final AppProperties appProperties;
     private final AuditLogService auditLogService;
+
+    // ─── Logout ──────────────────────────────────────────────────────────────
+
+    /**
+     * Invalidate the caller's access token by adding it to the Redis blacklist.
+     *
+     * <p>The token remains in Redis until its natural expiry — no cleanup job needed.
+     * All subsequent requests with this token will be rejected by {@link com.locnguyen.ecommerce.common.security.JwtAuthenticationFilter}.
+     *
+     * @param token raw access token extracted from the Authorization header
+     */
+    public void logout(String token) {
+        if (!tokenProvider.validateToken(token) || !tokenProvider.isAccessToken(token)) {
+            throw new AppException(ErrorCode.TOKEN_INVALID);
+        }
+        tokenBlacklistService.blacklist(token);
+        String email = tokenProvider.extractUsername(token);
+        log.info("User logged out: email={}", email);
+        auditLogService.log(AuditAction.LOGOUT, "USER", email, "access_token_blacklisted");
+    }
 
     // ─── Register ────────────────────────────────────────────────────────────
 

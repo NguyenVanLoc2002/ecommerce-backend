@@ -41,6 +41,7 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider tokenProvider;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -60,6 +61,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private void authenticate(String token, HttpServletRequest request) {
         if (!tokenProvider.validateToken(token)) {
             // Invalid / expired — let SecurityConfig's entry point handle 401
+            return;
+        }
+
+        if (tokenBlacklistService.isBlacklisted(token)) {
+            log.warn("Blacklisted (logged-out) token rejected — path={}", request.getRequestURI());
             return;
         }
 
