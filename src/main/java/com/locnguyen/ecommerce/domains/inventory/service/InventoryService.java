@@ -15,6 +15,7 @@ import com.locnguyen.ecommerce.domains.inventory.mapper.InventoryMapper;
 import com.locnguyen.ecommerce.domains.inventory.repository.InventoryRepository;
 import com.locnguyen.ecommerce.domains.inventory.repository.InventoryReservationRepository;
 import com.locnguyen.ecommerce.domains.inventory.repository.StockMovementRepository;
+import com.locnguyen.ecommerce.domains.inventory.specification.InventorySpecification;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import com.locnguyen.ecommerce.domains.productvariant.repository.ProductVariantRepository;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,15 @@ public class InventoryService {
     private final InventoryMapper inventoryMapper;
 
     // ─── Read operations ─────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public PagedResponse<InventoryResponse> getInventories(InventoryFilter filter, Pageable pageable) {
+        Page<Inventory> page = inventoryRepository.findAll(
+                InventorySpecification.withFilter(filter),
+                pageable
+        );
+        return PagedResponse.of(page.map(inventoryMapper::toResponse));
+    }
 
     @Transactional(readOnly = true)
     public List<InventoryResponse> getInventoryByVariant(Long variantId) {

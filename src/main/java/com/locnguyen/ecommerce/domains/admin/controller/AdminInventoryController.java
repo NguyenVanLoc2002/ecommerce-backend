@@ -13,7 +13,9 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -79,6 +81,18 @@ public class AdminInventoryController {
 
     // ─── Inventory view ───────────────────────────────────────────────────────
 
+    @Operation(summary = "List inventories (paginated, filterable)")
+    @GetMapping(AppConstants.API_V1 + "/admin/inventories")
+    public ApiResponse<PagedResponse<InventoryResponse>> getInventories(
+            InventoryFilter filter,
+            @PageableDefault(
+                    size = AppConstants.DEFAULT_PAGE_SIZE,
+                    sort = "updatedAt",
+                    direction = Sort.Direction.DESC
+            ) Pageable pageable) {
+        return ApiResponse.success(inventoryService.getInventories(filter, pageable));
+    }
+
     @Operation(summary = "Get inventory levels for a variant (all warehouses)")
     @GetMapping(AppConstants.API_V1 + "/admin/inventories/variant/{variantId}")
     public ApiResponse<List<InventoryResponse>> getInventoryByVariant(@PathVariable Long variantId) {
@@ -117,8 +131,8 @@ public class AdminInventoryController {
     // ─── Stock operations ─────────────────────────────────────────────────────
 
     @Operation(
-        summary = "Adjust stock — import, export, manual adjustment or return",
-        description = "Use movementType IMPORT to receive goods, EXPORT for write-offs, ADJUSTMENT for corrections, RETURN for customer returns."
+            summary = "Adjust stock — import, export, manual adjustment or return",
+            description = "Use movementType IMPORT to receive goods, EXPORT for write-offs, ADJUSTMENT for corrections, RETURN for customer returns."
     )
     @PostMapping(AppConstants.API_V1 + "/admin/inventories/adjust")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
