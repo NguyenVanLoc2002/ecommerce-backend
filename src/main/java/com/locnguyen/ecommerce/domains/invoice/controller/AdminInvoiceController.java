@@ -12,9 +12,9 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -60,16 +60,10 @@ public class AdminInvoiceController {
 
     @Operation(summary = "List invoices (paginated, filterable)")
     @GetMapping
-    public ApiResponse<PagedResponse<InvoiceResponse>> list(
+    public ApiResponse<PagedResponse<InvoiceResponse>> getInvoices(
             InvoiceFilter filter,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "issuedAt") String sort,
-            @RequestParam(defaultValue = "desc") String direction) {
-        Sort.Direction dir = "asc".equalsIgnoreCase(direction)
-                ? Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page, size, Sort.by(dir, sort));
-        return ApiResponse.success(invoiceService.listInvoices(filter, pageable));
+            @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE, sort = "issuedAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ApiResponse.success(invoiceService.getInvoices(filter, pageable));
     }
 
     @Operation(

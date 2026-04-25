@@ -49,10 +49,10 @@ public class AdminVoucherController {
 
     @Operation(summary = "List vouchers (filterable, paginated)")
     @GetMapping
-    public ApiResponse<PagedResponse<VoucherResponse>> list(
+    public ApiResponse<PagedResponse<VoucherResponse>> getVouchers(
             VoucherFilter filter,
             @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE) Pageable pageable) {
-        return ApiResponse.success(voucherService.listVouchers(filter, pageable));
+        return ApiResponse.success(voucherService.getVouchers(filter, pageable));
     }
 
     @Operation(summary = "Get usage history for a voucher")

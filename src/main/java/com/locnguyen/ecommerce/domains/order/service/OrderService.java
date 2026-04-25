@@ -229,8 +229,11 @@ public class OrderService {
     // ─── Read operations ─────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public PagedResponse<OrderListItemResponse> getMyOrders(Customer customer, Pageable pageable) {
-        Page<Order> page = orderRepository.findByCustomerIdOrderByCreatedAtDesc(customer.getId(), pageable);
+    public PagedResponse<OrderListItemResponse> getMyOrders(Customer customer, OrderFilter filter, Pageable pageable) {
+        OrderStatus status = filter.getStatus() != null
+                ? parseEnum(filter.getStatus(), OrderStatus.class)
+                : null;
+        Page<Order> page = orderRepository.filter(customer.getId(), status, pageable);
         List<OrderListItemResponse> items = page.getContent().stream()
                 .map(this::buildListItemResponse)
                 .toList();

@@ -10,9 +10,8 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -51,16 +50,10 @@ public class AdminShipmentController {
 
     @Operation(summary = "List shipments (paginated, filterable)")
     @GetMapping
-    public ApiResponse<PagedResponse<ShipmentResponse>> list(
+    public ApiResponse<PagedResponse<ShipmentResponse>> getShipments(
             ShipmentFilter filter,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "createdAt") String sort,
-            @RequestParam(defaultValue = "desc") String direction) {
-        Sort.Direction dir = "asc".equalsIgnoreCase(direction)
-                ? Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page, size, Sort.by(dir, sort));
-        return ApiResponse.success(shipmentService.listShipments(filter, pageable));
+            @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE, sort = "createdAt") Pageable pageable) {
+        return ApiResponse.success(shipmentService.getShipments(filter, pageable));
     }
 
     @Operation(summary = "Update shipment details (carrier, tracking number, dates, note)")

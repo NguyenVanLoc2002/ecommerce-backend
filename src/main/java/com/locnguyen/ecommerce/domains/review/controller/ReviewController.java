@@ -5,6 +5,7 @@ import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.review.dto.CreateReviewRequest;
 import com.locnguyen.ecommerce.domains.review.dto.ModerateReviewRequest;
+import com.locnguyen.ecommerce.domains.review.dto.ReviewFilter;
 import com.locnguyen.ecommerce.domains.review.dto.ReviewResponse;
 import com.locnguyen.ecommerce.domains.review.service.ReviewService;
 import com.locnguyen.ecommerce.domains.user.service.UserService;
@@ -49,18 +50,20 @@ public class ReviewController {
     @GetMapping("/product/{productId}")
     public ApiResponse<PagedResponse<ReviewResponse>> getProductReviews(
             @PathVariable Long productId,
+            ReviewFilter filter,
             @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE) Pageable pageable) {
-        return ApiResponse.success(reviewService.getProductReviews(productId, pageable));
+        return ApiResponse.success(reviewService.getProductReviews(productId, filter, pageable));
     }
 
     // ─── Admin / Staff ───────────────────────────────────────────────────────
 
-    @Operation(summary = "Get reviews pending moderation")
+    @Operation(summary = "Get reviews pending moderation (filterable by product, customer, rating, status)")
     @GetMapping("/pending")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'STAFF')")
     public ApiResponse<PagedResponse<ReviewResponse>> getPendingReviews(
+            ReviewFilter filter,
             @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE) Pageable pageable) {
-        return ApiResponse.success(reviewService.getPendingReviews(pageable));
+        return ApiResponse.success(reviewService.getPendingReviews(filter, pageable));
     }
 
     @Operation(summary = "Get a review by ID")

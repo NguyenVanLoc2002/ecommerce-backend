@@ -157,7 +157,7 @@ public class InvoiceService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<InvoiceResponse> listInvoices(InvoiceFilter filter, Pageable pageable) {
+    public PagedResponse<InvoiceResponse> getInvoices(InvoiceFilter filter, Pageable pageable) {
         Page<Invoice> page = invoiceRepository.findAll(
                 InvoiceSpecification.withFilter(filter), pageable);
         return PagedResponse.of(page.map(invoiceMapper::toListItemResponse));
