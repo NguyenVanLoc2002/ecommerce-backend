@@ -1,4 +1,4 @@
-package com.locnguyen.ecommerce.domains.promotion.controller;
+package com.locnguyen.ecommerce.domains.admin.controller;
 
 import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
@@ -25,8 +25,6 @@ import org.springframework.web.bind.annotation.*;
 public class AdminPromotionController {
 
     private final PromotionService promotionService;
-
-    // ─── CRUD ───────────────────────────────────────────────────────────────
 
     @Operation(summary = "Create a promotion")
     @ResponseStatus(HttpStatus.CREATED)
@@ -64,8 +62,6 @@ public class AdminPromotionController {
         promotionService.deletePromotion(id);
         return ApiResponse.noContent();
     }
-
-    // ─── Rules ──────────────────────────────────────────────────────────────
 
     @Operation(summary = "Add a rule to a promotion")
     @ResponseStatus(HttpStatus.CREATED)
