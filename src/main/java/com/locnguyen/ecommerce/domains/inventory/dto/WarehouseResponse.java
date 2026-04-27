@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.inventory.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.inventory.enums.WarehouseStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -17,6 +18,6 @@ public class WarehouseResponse {
     private final String name;
     private final String code;
     private final String location;
-    private final String status;
+    private final WarehouseStatus status;
     private final LocalDateTime createdAt;
 }

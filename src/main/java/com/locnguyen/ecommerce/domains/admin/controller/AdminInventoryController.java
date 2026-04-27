@@ -5,6 +5,7 @@ import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.inventory.dto.*;
 import com.locnguyen.ecommerce.domains.inventory.entity.InventoryReservation;
+import com.locnguyen.ecommerce.domains.inventory.enums.StockMovementType;
 import com.locnguyen.ecommerce.domains.inventory.service.InventoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -78,7 +79,7 @@ public class AdminInventoryController {
             @Parameter(description = "Filter by variant ID") @RequestParam(required = false) Long variantId,
             @Parameter(description = "Filter by warehouse ID") @RequestParam(required = false) Long warehouseId,
             @Parameter(description = "Filter by movement type (IMPORT, EXPORT, ADJUSTMENT, RETURN)")
-            @RequestParam(required = false) String movementType,
+            @RequestParam(required = false) StockMovementType movementType,
             @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE) Pageable pageable) {
         StockFilter filter = new StockFilter();
         filter.setVariantId(variantId);

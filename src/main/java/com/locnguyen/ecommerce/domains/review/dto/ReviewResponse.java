@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.review.dto;
 
+import com.locnguyen.ecommerce.domains.review.enums.ReviewStatus;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -13,31 +14,25 @@ public class ReviewResponse {
 
     private Long id;
 
-    // ─── Customer ───────────────────────────────────────────────────────────
     private Long customerId;
     private String customerName;
 
-    // ─── Product / Variant ──────────────────────────────────────────────────
     private Long productId;
     private String productName;
     private Long variantId;
     private String variantName;
     private String sku;
 
-    // ─── Source order item ──────────────────────────────────────────────────
     private Long orderItemId;
 
-    // ─── Review content ─────────────────────────────────────────────────────
     private Integer rating;
     private String comment;
 
-    // ─── Moderation ─────────────────────────────────────────────────────────
-    private String status;
+    private ReviewStatus status;
     private String adminNote;
     private LocalDateTime moderatedAt;
     private String moderatedBy;
 
-    // ─── Audit ──────────────────────────────────────────────────────────────
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

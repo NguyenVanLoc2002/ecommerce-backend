@@ -1,6 +1,9 @@
 package com.locnguyen.ecommerce.domains.order.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,9 +21,9 @@ public class OrderResponse {
     private final Long id;
     private final String orderCode;
     private final Long customerId;
-    private final String status;
-    private final String paymentMethod;
-    private final String paymentStatus;
+    private final OrderStatus status;
+    private final PaymentMethod paymentMethod;
+    private final PaymentStatus paymentStatus;
 
     // Shipping address
     private final String receiverName;

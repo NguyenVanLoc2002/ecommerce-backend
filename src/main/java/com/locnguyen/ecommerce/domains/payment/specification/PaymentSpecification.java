@@ -2,7 +2,6 @@ package com.locnguyen.ecommerce.domains.payment.specification;
 
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentFilter;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
-import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
@@ -18,21 +17,12 @@ public class PaymentSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            if (filter.getMethod() != null && !filter.getMethod().isBlank()) {
-                predicates.add(cb.equal(
-                        cb.upper(root.get("method")),
-                        filter.getMethod().trim().toUpperCase()
-                ));
+            if (filter.getMethod() != null) {
+                predicates.add(cb.equal(root.get("method"), filter.getMethod()));
             }
 
-            if (filter.getStatus() != null && !filter.getStatus().isBlank()) {
-                try {
-                    PaymentRecordStatus status =
-                            PaymentRecordStatus.valueOf(filter.getStatus().trim().toUpperCase());
-                    predicates.add(cb.equal(root.get("status"), status));
-                } catch (IllegalArgumentException ignored) {
-                    // unknown status value — skip predicate rather than failing
-                }
+            if (filter.getStatus() != null) {
+                predicates.add(cb.equal(root.get("status"), filter.getStatus()));
             }
 
             if (filter.getOrderCode() != null && !filter.getOrderCode().isBlank()) {

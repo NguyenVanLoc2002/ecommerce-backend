@@ -1,5 +1,7 @@
 package com.locnguyen.ecommerce.domains.payment.dto;
 
+import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
+import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -11,10 +13,10 @@ import java.time.LocalDate;
 public class PaymentFilter {
 
     @Schema(example = "COD", description = "Filter by payment method: COD or ONLINE")
-    private String method;
+    private PaymentMethod method;
 
     @Schema(example = "PAID", description = "Filter by payment status: PENDING, INITIATED, PAID, FAILED, REFUNDED")
-    private String status;
+    private PaymentRecordStatus status;
 
     @Schema(example = "ORD20260408123456", description = "Filter by order code (partial match)")
     private String orderCode;

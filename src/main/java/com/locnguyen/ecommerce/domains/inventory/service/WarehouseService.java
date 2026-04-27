@@ -68,7 +68,7 @@ public class WarehouseService {
             warehouse.setLocation(request.getLocation());
         }
         if (request.getStatus() != null) {
-            warehouse.setStatus(WarehouseStatus.valueOf(request.getStatus()));
+            warehouse.setStatus(request.getStatus());
         }
 
         warehouse = warehouseRepository.save(warehouse);

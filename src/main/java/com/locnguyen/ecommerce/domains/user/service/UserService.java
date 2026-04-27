@@ -121,7 +121,7 @@ public class UserService {
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .phoneNumber(user.getPhoneNumber())
-                .status(user.getStatus().name())
+                .status(user.getStatus())
                 .roles(user.getRoles().stream()
                         .map(role -> role.getName().name())
                         .collect(Collectors.toSet()))

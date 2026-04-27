@@ -4,6 +4,8 @@ import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
+import com.locnguyen.ecommerce.domains.customer.repository.CustomerRepository;
+import com.locnguyen.ecommerce.domains.notification.dto.BroadcastNotificationRequest;
 import com.locnguyen.ecommerce.domains.notification.dto.NotificationResponse;
 import com.locnguyen.ecommerce.domains.notification.dto.UnreadCountResponse;
 import com.locnguyen.ecommerce.domains.notification.entity.Notification;
@@ -27,6 +29,7 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final NotificationMapper notificationMapper;
+    private final CustomerRepository customerRepository;
 
     // ─── Internal send API ───────────────────────────────────────────────────
 
@@ -97,6 +100,43 @@ public class NotificationService {
     @Transactional
     public void markAllAsRead(Customer customer) {
         notificationRepository.markAllReadByCustomerId(customer.getId(), LocalDateTime.now());
+    }
+
+    // ─── Admin broadcast ─────────────────────────────────────────────────────
+
+    /**
+     * Broadcast a notification to specific customers, or to all customers if
+     * {@code customerIds} is empty/null. Returns the number of customers reached.
+     */
+    @Transactional
+    public int broadcast(BroadcastNotificationRequest request) {
+        java.util.List<Customer> targets = (request.getCustomerIds() == null
+                || request.getCustomerIds().isEmpty())
+                ? customerRepository.findAll()
+                : customerRepository.findAllById(request.getCustomerIds());
+
+        for (Customer customer : targets) {
+            Notification entry = new Notification();
+            entry.setCustomer(customer);
+            entry.setType(request.getType());
+            entry.setTitle(request.getTitle());
+            entry.setBody(request.getMessage());
+            entry.setReferenceId(parseReferenceId(request.getReferenceId()));
+            entry.setReferenceType(request.getReferenceType());
+            notificationRepository.save(entry);
+        }
+
+        log.info("Notification broadcast: type={} count={}", request.getType(), targets.size());
+        return targets.size();
+    }
+
+    private Long parseReferenceId(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return Long.parseLong(raw.trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     @Transactional(readOnly = true)

@@ -2,7 +2,6 @@ package com.locnguyen.ecommerce.domains.review.specification;
 
 import com.locnguyen.ecommerce.domains.review.dto.ReviewFilter;
 import com.locnguyen.ecommerce.domains.review.entity.Review;
-import com.locnguyen.ecommerce.domains.review.enums.ReviewStatus;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -17,11 +16,8 @@ public class ReviewSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            if (filter.getStatus() != null && !filter.getStatus().isBlank()) {
-                try {
-                    ReviewStatus status = ReviewStatus.valueOf(filter.getStatus().trim().toUpperCase());
-                    predicates.add(cb.equal(root.get("status"), status));
-                } catch (IllegalArgumentException ignored) {}
+            if (filter.getStatus() != null) {
+                predicates.add(cb.equal(root.get("status"), filter.getStatus()));
             }
 
             if (filter.getProductId() != null) {

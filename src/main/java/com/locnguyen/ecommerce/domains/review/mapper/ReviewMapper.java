@@ -16,6 +16,5 @@ public interface ReviewMapper {
     @Mapping(target = "variantName",  source = "variant.variantName")
     @Mapping(target = "sku",          source = "variant.sku")
     @Mapping(target = "orderItemId",  source = "orderItem.id")
-    @Mapping(target = "status",       expression = "java(review.getStatus().name())")
     ReviewResponse toResponse(Review review);
 }

@@ -56,14 +56,14 @@ public class PaymentService {
         Payment payment = new Payment();
         payment.setOrder(order);
         payment.setPaymentCode(CodeGenerator.generatePaymentCode());
-        payment.setMethod(PaymentMethod.COD.name());
+        payment.setMethod(PaymentMethod.COD);
         payment.setStatus(PaymentRecordStatus.PENDING);
         payment.setAmount(order.getTotalAmount());
 
         payment = paymentRepository.save(payment);
 
         recordTransaction(payment, TransactionStatus.INITIATED,
-                PaymentMethod.COD.name(), null, null,
+                PaymentMethod.COD, null, null,
                 "COD payment created for order " + order.getOrderCode());
 
         log.info("COD payment created: code={} orderCode={} amount={}",
@@ -103,7 +103,7 @@ public class PaymentService {
         orderRepository.save(order);
 
         recordTransaction(payment, TransactionStatus.SUCCESS,
-                PaymentMethod.COD.name(), null, null,
+                PaymentMethod.COD, null, null,
                 "COD payment collected for order " + order.getOrderCode());
 
         log.info("COD payment completed: code={} orderCode={}",
@@ -161,7 +161,7 @@ public class PaymentService {
                     existing.setExpiredAt(LocalDateTime.now().plusHours(24));
                     existing = paymentRepository.save(existing);
 
-                    recordTransaction(existing, TransactionStatus.INITIATED, "ONLINE",
+                    recordTransaction(existing, TransactionStatus.INITIATED, PaymentMethod.ONLINE,
                             request.getProvider(), null,
                             "Online payment re-initiated after failure for order " + order.getOrderCode());
 
@@ -176,7 +176,7 @@ public class PaymentService {
         Payment payment = new Payment();
         payment.setOrder(order);
         payment.setPaymentCode(CodeGenerator.generatePaymentCode());
-        payment.setMethod("ONLINE");
+        payment.setMethod(PaymentMethod.ONLINE);
         payment.setStatus(PaymentRecordStatus.INITIATED);
         payment.setAmount(order.getTotalAmount());
         payment.setExpiredAt(LocalDateTime.now().plusHours(24));
@@ -187,7 +187,7 @@ public class PaymentService {
         order.setPaymentStatus(PaymentStatus.PENDING);
         orderRepository.save(order);
 
-        recordTransaction(payment, TransactionStatus.INITIATED, "ONLINE",
+        recordTransaction(payment, TransactionStatus.INITIATED, PaymentMethod.ONLINE,
                 request.getProvider(), null,
                 "Online payment initiated for order " + order.getOrderCode());
 
@@ -261,7 +261,7 @@ public class PaymentService {
         txn.setTransactionCode(CodeGenerator.generatePaymentTransactionCode());
         txn.setStatus(success ? TransactionStatus.SUCCESS : TransactionStatus.FAILED);
         txn.setAmount(payment.getAmount());
-        txn.setMethod("ONLINE");
+        txn.setMethod(PaymentMethod.ONLINE);
         txn.setProvider(request.getProvider());
         txn.setProviderTxnId(request.getProviderTxnId());
         txn.setReferenceType("CALLBACK");
@@ -344,7 +344,7 @@ public class PaymentService {
      * @param providerTxnId provider's own transaction reference, may be null
      */
     private PaymentTransaction recordTransaction(Payment payment, TransactionStatus status,
-                                                 String method, String provider,
+                                                 PaymentMethod method, String provider,
                                                  String providerTxnId, String note) {
         PaymentTransaction txn = new PaymentTransaction();
         txn.setPayment(payment);

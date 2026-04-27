@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.review.dto;
 
+import com.locnguyen.ecommerce.domains.review.enums.ReviewStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -8,7 +9,7 @@ import lombok.Data;
 public class ReviewFilter {
 
     @Schema(description = "Filter by review status (PENDING, APPROVED, REJECTED)")
-    private String status;
+    private ReviewStatus status;
 
     @Schema(description = "Filter by product ID")
     private Long productId;

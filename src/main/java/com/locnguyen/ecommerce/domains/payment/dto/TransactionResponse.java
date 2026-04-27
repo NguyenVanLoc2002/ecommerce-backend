@@ -1,6 +1,8 @@
 package com.locnguyen.ecommerce.domains.payment.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
+import com.locnguyen.ecommerce.domains.payment.enums.TransactionStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -16,9 +18,9 @@ public class TransactionResponse {
 
     private final Long id;
     private final String transactionCode;
-    private final String status;
+    private final TransactionStatus status;
     private final BigDecimal amount;
-    private final String method;
+    private final PaymentMethod method;
     private final String provider;
     private final String providerTxnId;
     private final String referenceType;

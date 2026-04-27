@@ -2,6 +2,7 @@ package com.locnguyen.ecommerce.domains.user.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.locnguyen.ecommerce.domains.customer.enums.Gender;
+import com.locnguyen.ecommerce.domains.user.enums.UserStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -20,8 +21,6 @@ import java.util.Set;
 @Schema(description = "User profile — combines auth identity and customer profile")
 public class UserProfileResponse {
 
-    // ─── User (auth identity) ────────────────────────────────────────────────
-
     @Schema(description = "User ID")
     private final Long id;
 
@@ -38,12 +37,10 @@ public class UserProfileResponse {
     private final String phoneNumber;
 
     @Schema(description = "Account status", example = "ACTIVE")
-    private final String status;
+    private final UserStatus status;
 
     @Schema(description = "Assigned roles", example = "[\"CUSTOMER\"]")
     private final Set<String> roles;
-
-    // ─── Customer (business profile) ────────────────────────────────────────
 
     @Schema(description = "Customer ID")
     private final Long customerId;
@@ -59,8 +56,6 @@ public class UserProfileResponse {
 
     @Schema(description = "Loyalty points balance", example = "0")
     private final Integer loyaltyPoints;
-
-    // ─── Metadata ────────────────────────────────────────────────────────────
 
     @Schema(description = "Account creation timestamp")
     private final LocalDateTime createdAt;

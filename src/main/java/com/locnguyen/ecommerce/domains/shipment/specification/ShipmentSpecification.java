@@ -2,7 +2,6 @@ package com.locnguyen.ecommerce.domains.shipment.specification;
 
 import com.locnguyen.ecommerce.domains.shipment.dto.ShipmentFilter;
 import com.locnguyen.ecommerce.domains.shipment.entity.Shipment;
-import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
@@ -37,14 +36,8 @@ public class ShipmentSpecification {
                 ));
             }
 
-            if (filter.getStatus() != null && !filter.getStatus().isBlank()) {
-                try {
-                    ShipmentStatus status = ShipmentStatus.valueOf(
-                            filter.getStatus().trim().toUpperCase());
-                    predicates.add(cb.equal(root.get("status"), status));
-                } catch (IllegalArgumentException ignored) {
-                    // unknown status — skip predicate
-                }
+            if (filter.getStatus() != null) {
+                predicates.add(cb.equal(root.get("status"), filter.getStatus()));
             }
 
             if (filter.getDateFrom() != null) {

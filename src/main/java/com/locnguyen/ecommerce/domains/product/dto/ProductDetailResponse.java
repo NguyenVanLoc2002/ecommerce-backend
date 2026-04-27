@@ -3,6 +3,7 @@ package com.locnguyen.ecommerce.domains.product.dto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.locnguyen.ecommerce.domains.brand.dto.BrandResponse;
 import com.locnguyen.ecommerce.domains.category.dto.CategoryResponse;
+import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -24,7 +25,7 @@ public class ProductDetailResponse {
     private final String slug;
     private final String shortDescription;
     private final String description;
-    private final String status;
+    private final ProductStatus status;
     private final boolean featured;
     private final BrandResponse brand;
     private final List<CategoryResponse> categories;

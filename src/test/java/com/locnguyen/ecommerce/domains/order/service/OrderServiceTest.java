@@ -165,7 +165,7 @@ class OrderServiceTest {
     private CreateOrderRequest createRequest(Long addressId, String paymentMethod) {
         CreateOrderRequest req = new CreateOrderRequest();
         req.setShippingAddressId(addressId);
-        req.setPaymentMethod(paymentMethod);
+        req.setPaymentMethod(paymentMethod == null ? null : PaymentMethod.valueOf(paymentMethod));
         return req;
     }
 

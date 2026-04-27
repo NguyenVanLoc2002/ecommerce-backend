@@ -104,7 +104,7 @@ public class OrderService {
         // 3. Build order
         String orderCode = CodeGenerator.generateOrderCode();
         PaymentMethod paymentMethod = request.getPaymentMethod() != null
-                ? PaymentMethod.valueOf(request.getPaymentMethod())
+                ? request.getPaymentMethod()
                 : PaymentMethod.COD;
 
         Order order = new Order();
@@ -230,10 +230,7 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public PagedResponse<OrderListItemResponse> getMyOrders(Customer customer, OrderFilter filter, Pageable pageable) {
-        OrderStatus status = filter.getStatus() != null
-                ? parseEnum(filter.getStatus(), OrderStatus.class)
-                : null;
-        Page<Order> page = orderRepository.filter(customer.getId(), status, pageable);
+        Page<Order> page = orderRepository.filter(customer.getId(), filter.getStatus(), pageable);
         List<OrderListItemResponse> items = page.getContent().stream()
                 .map(this::buildListItemResponse)
                 .toList();
@@ -264,10 +261,8 @@ public class OrderService {
      */
     @Transactional(readOnly = true)
     public PagedResponse<AdminOrderListItemResponse> getAllOrders(OrderAdminFilter filter, Pageable pageable) {
-        OrderStatus status = parseEnum(filter.getStatus(), OrderStatus.class);
-        PaymentStatus paymentStatus = parseEnum(filter.getPaymentStatus(), PaymentStatus.class);
-
-        Page<Order> page = orderRepository.adminFilter(filter.getCustomerId(), status, paymentStatus, pageable);
+        Page<Order> page = orderRepository.adminFilter(
+                filter.getCustomerId(), filter.getStatus(), filter.getPaymentStatus(), pageable);
         return PagedResponse.of(page.map(this::buildAdminListItemResponse));
     }
 
@@ -490,9 +485,9 @@ public class OrderService {
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
                 .customerId(order.getCustomer().getId())
-                .status(order.getStatus().name())
-                .paymentMethod(order.getPaymentMethod().name())
-                .paymentStatus(order.getPaymentStatus().name())
+                .status(order.getStatus())
+                .paymentMethod(order.getPaymentMethod())
+                .paymentStatus(order.getPaymentStatus())
                 .receiverName(order.getReceiverName())
                 .receiverPhone(order.getReceiverPhone())
                 .shippingStreet(order.getShippingStreet())
@@ -516,9 +511,9 @@ public class OrderService {
         return OrderListItemResponse.builder()
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
-                .status(order.getStatus().name())
-                .paymentMethod(order.getPaymentMethod().name())
-                .paymentStatus(order.getPaymentStatus().name())
+                .status(order.getStatus())
+                .paymentMethod(order.getPaymentMethod())
+                .paymentStatus(order.getPaymentStatus())
                 .totalItems(order.getItems().stream().mapToInt(OrderItem::getQuantity).sum())
                 .totalAmount(order.getTotalAmount())
                 .createdAt(order.getCreatedAt())
@@ -533,9 +528,9 @@ public class OrderService {
                 .customerId(order.getCustomer().getId())
                 .customerName(user.getFirstName() + " " + user.getLastName())
                 .customerEmail(user.getEmail())
-                .status(order.getStatus().name())
-                .paymentMethod(order.getPaymentMethod().name())
-                .paymentStatus(order.getPaymentStatus().name())
+                .status(order.getStatus())
+                .paymentMethod(order.getPaymentMethod())
+                .paymentStatus(order.getPaymentStatus())
                 .totalItems(order.getItems().stream().mapToInt(OrderItem::getQuantity).sum())
                 .totalAmount(order.getTotalAmount())
                 .createdAt(order.getCreatedAt())
@@ -551,13 +546,4 @@ public class OrderService {
         order.setStatus(target);
     }
 
-    /** Safely parses a nullable String into an enum constant; returns null if blank. */
-    private <T extends Enum<T>> T parseEnum(String value, Class<T> enumClass) {
-        if (value == null || value.isBlank()) return null;
-        try {
-            return Enum.valueOf(enumClass, value.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Invalid value '" + value + "' for " + enumClass.getSimpleName());
-        }
-    }
 }

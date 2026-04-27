@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.inventory.dto;
 
+import com.locnguyen.ecommerce.domains.inventory.enums.WarehouseStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -17,5 +18,5 @@ public class UpdateWarehouseRequest {
     private String location;
 
     @Schema(example = "ACTIVE", description = "ACTIVE or INACTIVE")
-    private String status;
+    private WarehouseStatus status;
 }

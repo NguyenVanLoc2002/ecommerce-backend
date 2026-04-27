@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.shipment.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -22,7 +23,7 @@ public class ShipmentResponse {
     private final String shipmentCode;
     private final String carrier;
     private final String trackingNumber;
-    private final String status;
+    private final ShipmentStatus status;
     private final LocalDate estimatedDeliveryDate;
     private final LocalDateTime deliveredAt;
     private final BigDecimal shippingFee;

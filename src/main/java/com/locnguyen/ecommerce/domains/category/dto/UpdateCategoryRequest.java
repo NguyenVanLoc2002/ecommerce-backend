@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.category.dto;
 
+import com.locnguyen.ecommerce.domains.category.enums.CategoryStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -20,7 +21,7 @@ public class UpdateCategoryRequest {
 
     private String imageUrl;
 
-    private String status;
+    private CategoryStatus status;
 
     private Integer sortOrder;
 }

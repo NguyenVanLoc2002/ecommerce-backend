@@ -74,10 +74,8 @@ public class InventoryService {
 
     @Transactional(readOnly = true)
     public PagedResponse<StockMovementResponse> getStockMovements(StockFilter filter, Pageable pageable) {
-        StockMovementType movementType = filter.getMovementType() != null
-                ? StockMovementType.valueOf(filter.getMovementType()) : null;
         Page<StockMovement> page = stockMovementRepository.filter(
-                filter.getVariantId(), filter.getWarehouseId(), movementType, pageable);
+                filter.getVariantId(), filter.getWarehouseId(), filter.getMovementType(), pageable);
         List<StockMovementResponse> items = page.getContent().stream()
                 .map(inventoryMapper::toResponse).toList();
         return PagedResponse.of(items, page);
@@ -161,7 +159,7 @@ public class InventoryService {
         validateVariant(request.getVariantId());
         warehouseService.findOrThrow(request.getWarehouseId());
 
-        StockMovementType type = StockMovementType.valueOf(request.getMovementType());
+        StockMovementType type = request.getMovementType();
 
         Inventory inventory = inventoryRepository
                 .findByVariantIdAndWarehouseId(request.getVariantId(), request.getWarehouseId())

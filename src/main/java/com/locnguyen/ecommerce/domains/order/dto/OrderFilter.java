@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.order.dto;
 
+import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -8,5 +9,5 @@ import lombok.Data;
 public class OrderFilter {
 
     @Schema(description = "Filter by status (PENDING, AWAITING_PAYMENT, CONFIRMED, etc.)")
-    private String status;
+    private OrderStatus status;
 }

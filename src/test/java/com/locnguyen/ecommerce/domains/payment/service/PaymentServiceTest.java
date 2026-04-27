@@ -80,7 +80,7 @@ class PaymentServiceTest {
         setId(p, id);
         p.setOrder(order);
         p.setPaymentCode("PAY202604060001");
-        p.setMethod(order.getPaymentMethod().name());
+        p.setMethod(order.getPaymentMethod());
         p.setStatus(status);
         p.setAmount(order.getTotalAmount());
         return p;
@@ -123,7 +123,7 @@ class PaymentServiceTest {
             ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
             verify(paymentRepository).save(captor.capture());
             assertThat(captor.getValue().getStatus()).isEqualTo(PaymentRecordStatus.PENDING);
-            assertThat(captor.getValue().getMethod()).isEqualTo("COD");
+            assertThat(captor.getValue().getMethod()).isEqualTo(PaymentMethod.COD);
         }
 
         @Test

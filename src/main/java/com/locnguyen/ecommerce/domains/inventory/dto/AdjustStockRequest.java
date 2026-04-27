@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.inventory.dto;
 
+import com.locnguyen.ecommerce.domains.inventory.enums.StockMovementType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -24,9 +25,9 @@ public class AdjustStockRequest {
     private Integer quantity;
 
     @NotNull(message = "Movement type is required")
-    @Schema(example = "IMPORT", description = "IMPORT, EXPORT, ADJUST, RETURN",
+    @Schema(example = "IMPORT", description = "IMPORT, EXPORT, ADJUSTMENT, RETURN",
             requiredMode = Schema.RequiredMode.REQUIRED)
-    private String movementType;
+    private StockMovementType movementType;
 
     @Size(max = 500)
     @Schema(example = "Nhập hàng mới từ nhà cung cấp ABC")

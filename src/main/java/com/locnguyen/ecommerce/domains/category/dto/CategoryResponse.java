@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.category.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.category.enums.CategoryStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -19,7 +20,7 @@ public class CategoryResponse {
     private final String slug;
     private final String description;
     private final String imageUrl;
-    private final String status;
+    private final CategoryStatus status;
     private final Integer sortOrder;
     private final LocalDateTime createdAt;
 }

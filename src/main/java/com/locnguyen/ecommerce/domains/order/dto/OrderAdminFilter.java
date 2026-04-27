@@ -1,5 +1,7 @@
 package com.locnguyen.ecommerce.domains.order.dto;
 
+import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,9 +16,9 @@ public class OrderAdminFilter {
     /** Filter by customer ID. */
     private Long customerId;
 
-    /** Filter by order status (OrderStatus enum name). */
-    private String status;
+    /** Filter by order status. */
+    private OrderStatus status;
 
-    /** Filter by payment status (PaymentStatus enum name). */
-    private String paymentStatus;
+    /** Filter by payment status. */
+    private PaymentStatus paymentStatus;
 }

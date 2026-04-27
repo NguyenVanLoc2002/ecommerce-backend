@@ -2,7 +2,6 @@ package com.locnguyen.ecommerce.domains.invoice.specification;
 
 import com.locnguyen.ecommerce.domains.invoice.dto.InvoiceFilter;
 import com.locnguyen.ecommerce.domains.invoice.entity.Invoice;
-import com.locnguyen.ecommerce.domains.invoice.enums.InvoiceStatus;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
@@ -33,14 +32,8 @@ public class InvoiceSpecification {
                 ));
             }
 
-            if (filter.getStatus() != null && !filter.getStatus().isBlank()) {
-                try {
-                    InvoiceStatus status = InvoiceStatus.valueOf(
-                            filter.getStatus().trim().toUpperCase());
-                    predicates.add(cb.equal(root.get("status"), status));
-                } catch (IllegalArgumentException ignored) {
-                    // unknown status — skip predicate
-                }
+            if (filter.getStatus() != null) {
+                predicates.add(cb.equal(root.get("status"), filter.getStatus()));
             }
 
             if (filter.getDateFrom() != null) {

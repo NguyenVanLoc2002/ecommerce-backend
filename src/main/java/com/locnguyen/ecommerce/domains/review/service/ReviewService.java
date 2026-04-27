@@ -17,6 +17,7 @@ import com.locnguyen.ecommerce.domains.review.dto.CreateReviewRequest;
 import com.locnguyen.ecommerce.domains.review.dto.ModerateReviewRequest;
 import com.locnguyen.ecommerce.domains.review.dto.ReviewFilter;
 import com.locnguyen.ecommerce.domains.review.dto.ReviewResponse;
+import com.locnguyen.ecommerce.domains.review.dto.UpdateReviewStatusRequest;
 import com.locnguyen.ecommerce.domains.review.entity.Review;
 import com.locnguyen.ecommerce.domains.review.enums.ReviewStatus;
 import com.locnguyen.ecommerce.domains.review.mapper.ReviewMapper;
@@ -117,7 +118,7 @@ public class ReviewService {
     @Transactional(readOnly = true)
     public PagedResponse<ReviewResponse> getProductReviews(Long productId, ReviewFilter filter, Pageable pageable) {
         filter.setProductId(productId);
-        filter.setStatus(ReviewStatus.APPROVED.name());
+        filter.setStatus(ReviewStatus.APPROVED);
         Page<Review> page = reviewRepository.findAll(ReviewSpecification.withFilter(filter), pageable);
         return PagedResponse.of(page.map(reviewMapper::toResponse));
     }
@@ -133,11 +134,36 @@ public class ReviewService {
     /** Returns reviews in the PENDING moderation queue — admin/staff only. Supports additional filtering. */
     @Transactional(readOnly = true)
     public PagedResponse<ReviewResponse> getPendingReviews(ReviewFilter filter, Pageable pageable) {
-        if (filter.getStatus() == null || filter.getStatus().isBlank()) {
-            filter.setStatus(ReviewStatus.PENDING.name());
+        if (filter.getStatus() == null) {
+            filter.setStatus(ReviewStatus.PENDING);
         }
         Page<Review> page = reviewRepository.findAll(ReviewSpecification.withFilter(filter), pageable);
         return PagedResponse.of(page.map(reviewMapper::toResponse));
+    }
+
+    /** Admin list: any status, fully filterable. */
+    @Transactional(readOnly = true)
+    public PagedResponse<ReviewResponse> listReviews(ReviewFilter filter, Pageable pageable) {
+        Page<Review> page = reviewRepository.findAll(ReviewSpecification.withFilter(filter), pageable);
+        return PagedResponse.of(page.map(reviewMapper::toResponse));
+    }
+
+    /** Admin lookup by ID — alias for {@link #getReviewById(Long)}. */
+    @Transactional(readOnly = true)
+    public ReviewResponse adminGetById(Long id) {
+        return getReviewById(id);
+    }
+
+    /**
+     * Status-update overload accepting {@link UpdateReviewStatusRequest}.
+     * Delegates to the canonical moderation flow.
+     */
+    @Transactional
+    public ReviewResponse moderateReview(Long reviewId, UpdateReviewStatusRequest request) {
+        ModerateReviewRequest delegate = new ModerateReviewRequest();
+        delegate.setAction(request.getStatus());
+        delegate.setAdminNote(request.getAdminNote());
+        return moderateReview(reviewId, delegate);
     }
 
     // ─── Admin / Staff operations ────────────────────────────────────────────
@@ -157,7 +183,11 @@ public class ReviewService {
             throw new AppException(ErrorCode.REVIEW_ALREADY_MODERATED);
         }
 
-        ReviewStatus newStatus = ReviewStatus.valueOf(request.getAction());
+        ReviewStatus newStatus = request.getAction();
+        if (newStatus != ReviewStatus.APPROVED && newStatus != ReviewStatus.REJECTED) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Action must be APPROVED or REJECTED");
+        }
         review.setStatus(newStatus);
         review.setAdminNote(request.getAdminNote());
         review.setModeratedAt(LocalDateTime.now());

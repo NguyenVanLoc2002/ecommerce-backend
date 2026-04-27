@@ -226,7 +226,7 @@ public class ProductService {
                 .slug(product.getSlug())
                 .shortDescription(product.getShortDescription())
                 .description(product.getDescription())
-                .status(product.getStatus().name())
+                .status(product.getStatus())
                 .featured(product.isFeatured())
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())

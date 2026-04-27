@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.inventory.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.inventory.enums.StockMovementType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -19,7 +20,7 @@ public class StockMovementResponse {
     private final String sku;
     private final Long warehouseId;
     private final String warehouseName;
-    private final String movementType;
+    private final StockMovementType movementType;
     private final int quantity;
     private final String referenceType;
     private final String referenceId;

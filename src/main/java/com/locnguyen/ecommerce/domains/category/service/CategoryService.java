@@ -107,7 +107,7 @@ public class CategoryService {
             category.setImageUrl(request.getImageUrl());
         }
         if (request.getStatus() != null) {
-            category.setStatus(CategoryStatus.valueOf(request.getStatus()));
+            category.setStatus(request.getStatus());
         }
         if (request.getSortOrder() != null) {
             category.setSortOrder(request.getSortOrder());

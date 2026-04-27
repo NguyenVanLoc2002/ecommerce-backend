@@ -2,7 +2,6 @@ package com.locnguyen.ecommerce.domains.brand.specification;
 
 import com.locnguyen.ecommerce.domains.brand.dto.BrandFilter;
 import com.locnguyen.ecommerce.domains.brand.entity.Brand;
-import com.locnguyen.ecommerce.domains.brand.enums.BrandStatus;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -24,13 +23,8 @@ public class BrandSpecification {
                 ));
             }
 
-            if (filter.getStatus() != null && !filter.getStatus().isBlank()) {
-                try {
-                    BrandStatus status = BrandStatus.valueOf(filter.getStatus().trim().toUpperCase());
-                    predicates.add(cb.equal(root.get("status"), status));
-                } catch (IllegalArgumentException ignored) {
-                    // unknown status value — skip predicate
-                }
+            if (filter.getStatus() != null) {
+                predicates.add(cb.equal(root.get("status"), filter.getStatus()));
             }
 
             return cb.and(predicates.toArray(new Predicate[0]));

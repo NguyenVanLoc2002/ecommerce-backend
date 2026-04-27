@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.auth.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.user.enums.UserStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -30,7 +31,7 @@ public class UserResponse {
     private final String phoneNumber;
 
     @Schema(description = "Account status", example = "ACTIVE")
-    private final String status;
+    private final UserStatus status;
 
     @Schema(description = "Assigned roles", example = "[\"CUSTOMER\"]")
     private final Set<String> roles;

@@ -2,6 +2,7 @@ package com.locnguyen.ecommerce.domains.payment.entity;
 
 import com.locnguyen.ecommerce.common.auditing.BaseEntity;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -44,8 +45,9 @@ public class Payment extends BaseEntity {
     @Column(name = "payment_code", length = 50, nullable = false, unique = true)
     private String paymentCode;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "method", length = 50, nullable = false)
-    private String method;
+    private PaymentMethod method;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50, nullable = false)

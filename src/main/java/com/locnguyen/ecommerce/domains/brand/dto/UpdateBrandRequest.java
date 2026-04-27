@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.brand.dto;
 
+import com.locnguyen.ecommerce.domains.brand.enums.BrandStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -18,5 +19,5 @@ public class UpdateBrandRequest {
 
     private String description;
 
-    private String status;
+    private BrandStatus status;
 }

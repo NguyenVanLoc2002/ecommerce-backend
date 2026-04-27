@@ -1,5 +1,8 @@
 package com.locnguyen.ecommerce.domains.admin.dto;
 
+import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -19,17 +22,14 @@ public class AdminOrderListItemResponse {
     private Long id;
     private String orderCode;
 
-    // ─── Customer identity ───────────────────────────────────────────────────
     private Long customerId;
     private String customerName;
     private String customerEmail;
 
-    // ─── Order state ─────────────────────────────────────────────────────────
-    private String status;
-    private String paymentMethod;
-    private String paymentStatus;
+    private OrderStatus status;
+    private PaymentMethod paymentMethod;
+    private PaymentStatus paymentStatus;
 
-    // ─── Amounts ─────────────────────────────────────────────────────────────
     private int totalItems;
     private BigDecimal totalAmount;
 

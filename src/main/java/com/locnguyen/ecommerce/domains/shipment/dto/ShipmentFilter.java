@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.shipment.dto;
 
+import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -11,7 +12,7 @@ public class ShipmentFilter {
     private Long orderId;
     private String orderCode;
     private String carrier;
-    private String status;
+    private ShipmentStatus status;
     private LocalDate dateFrom;
     private LocalDate dateTo;
 }

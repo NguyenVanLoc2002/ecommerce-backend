@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.product.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -26,7 +27,7 @@ public class ProductListItemResponse {
     private final String thumbnailUrl;
     private final BigDecimal minPrice;
     private final BigDecimal maxPrice;
-    private final String status;
+    private final ProductStatus status;
     private final boolean featured;
     private final String brandName;
     private final List<String> categoryNames;

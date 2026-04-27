@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.order.dto;
 
+import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -14,7 +15,7 @@ public class CreateOrderRequest {
     private Long shippingAddressId;
 
     @Schema(example = "COD", description = "Payment method: COD or ONLINE", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
-    private String paymentMethod;
+    private PaymentMethod paymentMethod;
 
     @Schema(example = "Giao giờ hành chính")
     @Size(max = 500)

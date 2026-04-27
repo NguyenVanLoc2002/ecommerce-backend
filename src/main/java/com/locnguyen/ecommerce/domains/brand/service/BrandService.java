@@ -102,7 +102,7 @@ public class BrandService {
         }
         if (request.getLogoUrl() != null) brand.setLogoUrl(request.getLogoUrl());
         if (request.getDescription() != null) brand.setDescription(request.getDescription());
-        if (request.getStatus() != null) brand.setStatus(BrandStatus.valueOf(request.getStatus()));
+        if (request.getStatus() != null) brand.setStatus(request.getStatus());
         brand = brandRepository.save(brand);
         log.info("Brand updated: id={}", id);
         auditLogService.log(AuditAction.BRAND_UPDATED, "BRAND", String.valueOf(id));

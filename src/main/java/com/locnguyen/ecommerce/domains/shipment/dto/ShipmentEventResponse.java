@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.shipment.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
@@ -14,7 +15,7 @@ import java.time.LocalDateTime;
 public class ShipmentEventResponse {
 
     private final Long id;
-    private final String status;
+    private final ShipmentStatus status;
     private final String location;
     private final String description;
     private final LocalDateTime eventTime;

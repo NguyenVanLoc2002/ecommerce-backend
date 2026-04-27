@@ -25,8 +25,8 @@ import org.springframework.web.bind.annotation.*;
  * always lived alongside customer review endpoints. Access is restricted via
  * {@link PreAuthorize} role checks.
  */
-@Tag(name = "Admin — Review", description = "Review moderation for admins and staff")
-@RestController
+@Tag(name = "Admin — Review (legacy paths)", description = "Review moderation for admins and staff (kept under /reviews for backwards compatibility)")
+@RestController("adminReviewLegacyController")
 @RequestMapping(AppConstants.API_V1 + "/reviews")
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
