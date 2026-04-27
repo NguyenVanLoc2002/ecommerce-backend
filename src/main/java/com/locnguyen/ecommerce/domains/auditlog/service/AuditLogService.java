@@ -1,14 +1,22 @@
 package com.locnguyen.ecommerce.domains.auditlog.service;
 
 import com.locnguyen.ecommerce.common.constants.AppConstants;
+import com.locnguyen.ecommerce.common.exception.AppException;
+import com.locnguyen.ecommerce.common.exception.ErrorCode;
+import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.common.utils.SecurityUtils;
+import com.locnguyen.ecommerce.domains.auditlog.dto.AuditLogFilter;
+import com.locnguyen.ecommerce.domains.auditlog.dto.AuditLogResponse;
 import com.locnguyen.ecommerce.domains.auditlog.entity.AuditLog;
 import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
 import com.locnguyen.ecommerce.domains.auditlog.repository.AuditLogRepository;
+import com.locnguyen.ecommerce.domains.auditlog.specification.AuditLogSpecification;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -100,6 +108,31 @@ public class AuditLogService {
             log.error("Failed to persist audit log (explicit actor): action={} actor={} — {}",
                     action, actor, ex.getMessage());
         }
+    }
+
+    // ─── Read API (admin) ────────────────────────────────────────────────────
+
+    /**
+     * List audit logs with filter and pagination, ordered by createdAt DESC.
+     *
+     * <p>Synchronous read — runs on the caller's thread inside its transaction.
+     */
+    @Transactional(readOnly = true)
+    public PagedResponse<AuditLogResponse> getAuditLogs(AuditLogFilter filter, Pageable pageable) {
+        Page<AuditLog> page = auditLogRepository.findAll(
+                AuditLogSpecification.withFilter(filter), pageable);
+        return PagedResponse.of(page.map(AuditLogResponse::from));
+    }
+
+    /**
+     * Get a single audit log entry by id.
+     */
+    @Transactional(readOnly = true)
+    public AuditLogResponse getAuditLogById(Long id) {
+        return auditLogRepository.findById(id)
+                .map(AuditLogResponse::from)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND,
+                        "Audit log not found: id=" + id));
     }
 
     // ─── IP resolution ───────────────────────────────────────────────────────

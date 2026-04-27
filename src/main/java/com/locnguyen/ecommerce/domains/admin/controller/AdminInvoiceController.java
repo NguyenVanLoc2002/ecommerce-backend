@@ -1,4 +1,4 @@
-package com.locnguyen.ecommerce.domains.invoice.controller;
+package com.locnguyen.ecommerce.domains.admin.controller;
 
 import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
