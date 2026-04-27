@@ -169,7 +169,7 @@ public class ShipmentService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<ShipmentResponse> listShipments(ShipmentFilter filter, Pageable pageable) {
+    public PagedResponse<ShipmentResponse> getShipments(ShipmentFilter filter, Pageable pageable) {
         Page<Shipment> page = shipmentRepository.findAll(
                 ShipmentSpecification.withFilter(filter), pageable);
         return PagedResponse.of(page.map(shipmentMapper::toListItemResponse));

@@ -18,6 +18,7 @@ public class BrandResponse {
     private final String slug;
     private final String logoUrl;
     private final String description;
+    private final Integer sortOrder;
     private final String status;
     private final LocalDateTime createdAt;
 }

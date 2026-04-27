@@ -3,9 +3,11 @@ package com.locnguyen.ecommerce.domains.brand.service;
 import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
+import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.common.utils.SecurityUtils;
 import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
+import com.locnguyen.ecommerce.domains.brand.dto.BrandFilter;
 import com.locnguyen.ecommerce.domains.brand.dto.BrandResponse;
 import com.locnguyen.ecommerce.domains.brand.dto.CreateBrandRequest;
 import com.locnguyen.ecommerce.domains.brand.dto.UpdateBrandRequest;
@@ -13,10 +15,12 @@ import com.locnguyen.ecommerce.domains.brand.entity.Brand;
 import com.locnguyen.ecommerce.domains.brand.enums.BrandStatus;
 import com.locnguyen.ecommerce.domains.brand.mapper.BrandMapper;
 import com.locnguyen.ecommerce.domains.brand.repository.BrandRepository;
+import com.locnguyen.ecommerce.domains.brand.specification.BrandSpecification;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +34,19 @@ public class BrandService {
     private final BrandRepository brandRepository;
     private final BrandMapper brandMapper;
     private final AuditLogService auditLogService;
+
+    // ─── Admin operations ─────────────────────────────────────────────────────
+
+    /** Paginated, filterable brand list for admin — bypasses cache. */
+    @Transactional(readOnly = true)
+    public PagedResponse<BrandResponse> getBrands(BrandFilter filter, Pageable pageable) {
+        return PagedResponse.of(
+                brandRepository.findAll(BrandSpecification.withFilter(filter), pageable)
+                        .map(brandMapper::toResponse)
+        );
+    }
+
+    // ─── Public / shared operations ───────────────────────────────────────────
 
     /**
      * List all active brands.

@@ -296,7 +296,7 @@ public class PaymentService {
     // ─── Admin operations ─────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public PagedResponse<PaymentResponse> listPayments(PaymentFilter filter, Pageable pageable) {
+    public PagedResponse<PaymentResponse> getPayments(PaymentFilter filter, Pageable pageable) {
         Page<Payment> page = paymentRepository.findAll(
                 PaymentSpecification.withFilter(filter), pageable);
         return PagedResponse.of(page.map(paymentMapper::toListItemResponse));

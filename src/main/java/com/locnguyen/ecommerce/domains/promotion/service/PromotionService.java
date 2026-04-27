@@ -110,7 +110,7 @@ public class PromotionService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<PromotionResponse> listPromotions(PromotionFilter filter, Pageable pageable) {
+    public PagedResponse<PromotionResponse> getPromotions(PromotionFilter filter, Pageable pageable) {
         Page<Promotion> page = promotionRepository.findAll(
                 PromotionSpecification.withFilter(filter), pageable);
         return PagedResponse.of(page.map(promotionMapper::toListItemResponse));

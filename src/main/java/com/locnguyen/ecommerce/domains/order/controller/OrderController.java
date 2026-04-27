@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
+import com.locnguyen.ecommerce.domains.order.dto.OrderFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderListItemResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
@@ -40,11 +41,12 @@ public class OrderController {
         return ApiResponse.created(orderService.createOrder(userService.getCurrentCustomer(), request));
     }
 
-    @Operation(summary = "List my orders (paginated)")
+    @Operation(summary = "List my orders (paginated, filterable by status)")
     @GetMapping
     public ApiResponse<PagedResponse<OrderListItemResponse>> getMyOrders(
+            OrderFilter filter,
             @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE) Pageable pageable) {
-        return ApiResponse.success(orderService.getMyOrders(userService.getCurrentCustomer(), pageable));
+        return ApiResponse.success(orderService.getMyOrders(userService.getCurrentCustomer(), filter, pageable));
     }
 
     @Operation(summary = "Get my order by ID")

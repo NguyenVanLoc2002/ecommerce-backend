@@ -118,7 +118,7 @@ public class VoucherService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<VoucherResponse> listVouchers(VoucherFilter filter, Pageable pageable) {
+    public PagedResponse<VoucherResponse> getVouchers(VoucherFilter filter, Pageable pageable) {
         Page<Voucher> page = voucherRepository.findAll(
                 VoucherSpecification.withFilter(filter), pageable);
         return PagedResponse.of(page.map(voucherMapper::toResponse));

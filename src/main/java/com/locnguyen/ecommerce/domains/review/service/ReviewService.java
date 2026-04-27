@@ -15,11 +15,13 @@ import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.review.dto.CreateReviewRequest;
 import com.locnguyen.ecommerce.domains.review.dto.ModerateReviewRequest;
+import com.locnguyen.ecommerce.domains.review.dto.ReviewFilter;
 import com.locnguyen.ecommerce.domains.review.dto.ReviewResponse;
 import com.locnguyen.ecommerce.domains.review.entity.Review;
 import com.locnguyen.ecommerce.domains.review.enums.ReviewStatus;
 import com.locnguyen.ecommerce.domains.review.mapper.ReviewMapper;
 import com.locnguyen.ecommerce.domains.review.repository.ReviewRepository;
+import com.locnguyen.ecommerce.domains.review.specification.ReviewSpecification;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -111,11 +113,12 @@ public class ReviewService {
         return reviewMapper.toResponse(findOrThrow(id));
     }
 
-    /** Returns APPROVED reviews for a product — public endpoint. */
+    /** Returns APPROVED reviews for a product — public endpoint. Supports rating filter. */
     @Transactional(readOnly = true)
-    public PagedResponse<ReviewResponse> getProductReviews(Long productId, Pageable pageable) {
-        Page<Review> page = reviewRepository.findByProductIdAndStatusOrderByCreatedAtDesc(
-                productId, ReviewStatus.APPROVED, pageable);
+    public PagedResponse<ReviewResponse> getProductReviews(Long productId, ReviewFilter filter, Pageable pageable) {
+        filter.setProductId(productId);
+        filter.setStatus(ReviewStatus.APPROVED.name());
+        Page<Review> page = reviewRepository.findAll(ReviewSpecification.withFilter(filter), pageable);
         return PagedResponse.of(page.map(reviewMapper::toResponse));
     }
 
@@ -127,10 +130,13 @@ public class ReviewService {
         return PagedResponse.of(page.map(reviewMapper::toResponse));
     }
 
-    /** Returns reviews in the PENDING moderation queue — admin/staff only. */
+    /** Returns reviews in the PENDING moderation queue — admin/staff only. Supports additional filtering. */
     @Transactional(readOnly = true)
-    public PagedResponse<ReviewResponse> getPendingReviews(Pageable pageable) {
-        Page<Review> page = reviewRepository.findByStatusOrderByCreatedAtAsc(ReviewStatus.PENDING, pageable);
+    public PagedResponse<ReviewResponse> getPendingReviews(ReviewFilter filter, Pageable pageable) {
+        if (filter.getStatus() == null || filter.getStatus().isBlank()) {
+            filter.setStatus(ReviewStatus.PENDING.name());
+        }
+        Page<Review> page = reviewRepository.findAll(ReviewSpecification.withFilter(filter), pageable);
         return PagedResponse.of(page.map(reviewMapper::toResponse));
     }
 

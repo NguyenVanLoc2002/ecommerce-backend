@@ -1,4 +1,4 @@
-package com.locnguyen.ecommerce.domains.promotion.controller;
+package com.locnguyen.ecommerce.domains.admin.controller;
 
 import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
@@ -10,9 +10,8 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -26,8 +25,6 @@ import org.springframework.web.bind.annotation.*;
 public class AdminPromotionController {
 
     private final PromotionService promotionService;
-
-    // ─── CRUD ───────────────────────────────────────────────────────────────
 
     @Operation(summary = "Create a promotion")
     @ResponseStatus(HttpStatus.CREATED)
@@ -44,15 +41,10 @@ public class AdminPromotionController {
 
     @Operation(summary = "List promotions (paginated, filterable)")
     @GetMapping
-    public ApiResponse<PagedResponse<PromotionResponse>> list(
+    public ApiResponse<PagedResponse<PromotionResponse>> getPromotions(
             PromotionFilter filter,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "createdAt") String sort,
-            @RequestParam(defaultValue = "desc") String direction) {
-        Sort.Direction dir = "asc".equalsIgnoreCase(direction) ? Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page, size, Sort.by(dir, sort));
-        return ApiResponse.success(promotionService.listPromotions(filter, pageable));
+            @PageableDefault(size = AppConstants.DEFAULT_PAGE_SIZE, sort = "createdAt") Pageable pageable) {
+        return ApiResponse.success(promotionService.getPromotions(filter, pageable));
     }
 
     @Operation(summary = "Update a promotion")
@@ -70,8 +62,6 @@ public class AdminPromotionController {
         promotionService.deletePromotion(id);
         return ApiResponse.noContent();
     }
-
-    // ─── Rules ──────────────────────────────────────────────────────────────
 
     @Operation(summary = "Add a rule to a promotion")
     @ResponseStatus(HttpStatus.CREATED)
