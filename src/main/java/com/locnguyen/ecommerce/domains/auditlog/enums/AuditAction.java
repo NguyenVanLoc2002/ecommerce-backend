@@ -47,6 +47,7 @@ public enum AuditAction {
     ORDER_COMPLETED,
 
     // ─── Payment ─────────────────────────────────────────────────────────────
+    PAYMENT_CREATED,
     PAYMENT_COD_COMPLETED,
     PAYMENT_CALLBACK_SUCCESS,
     PAYMENT_CALLBACK_FAILED,

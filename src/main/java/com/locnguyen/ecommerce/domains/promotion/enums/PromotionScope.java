@@ -19,5 +19,6 @@ public enum PromotionScope {
     ORDER,
     PRODUCT,
     CATEGORY,
-    BRAND
+    BRAND,
+    SHIPPING
 }
