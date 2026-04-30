@@ -1,6 +1,6 @@
 package com.locnguyen.ecommerce.domains.product.entity;
 
-import com.locnguyen.ecommerce.common.auditing.BaseEntity;
+import com.locnguyen.ecommerce.common.auditing.SoftDeleteEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -14,12 +14,18 @@ import java.util.Set;
  * A concrete value for a {@link ProductAttribute} — e.g., "M", "Red", "Cotton".
  */
 @Entity
-@Table(name = "product_attribute_values")
+@Table(
+        name = "product_attribute_values",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_pav_attribute_value",
+                columnNames = {"attribute_id", "value"}
+        )
+)
 @Getter
 @Setter
 @NoArgsConstructor
 @ToString
-public class ProductAttributeValue extends BaseEntity {
+public class ProductAttributeValue extends SoftDeleteEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "attribute_id", nullable = false)

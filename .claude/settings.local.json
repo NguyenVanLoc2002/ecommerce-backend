@@ -25,7 +25,11 @@
       "Bash(curl -sL \"https://repo1.maven.org/maven2/org/flywaydb/flyway-database-mariadb/maven-metadata.xml\")",
       "Bash(curl -sL \"https://repo1.maven.org/maven2/org/flywaydb/\")",
       "Bash(curl -sL \"https://repo1.maven.org/maven2/org/flywaydb/flyway-mysql/maven-metadata.xml\")",
-      "Bash(./mvnw dependency:tree -Dincludes=org.flywaydb)"
+      "Bash(./mvnw dependency:tree -Dincludes=org.flywaydb)",
+      "Bash(./mvnw -Dtest='CartServiceTest,OrderServiceTest' test)",
+      "Bash(./mvnw -DskipTests clean compile)",
+      "Bash(./mvnw -Dtest='ProductAttributeServiceTest,ProductVariantServiceTest' test)",
+      "Bash(./mvnw -Dtest='CartServiceTest,OrderServiceTest,InventoryServiceTest,PaymentServiceTest,OrderStatusTest,EcommercePlatformApplicationTests' test)"
     ]
   }
 }

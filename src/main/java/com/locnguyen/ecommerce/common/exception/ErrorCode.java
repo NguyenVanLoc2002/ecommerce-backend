@@ -64,6 +64,28 @@ public enum ErrorCode {
             "Product variant is currently inactive"),
     SKU_ALREADY_EXISTS(HttpStatus.CONFLICT, "SKU_ALREADY_EXISTS",
             "SKU is already in use"),
+    BARCODE_ALREADY_EXISTS(HttpStatus.CONFLICT, "BARCODE_ALREADY_EXISTS",
+            "Barcode is already in use"),
+    VARIANT_INVALID_PRICE(HttpStatus.UNPROCESSABLE_ENTITY, "VARIANT_INVALID_PRICE",
+            "Variant prices are invalid"),
+    VARIANT_INVALID_WEIGHT(HttpStatus.UNPROCESSABLE_ENTITY, "VARIANT_INVALID_WEIGHT",
+            "Variant weight must be greater than 0 when provided"),
+    VARIANT_ATTRIBUTE_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "VARIANT_ATTRIBUTE_INVALID",
+            "Variant attributes are invalid"),
+    VARIANT_COMBINATION_DUPLICATE(HttpStatus.CONFLICT, "VARIANT_COMBINATION_DUPLICATE",
+            "Another variant with this attribute combination already exists for this product"),
+
+    // ─── Product Attribute ─────────────────────────────────────────────────
+    PRODUCT_ATTRIBUTE_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_ATTRIBUTE_NOT_FOUND",
+            "Product attribute not found"),
+    PRODUCT_ATTRIBUTE_VALUE_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_ATTRIBUTE_VALUE_NOT_FOUND",
+            "Product attribute value not found"),
+    PRODUCT_ATTRIBUTE_CODE_ALREADY_EXISTS(HttpStatus.CONFLICT, "PRODUCT_ATTRIBUTE_CODE_ALREADY_EXISTS",
+            "Product attribute code is already in use"),
+    PRODUCT_ATTRIBUTE_VALUE_ALREADY_EXISTS(HttpStatus.CONFLICT, "PRODUCT_ATTRIBUTE_VALUE_ALREADY_EXISTS",
+            "Attribute value already exists for this attribute"),
+    PRODUCT_ATTRIBUTE_VALUE_IN_USE(HttpStatus.CONFLICT, "PRODUCT_ATTRIBUTE_VALUE_IN_USE",
+            "Attribute value is currently used by one or more variants"),
 
     // ─── Inventory ──────────────────────────────────────────────────────────
     INVENTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "INVENTORY_NOT_FOUND",

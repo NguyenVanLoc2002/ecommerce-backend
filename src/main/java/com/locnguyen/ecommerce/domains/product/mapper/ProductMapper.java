@@ -16,7 +16,8 @@ import java.util.stream.Collectors;
  * Maps Product entity to list-item and detail DTOs.
  * Does NOT expose entity-level relationships directly.
  */
-@Mapper(componentModel = "spring", uses = {BrandMapper.class, CategoryMapper.class})
+@Mapper(componentModel = "spring",
+        uses = {BrandMapper.class, CategoryMapper.class, ProductVariantMapper.class})
 public interface ProductMapper {
 
     @Mapping(target = "thumbnailUrl", source = ".", qualifiedByName = "extractThumbnail")

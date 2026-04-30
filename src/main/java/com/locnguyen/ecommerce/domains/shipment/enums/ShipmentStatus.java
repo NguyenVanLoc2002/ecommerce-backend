@@ -21,6 +21,9 @@ public enum ShipmentStatus {
     /** Created, awaiting carrier pickup. */
     PENDING,
 
+    /** Carrier is picking up the package. */
+    PICKING,
+
     /** Picked up by carrier and in transit. */
     IN_TRANSIT,
 
@@ -37,7 +40,8 @@ public enum ShipmentStatus {
     RETURNED;
 
     private static final Map<ShipmentStatus, Set<ShipmentStatus>> TRANSITIONS = Map.of(
-            PENDING,           EnumSet.of(IN_TRANSIT, FAILED),
+            PENDING,           EnumSet.of(PICKING, FAILED),
+            PICKING,           EnumSet.of(IN_TRANSIT, FAILED),
             IN_TRANSIT,        EnumSet.of(OUT_FOR_DELIVERY, FAILED),
             OUT_FOR_DELIVERY,  EnumSet.of(DELIVERED, FAILED),
             FAILED,            EnumSet.of(RETURNED)
