@@ -26,6 +26,7 @@ Role summary by module:
 
 - `ADMIN`, `SUPER_ADMIN` only:
   - admin products and variants
+  - admin product attributes (and their values)
   - admin promotions
   - admin notifications broadcast
   - admin audit logs
@@ -85,29 +86,39 @@ Role summary by module:
 ### Variant DTOs
 
 - `VariantResponse`
-  - `id`, `sku`, `barcode`, `variantName`
+  - `id`, `productId`, `sku`, `barcode`, `variantName`
   - `basePrice`, `salePrice`, `compareAtPrice`
   - `weightGram`, `status`
-  - `attributes`
-- `AttributeResponse`
-  - `name`, `value`
+  - `attributes`: list of `VariantAttributeResponse`
+- `VariantAttributeResponse`
+  - `attributeId`, `attributeName`, `attributeCode`
+  - `valueId`, `value`, `displayValue`
 - `MediaResponse`
   - `id`, `mediaUrl`, `mediaType`, `sortOrder`, `primary`, `variantId`
 - `CreateVariantRequest`
-  - `sku`: required, max 100
-  - `barcode`: optional, max 100
-  - `variantName`: required, max 255
-  - `basePrice`: required, positive
-  - `salePrice`: optional, positive
-  - `compareAtPrice`: optional, positive
-  - `weightGram`: optional
+  - `sku`: optional, max 100. Server generates one when blank or `autoGenerateSku=true`.
+  - `autoGenerateSku`: optional boolean
+  - `barcode`: optional, max 100. Uniqueness enforced when present.
+  - `autoGenerateBarcode`: optional boolean — server generates when true or barcode blank
+  - `variantName`: optional, max 255. Server builds from selected attribute display values when blank or `autoGenerateVariantName=true`.
+  - `autoGenerateVariantName`: optional boolean
+  - `basePrice`: required, `>= 0`
+  - `salePrice`: optional, `>= 0`, must be `<= basePrice`
+  - `compareAtPrice`: optional, `>= 0`, must be `>= basePrice`
+  - `weightGram`: optional, must be `> 0` when present
   - `status`: optional
-  - `attributes`: optional list of `AttributeRequest`
+  - `attributeValueIds`: set of `ProductAttributeValue` UUIDs (must be `VARIANT`-typed; at most one value per attribute)
 - `UpdateVariantRequest`
-  - partial update version of the same fields
-- `AttributeRequest`
-  - `attributeName`: required, max 100
-  - `value`: required, max 100
+  - partial update version of the same fields. If `attributeValueIds` is provided, the variant's attribute set is replaced.
+
+### Variant validation rules
+
+- `attributeValueIds` must reference existing values whose attribute is of type `VARIANT`. Sending a `DESCRIPTIVE` attribute value yields `VARIANT_ATTRIBUTE_INVALID`.
+- A variant cannot select more than one value from the same attribute (`VARIANT_ATTRIBUTE_INVALID`).
+- The same attribute-value combination cannot occur twice within the same product (`VARIANT_COMBINATION_DUPLICATE`).
+- `basePrice` is required and must be `>= 0`. `salePrice <= basePrice`. `compareAtPrice >= basePrice`. Violations yield `VARIANT_INVALID_PRICE`.
+- `weightGram` must be `> 0` when present (`VARIANT_INVALID_WEIGHT`).
+- Manually supplied `sku` must be unique (`SKU_ALREADY_EXISTS`); manually supplied `barcode` must be unique (`BARCODE_ALREADY_EXISTS`).
 
 ### GET `/api/v1/admin/products`
 
@@ -186,6 +197,116 @@ Role summary by module:
 
 - Access: `ADMIN`, `SUPER_ADMIN`
 - Description: soft-delete variant
+- Response:
+  - `ApiResponse<Void>`
+
+---
+
+## 2.b Product Attribute
+
+Reusable attribute definitions used to build variant pickers and tag descriptive product traits.
+
+### DTOs
+
+- `ProductAttributeFilter`
+  - `type`: optional `VARIANT` or `DESCRIPTIVE`
+  - `keyword`: optional partial, case-insensitive match on `name` or `code`
+- `ProductAttributeResponse`
+  - `id`, `name`, `code`, `type`
+  - `values`: list of `ProductAttributeValueResponse`
+  - `createdAt`, `updatedAt`
+- `ProductAttributeValueResponse`
+  - `id`, `value`, `displayValue`
+- `CreateProductAttributeRequest`
+  - `name`: required, max 100
+  - `code`: required, max 50 — normalized to upper snake-case server-side
+  - `type`: required (`VARIANT` or `DESCRIPTIVE`)
+  - `values`: optional list of `CreateProductAttributeValueRequest`
+- `UpdateProductAttributeRequest`
+  - partial update of the same fields. When `values` is provided, the value set is **replaced**.
+- `CreateProductAttributeValueRequest`
+  - `value`: required, max 100
+  - `displayValue`: optional, max 100
+
+### GET `/api/v1/admin/product-attributes`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: list product attributes (paginated). Pass `type=VARIANT` to fetch the dataset used by the variant attribute picker.
+- Filters:
+  - `type`, `keyword`
+- Pagination:
+  - `page`, `size`, `sort`
+  - default: `size=20`, `sort=createdAt,desc`
+- Response:
+  - `ApiResponse<PagedResponse<ProductAttributeResponse>>`
+
+### GET `/api/v1/admin/product-attributes/{id}`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: fetch one attribute
+- Response:
+  - `ApiResponse<ProductAttributeResponse>`
+
+### POST `/api/v1/admin/product-attributes`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: create a product attribute (optionally seed initial values)
+- Request body:
+  - `CreateProductAttributeRequest`
+- Errors:
+  - `PRODUCT_ATTRIBUTE_CODE_ALREADY_EXISTS` (409)
+  - `PRODUCT_ATTRIBUTE_VALUE_ALREADY_EXISTS` (409) — duplicate value in request
+- Response:
+  - `ApiResponse<ProductAttributeResponse>`
+
+### PUT `/api/v1/admin/product-attributes/{id}`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: partial update. If `values` is provided, the value set is replaced. Existing values that are still in use by variants cannot be removed.
+- Request body:
+  - `UpdateProductAttributeRequest`
+- Errors:
+  - `PRODUCT_ATTRIBUTE_NOT_FOUND` (404)
+  - `PRODUCT_ATTRIBUTE_CODE_ALREADY_EXISTS` (409)
+  - `PRODUCT_ATTRIBUTE_VALUE_IN_USE` (409)
+- Response:
+  - `ApiResponse<ProductAttributeResponse>`
+
+### DELETE `/api/v1/admin/product-attributes/{id}`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: soft-delete the attribute (and soft-delete its values). Variant snapshots remain intact because `variant_attribute_values` join rows are not touched.
+- Response:
+  - `ApiResponse<Void>`
+
+### POST `/api/v1/admin/product-attributes/{attributeId}/values`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: add a single value under an attribute
+- Request body:
+  - `CreateProductAttributeValueRequest`
+- Errors:
+  - `PRODUCT_ATTRIBUTE_NOT_FOUND` (404)
+  - `PRODUCT_ATTRIBUTE_VALUE_ALREADY_EXISTS` (409)
+- Response:
+  - `ApiResponse<ProductAttributeValueResponse>`
+
+### PUT `/api/v1/admin/product-attributes/{attributeId}/values/{valueId}`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: update a single attribute value
+- Request body:
+  - `CreateProductAttributeValueRequest`
+- Errors:
+  - `PRODUCT_ATTRIBUTE_VALUE_NOT_FOUND` (404)
+  - `PRODUCT_ATTRIBUTE_VALUE_ALREADY_EXISTS` (409)
+- Response:
+  - `ApiResponse<ProductAttributeValueResponse>`
+
+### DELETE `/api/v1/admin/product-attributes/{attributeId}/values/{valueId}`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: soft-delete a single value. Rejected with `PRODUCT_ATTRIBUTE_VALUE_IN_USE` if any variant still references it.
 - Response:
   - `ApiResponse<Void>`
 

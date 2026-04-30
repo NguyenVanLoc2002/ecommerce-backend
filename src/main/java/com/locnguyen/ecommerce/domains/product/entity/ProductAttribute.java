@@ -1,6 +1,6 @@
 package com.locnguyen.ecommerce.domains.product.entity;
 
-import com.locnguyen.ecommerce.common.auditing.BaseEntity;
+import com.locnguyen.ecommerce.common.auditing.SoftDeleteEntity;
 import com.locnguyen.ecommerce.domains.product.enums.AttributeType;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -21,7 +21,7 @@ import java.util.Set;
 @Getter
 @Setter
 @NoArgsConstructor
-public class ProductAttribute extends BaseEntity {
+public class ProductAttribute extends SoftDeleteEntity {
 
     @Column(name = "name", length = 100, nullable = false)
     private String name;
