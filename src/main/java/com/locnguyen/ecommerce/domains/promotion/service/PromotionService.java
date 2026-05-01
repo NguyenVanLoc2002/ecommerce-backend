@@ -156,7 +156,7 @@ public class PromotionService {
 
     // Intentionally package-private — only VoucherService (same package) and internal methods need this.
     Promotion findByIdOrThrow(UUID promotionId) {
-        return promotionRepository.findById(promotionId)
+        return promotionRepository.findByIdAndDeletedFalse(promotionId)
                 .orElseThrow(() -> new AppException(ErrorCode.PROMOTION_NOT_FOUND));
     }
 

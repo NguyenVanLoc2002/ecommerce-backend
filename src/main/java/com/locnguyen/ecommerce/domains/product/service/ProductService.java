@@ -111,7 +111,7 @@ public class ProductService {
         product.setFeatured(Boolean.TRUE.equals(request.getFeatured()));
 
         if (request.getBrandId() != null) {
-            Brand brand = brandRepository.findById(request.getBrandId())
+            Brand brand = brandRepository.findByIdAndDeletedFalse(request.getBrandId())
                     .orElseThrow(() -> new AppException(ErrorCode.BRAND_NOT_FOUND));
             product.setBrand(brand);
         }
@@ -156,7 +156,7 @@ public class ProductService {
         }
 
         if (request.getBrandId() != null) {
-            Brand brand = brandRepository.findById(request.getBrandId())
+            Brand brand = brandRepository.findByIdAndDeletedFalse(request.getBrandId())
                     .orElseThrow(() -> new AppException(ErrorCode.BRAND_NOT_FOUND));
             product.setBrand(brand);
         }
@@ -201,14 +201,18 @@ public class ProductService {
     // ─── Internal ────────────────────────────────────────────────────────────
 
     private Product findOrThrow(UUID id) {
-        return productRepository.findById(id)
+        return productRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
     }
 
     private void setCategories(Product product, List<UUID> categoryIds) {
         product.getCategories().clear();
         if (categoryIds != null && !categoryIds.isEmpty()) {
-            List<Category> categories = categoryRepository.findAllById(categoryIds);
+            List<UUID> uniqueIds = categoryIds.stream().distinct().toList();
+            List<Category> categories = categoryRepository.findByIdInAndDeletedFalse(uniqueIds);
+            if (categories.size() != uniqueIds.size()) {
+                throw new AppException(ErrorCode.CATEGORY_NOT_FOUND);
+            }
             product.getCategories().addAll(categories);
         }
     }
@@ -231,13 +235,15 @@ public class ProductService {
                 .featured(product.isFeatured())
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())
-                .brand(product.getBrand() != null
+                .brand(product.getBrand() != null && !product.getBrand().isDeleted()
                         ? brandMapper.toResponse(product.getBrand())
                         : null)
                 .categories(product.getCategories().stream()
+                        .filter(category -> !category.isDeleted())
                         .map(categoryMapper::toResponse)
                         .toList())
                 .variants(product.getVariants().stream()
+                        .filter(variant -> !variant.isDeleted())
                         .map(productVariantMapper::toResponse)
                         .toList())
                 .media(product.getMedia().stream()

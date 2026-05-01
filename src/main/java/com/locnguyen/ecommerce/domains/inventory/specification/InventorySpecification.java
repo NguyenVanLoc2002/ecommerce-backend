@@ -22,6 +22,9 @@ public class InventorySpecification {
             var variantJoin = root.join("variant", JoinType.INNER);
             var warehouseJoin = root.join("warehouse", JoinType.INNER);
             var productJoin = variantJoin.join("product", JoinType.INNER);
+            predicates.add(cb.isFalse(variantJoin.get("deleted")));
+            predicates.add(cb.isFalse(warehouseJoin.get("deleted")));
+            predicates.add(cb.isFalse(productJoin.get("deleted")));
 
             if (filter.getVariantId() != null) {
                 predicates.add(cb.equal(variantJoin.get("id"), filter.getVariantId()));

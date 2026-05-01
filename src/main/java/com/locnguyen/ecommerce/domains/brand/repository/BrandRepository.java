@@ -17,5 +17,7 @@ public interface BrandRepository extends JpaRepository<Brand, UUID>, JpaSpecific
 
     Optional<Brand> findBySlug(String slug);
 
+    Optional<Brand> findByIdAndDeletedFalse(UUID id);
+
     List<Brand> findByStatusOrderBySortOrderAsc(BrandStatus status);
 }

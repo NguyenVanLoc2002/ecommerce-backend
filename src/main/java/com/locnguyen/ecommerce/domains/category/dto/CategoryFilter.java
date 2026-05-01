@@ -21,4 +21,10 @@ public class CategoryFilter {
 
         @Schema(description = "Filter by category status", example = "ACTIVE")
         private CategoryStatus status;
+
+        @Schema(description = "Soft delete filter: false=active only, true=deleted only", example = "false")
+        private Boolean isDeleted;
+
+        @Schema(description = "Include both active and deleted rows", example = "false")
+        private Boolean includeDeleted;
 }

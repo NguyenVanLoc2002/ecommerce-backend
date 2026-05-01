@@ -18,7 +18,11 @@ public interface CategoryRepository extends JpaRepository<Category, UUID>,
 
     Optional<Category> findBySlug(String slug);
 
+    Optional<Category> findByIdAndDeletedFalse(UUID id);
+
     List<Category> findByStatusOrderBySortOrderAsc(CategoryStatus status);
 
     List<Category> findByParentIdOrderBySortOrderAsc(UUID parentId);
+
+    List<Category> findByIdInAndDeletedFalse(List<UUID> ids);
 }

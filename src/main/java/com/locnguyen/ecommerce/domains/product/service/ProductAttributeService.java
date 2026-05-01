@@ -201,14 +201,16 @@ public class ProductAttributeService {
     // ─── Internal ───────────────────────────────────────────────────────────
 
     private ProductAttribute findAttributeOrThrow(UUID id) {
-        return attributeRepository.findById(id)
+        return attributeRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_ATTRIBUTE_NOT_FOUND));
     }
 
     private ProductAttributeValue findValueOrThrow(UUID attributeId, UUID valueId) {
-        ProductAttributeValue value = valueRepository.findById(valueId)
+        ProductAttributeValue value = valueRepository.findByIdAndDeletedFalse(valueId)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_ATTRIBUTE_VALUE_NOT_FOUND));
-        if (value.getAttribute() == null || !attributeId.equals(value.getAttribute().getId())) {
+        if (value.getAttribute() == null
+                || value.getAttribute().isDeleted()
+                || !attributeId.equals(value.getAttribute().getId())) {
             throw new AppException(ErrorCode.PRODUCT_ATTRIBUTE_VALUE_NOT_FOUND);
         }
         return value;

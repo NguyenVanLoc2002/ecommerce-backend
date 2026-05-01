@@ -454,6 +454,21 @@ Enum values are returned as strings. Some DTOs expose enum-typed fields directly
 - Money fields are JSON numbers backed by `BigDecimal`.
 - Boolean flags use normal JSON booleans.
 
+### 10.1 Soft-delete convention
+
+- Catalog/admin modules that use `SoftDeleteEntity` are soft-deleted, not hard-deleted.
+- `DELETE` on these resources means soft delete unless an endpoint explicitly documents hard delete.
+- Admin list APIs for these resources default to active rows only.
+- Admin list filters use one shared convention:
+  - `isDeleted=false`: active rows only
+  - `isDeleted=true`: deleted rows only
+  - `includeDeleted=true`: both active and deleted rows
+- If no soft-delete query parameter is provided, the default is active rows only.
+- Reading a soft-deleted resource by ID should behave like a missing resource and return the module's normal `404`/not-found error.
+- Child collections exposed in DTOs should also exclude soft-deleted rows.
+- Picker/reference APIs should resolve active rows only by default and should reject deleted references in create/update flows.
+- Soft-deleted rows may still reserve unique business keys when the backing database unique constraint remains in place.
+
 ---
 
 ## 11. Validation conventions

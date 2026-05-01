@@ -35,7 +35,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserProfileResponse getMyProfile() {
         User user = getCurrentUser();
-        Customer customer = customerRepository.findByUserId(user.getId()).orElse(null);
+        Customer customer = customerRepository.findByUserIdAndDeletedFalse(user.getId()).orElse(null);
         return buildProfileResponse(user, customer);
     }
 
@@ -72,7 +72,7 @@ public class UserService {
         }
 
         // ── Update or create Customer fields ─────────────────────────────────
-        Customer customer = customerRepository.findByUserId(user.getId())
+        Customer customer = customerRepository.findByUserIdAndDeletedFalse(user.getId())
                 .orElseGet(() -> {
                     Customer c = new Customer(user);
                     log.info("Lazily created customer profile for userId={}", user.getId());
@@ -101,7 +101,7 @@ public class UserService {
      */
     public Customer getCurrentCustomer() {
         User user = getCurrentUser();
-        return customerRepository.findByUserId(user.getId())
+        return customerRepository.findByUserIdAndDeletedFalse(user.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
     }
 
@@ -110,7 +110,7 @@ public class UserService {
     private User getCurrentUser() {
         String email = SecurityUtils.getCurrentUsername()
                 .orElseThrow(() -> new AppException(ErrorCode.UNAUTHORIZED));
-        return userRepository.findByEmail(email)
+        return userRepository.findByEmailAndDeletedFalse(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
     }
 

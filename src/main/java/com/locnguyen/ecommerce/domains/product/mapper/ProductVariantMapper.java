@@ -35,6 +35,8 @@ public class ProductVariantMapper {
 
     private List<VariantAttributeResponse> extractAttributes(ProductVariant variant) {
         return variant.getAttributeValues().stream()
+                .filter(value -> !value.isDeleted())
+                .filter(value -> value.getAttribute() == null || !value.getAttribute().isDeleted())
                 .map(this::toAttributeResponse)
                 .sorted(Comparator
                         .comparing(VariantAttributeResponse::getAttributeName,

@@ -11,4 +11,10 @@ import java.util.UUID;
 public interface CustomerRepository extends JpaRepository<Customer, UUID> {
 
     Optional<Customer> findByUserId(UUID userId);
+
+    Optional<Customer> findByUserIdAndDeletedFalse(UUID userId);
+
+    java.util.List<Customer> findAllByDeletedFalse();
+
+    java.util.List<Customer> findByIdInAndDeletedFalse(java.util.List<UUID> ids);
 }

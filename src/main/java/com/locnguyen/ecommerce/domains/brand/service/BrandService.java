@@ -122,7 +122,7 @@ public class BrandService {
     }
 
     private Brand findOrThrow(UUID id) {
-        return brandRepository.findById(id)
+        return brandRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.BRAND_NOT_FOUND));
     }
 }

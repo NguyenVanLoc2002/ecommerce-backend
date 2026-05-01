@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.product.specification;
 
+import com.locnguyen.ecommerce.common.specification.SoftDeleteSpecificationHelper;
 import com.locnguyen.ecommerce.domains.product.dto.attribute.ProductAttributeFilter;
 import com.locnguyen.ecommerce.domains.product.entity.ProductAttribute;
 import jakarta.persistence.criteria.Predicate;
@@ -16,8 +17,16 @@ public final class ProductAttributeSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
+            SoftDeleteSpecificationHelper.addDeletedFilter(
+                    predicates,
+                    root.get("deleted"),
+                    cb,
+                    filter != null ? filter.getIsDeleted() : null,
+                    filter != null ? filter.getIncludeDeleted() : null
+            );
+
             if (filter == null) {
-                return cb.and();
+                return cb.and(predicates.toArray(new Predicate[0]));
             }
 
             if (filter.getType() != null) {

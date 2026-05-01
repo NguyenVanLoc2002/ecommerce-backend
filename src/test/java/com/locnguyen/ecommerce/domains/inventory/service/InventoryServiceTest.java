@@ -121,7 +121,7 @@ class InventoryServiceTest {
 
         @Test
         void throws_PRODUCT_VARIANT_NOT_FOUND_when_variant_missing() {
-            when(productVariantRepository.existsById(uuid(99))).thenReturn(false);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(99))).thenReturn(false);
 
             assertThatThrownBy(() -> inventoryService.reserveStock(reserveRequest(uuid(99), uuid(1), 2)))
                     .isInstanceOf(AppException.class)
@@ -131,7 +131,7 @@ class InventoryServiceTest {
 
         @Test
         void throws_INVENTORY_NOT_FOUND_when_no_record_for_variant_warehouse() {
-            when(productVariantRepository.existsById(uuid(1))).thenReturn(true);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(1))).thenReturn(true);
             when(warehouseService.findOrThrow(uuid(1))).thenReturn(warehouse(uuid(1)));
             when(inventoryRepository.findByVariantIdAndWarehouseIdWithLock(uuid(1), uuid(1)))
                     .thenReturn(Optional.empty());
@@ -149,7 +149,7 @@ class InventoryServiceTest {
             Warehouse w = warehouse(uuid(1));
             Inventory inv = inventory(uuid(10), v, w, 5, 4);
 
-            when(productVariantRepository.existsById(uuid(1))).thenReturn(true);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(1))).thenReturn(true);
             when(warehouseService.findOrThrow(uuid(1))).thenReturn(w);
             when(inventoryRepository.findByVariantIdAndWarehouseIdWithLock(uuid(1), uuid(1)))
                     .thenReturn(Optional.of(inv));
@@ -168,7 +168,7 @@ class InventoryServiceTest {
             Inventory inv = inventory(uuid(10), v, w, 15, 5);
             Inventory refreshed = inventory(uuid(10), v, w, 15, 5);
 
-            when(productVariantRepository.existsById(uuid(1))).thenReturn(true);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(1))).thenReturn(true);
             when(warehouseService.findOrThrow(uuid(1))).thenReturn(w);
             when(inventoryRepository.findByVariantIdAndWarehouseIdWithLock(uuid(1), uuid(1)))
                     .thenReturn(Optional.of(inv));
@@ -187,7 +187,7 @@ class InventoryServiceTest {
             Inventory inv = inventory(uuid(10), v, w, 20, 0);
             Inventory refreshed = inventory(uuid(10), v, w, 20, 5);
 
-            when(productVariantRepository.existsById(uuid(1))).thenReturn(true);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(1))).thenReturn(true);
             when(warehouseService.findOrThrow(uuid(1))).thenReturn(w);
             when(inventoryRepository.findByVariantIdAndWarehouseIdWithLock(uuid(1), uuid(1)))
                     .thenReturn(Optional.of(inv));
@@ -216,7 +216,7 @@ class InventoryServiceTest {
             Inventory refreshed = inventory(uuid(10), v, w, 20, 3);
             LocalDateTime expiresAt = LocalDateTime.now().plusHours(24);
 
-            when(productVariantRepository.existsById(uuid(1))).thenReturn(true);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(1))).thenReturn(true);
             when(warehouseService.findOrThrow(uuid(1))).thenReturn(w);
             when(inventoryRepository.findByVariantIdAndWarehouseIdWithLock(uuid(1), uuid(1)))
                     .thenReturn(Optional.of(inv));
@@ -241,7 +241,7 @@ class InventoryServiceTest {
             Inventory inv = inventory(uuid(10), v, w, 10, 7);
             Inventory refreshed = inventory(uuid(10), v, w, 10, 10);
 
-            when(productVariantRepository.existsById(uuid(1))).thenReturn(true);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(1))).thenReturn(true);
             when(warehouseService.findOrThrow(uuid(1))).thenReturn(w);
             when(inventoryRepository.findByVariantIdAndWarehouseIdWithLock(uuid(1), uuid(1)))
                     .thenReturn(Optional.of(inv));
@@ -428,7 +428,7 @@ class InventoryServiceTest {
 
         @Test
         void throws_PRODUCT_VARIANT_NOT_FOUND_when_variant_missing() {
-            when(productVariantRepository.existsById(uuid(99))).thenReturn(false);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(99))).thenReturn(false);
 
             assertThatThrownBy(() ->
                     inventoryService.importStock(uuid(99), uuid(1), 10, "Initial import"))
@@ -444,12 +444,12 @@ class InventoryServiceTest {
             Inventory newInv = inventory(uuid(10), v, w, 0, 0);
             Inventory refreshed = inventory(uuid(10), v, w, 50, 0);
 
-            when(productVariantRepository.existsById(uuid(1))).thenReturn(true);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(1))).thenReturn(true);
             when(warehouseService.findOrThrow(uuid(1))).thenReturn(w);
             // First call: not found → getOrCreateInventory creates it
             when(inventoryRepository.findByVariantIdAndWarehouseId(uuid(1), uuid(1)))
                     .thenReturn(Optional.empty());
-            when(productVariantRepository.findById(uuid(1))).thenReturn(Optional.of(v));
+            when(productVariantRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(v));
             when(inventoryRepository.save(any())).thenReturn(newInv);
             when(inventoryRepository.increaseOnHand(uuid(10), 50)).thenReturn(1);
             when(inventoryRepository.findById(uuid(10))).thenReturn(Optional.of(refreshed));
@@ -467,7 +467,7 @@ class InventoryServiceTest {
             Inventory inv = inventory(uuid(10), v, w, 20, 3);
             Inventory refreshed = inventory(uuid(10), v, w, 30, 3);
 
-            when(productVariantRepository.existsById(uuid(1))).thenReturn(true);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(1))).thenReturn(true);
             when(warehouseService.findOrThrow(uuid(1))).thenReturn(w);
             when(inventoryRepository.findByVariantIdAndWarehouseId(uuid(1), uuid(1)))
                     .thenReturn(Optional.of(inv));
@@ -497,7 +497,7 @@ class InventoryServiceTest {
             Warehouse w = warehouse(uuid(1));
             Inventory inv = inventory(uuid(10), v, w, 5, 5);
 
-            when(productVariantRepository.existsById(uuid(1))).thenReturn(true);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(1))).thenReturn(true);
             when(warehouseService.findOrThrow(uuid(1))).thenReturn(w);
             when(inventoryRepository.findByVariantIdAndWarehouseId(uuid(1), uuid(1)))
                     .thenReturn(Optional.of(inv));
@@ -512,7 +512,7 @@ class InventoryServiceTest {
 
         @Test
         void throws_INVENTORY_NOT_FOUND_when_no_inventory_record() {
-            when(productVariantRepository.existsById(uuid(1))).thenReturn(true);
+            when(productVariantRepository.existsByIdAndDeletedFalse(uuid(1))).thenReturn(true);
             when(warehouseService.findOrThrow(uuid(1))).thenReturn(warehouse(uuid(1)));
             when(inventoryRepository.findByVariantIdAndWarehouseId(uuid(1), uuid(1)))
                     .thenReturn(Optional.empty());
@@ -581,3 +581,4 @@ class InventoryServiceTest {
         }
     }
 }
+

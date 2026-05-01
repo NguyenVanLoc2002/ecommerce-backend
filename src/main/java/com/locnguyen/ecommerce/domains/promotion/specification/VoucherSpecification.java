@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.promotion.specification;
 
+import com.locnguyen.ecommerce.common.specification.SoftDeleteSpecificationHelper;
 import com.locnguyen.ecommerce.domains.promotion.dto.VoucherFilter;
 import com.locnguyen.ecommerce.domains.promotion.entity.Voucher;
 import jakarta.persistence.criteria.Predicate;
@@ -16,29 +17,37 @@ public class VoucherSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            if (filter.getCode() != null && !filter.getCode().isBlank()) {
+            SoftDeleteSpecificationHelper.addDeletedFilter(
+                    predicates,
+                    root.get("deleted"),
+                    cb,
+                    filter != null ? filter.getIsDeleted() : null,
+                    filter != null ? filter.getIncludeDeleted() : null
+            );
+
+            if (filter != null && filter.getCode() != null && !filter.getCode().isBlank()) {
                 predicates.add(cb.like(
                         cb.upper(root.get("code")),
                         "%" + filter.getCode().trim().toUpperCase() + "%"
                 ));
             }
 
-            if (filter.getPromotionId() != null) {
+            if (filter != null && filter.getPromotionId() != null) {
                 predicates.add(cb.equal(root.get("promotion").get("id"), filter.getPromotionId()));
             }
 
-            if (filter.getActive() != null) {
+            if (filter != null && filter.getActive() != null) {
                 predicates.add(cb.equal(root.get("active"), filter.getActive()));
             }
 
-            if (filter.getDateFrom() != null) {
+            if (filter != null && filter.getDateFrom() != null) {
                 predicates.add(cb.greaterThanOrEqualTo(
                         root.get("startDate"),
                         filter.getDateFrom().atStartOfDay()
                 ));
             }
 
-            if (filter.getDateTo() != null) {
+            if (filter != null && filter.getDateTo() != null) {
                 predicates.add(cb.lessThanOrEqualTo(
                         root.get("endDate"),
                         filter.getDateTo().atTime(23, 59, 59)

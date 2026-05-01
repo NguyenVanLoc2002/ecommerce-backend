@@ -1,6 +1,6 @@
 package com.locnguyen.ecommerce.domains.category.specification;
 
-
+import com.locnguyen.ecommerce.common.specification.SoftDeleteSpecificationHelper;
 import com.locnguyen.ecommerce.domains.category.dto.CategoryFilter;
 import com.locnguyen.ecommerce.domains.category.entity.Category;
 import jakarta.persistence.criteria.Predicate;
@@ -21,31 +21,33 @@ public final class CategorySpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // Name — search category name
-            if (filter.getName() != null && !filter.getName().isBlank()) {
+            SoftDeleteSpecificationHelper.addDeletedFilter(
+                    predicates,
+                    root.get("deleted"),
+                    cb,
+                    filter != null ? filter.getIsDeleted() : null,
+                    filter != null ? filter.getIncludeDeleted() : null
+            );
+
+            if (filter != null && filter.getName() != null && !filter.getName().isBlank()) {
                 String pattern = "%" + filter.getName().toLowerCase().trim() + "%";
                 predicates.add(cb.like(cb.lower(root.get("name")), pattern));
             }
 
-            // Slug — search category slug
-            if (filter.getSlug() != null && !filter.getSlug().isBlank()) {
+            if (filter != null && filter.getSlug() != null && !filter.getSlug().isBlank()) {
                 String pattern = "%" + filter.getSlug().toLowerCase().trim() + "%";
                 predicates.add(cb.like(cb.lower(root.get("slug")), pattern));
             }
 
-            // Parent category
-            if (filter.getParentId() != null) {
+            if (filter != null && filter.getParentId() != null) {
                 predicates.add(cb.equal(root.get("parent").get("id"), filter.getParentId()));
             }
 
-            // Status
-            if (filter.getStatus() != null) {
+            if (filter != null && filter.getStatus() != null) {
                 predicates.add(cb.equal(root.get("status"), filter.getStatus()));
             }
 
-            return predicates.isEmpty()
-                    ? null
-                    : cb.and(predicates.toArray(new Predicate[0]));
+            return cb.and(predicates.toArray(new Predicate[0]));
         };
     }
 }

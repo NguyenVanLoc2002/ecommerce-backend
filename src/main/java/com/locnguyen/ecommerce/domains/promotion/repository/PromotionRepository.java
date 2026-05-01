@@ -7,9 +7,12 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
 import java.util.UUID;
 public interface PromotionRepository extends JpaRepository<Promotion, UUID>,
         JpaSpecificationExecutor<Promotion> {
+
+    Optional<Promotion> findByIdAndDeletedFalse(UUID id);
 
     /**
      * Atomically increments the promotion usage counter.

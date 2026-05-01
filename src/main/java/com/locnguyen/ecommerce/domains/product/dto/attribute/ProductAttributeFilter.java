@@ -13,4 +13,10 @@ public class ProductAttributeFilter {
 
     @Schema(description = "Partial, case-insensitive match on name or code", example = "color")
     private String keyword;
+
+    @Schema(description = "Soft delete filter: false=active only, true=deleted only", example = "false")
+    private Boolean isDeleted;
+
+    @Schema(description = "Include both active and deleted rows", example = "false")
+    private Boolean includeDeleted;
 }

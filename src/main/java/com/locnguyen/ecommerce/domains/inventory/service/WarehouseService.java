@@ -3,21 +3,23 @@ package com.locnguyen.ecommerce.domains.inventory.service;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.utils.SecurityUtils;
-import com.locnguyen.ecommerce.domains.inventory.dto.WarehouseResponse;
 import com.locnguyen.ecommerce.domains.inventory.dto.CreateWarehouseRequest;
 import com.locnguyen.ecommerce.domains.inventory.dto.UpdateWarehouseRequest;
+import com.locnguyen.ecommerce.domains.inventory.dto.WarehouseFilter;
+import com.locnguyen.ecommerce.domains.inventory.dto.WarehouseResponse;
 import com.locnguyen.ecommerce.domains.inventory.entity.Warehouse;
 import com.locnguyen.ecommerce.domains.inventory.enums.WarehouseStatus;
 import com.locnguyen.ecommerce.domains.inventory.mapper.WarehouseMapper;
 import com.locnguyen.ecommerce.domains.inventory.repository.WarehouseRepository;
+import com.locnguyen.ecommerce.domains.inventory.specification.WarehouseSpecification;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-
 import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -26,20 +28,26 @@ public class WarehouseService {
     private final WarehouseRepository warehouseRepository;
     private final WarehouseMapper warehouseMapper;
 
-    // ─── Public ───────────────────────────────────────────────────────────────
-
     @Transactional(readOnly = true)
     public List<WarehouseResponse> getActiveWarehouses() {
-        return warehouseRepository.findByStatusOrderByCreatedAtAsc(WarehouseStatus.ACTIVE)
-                .stream().map(warehouseMapper::toResponse).toList();
+        return warehouseRepository.findByStatusAndDeletedFalseOrderByCreatedAtAsc(WarehouseStatus.ACTIVE)
+                .stream()
+                .map(warehouseMapper::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<WarehouseResponse> getWarehouses(WarehouseFilter filter) {
+        return warehouseRepository.findAll(WarehouseSpecification.withFilter(filter))
+                .stream()
+                .map(warehouseMapper::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public WarehouseResponse getWarehouseById(UUID id) {
         return warehouseMapper.toResponse(findOrThrow(id));
     }
-
-    // ─── Admin CRUD ──────────────────────────────────────────────────────────
 
     @Transactional
     public WarehouseResponse createWarehouse(CreateWarehouseRequest request) {
@@ -86,10 +94,8 @@ public class WarehouseService {
         log.info("Warehouse deleted: id={} by={}", id, actor);
     }
 
-    // ─── Internal ────────────────────────────────────────────────────────────
-
     Warehouse findOrThrow(UUID id) {
-        return warehouseRepository.findById(id)
+        return warehouseRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.WAREHOUSE_NOT_FOUND));
     }
 }

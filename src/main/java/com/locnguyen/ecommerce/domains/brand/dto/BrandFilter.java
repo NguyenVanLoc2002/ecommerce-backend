@@ -13,4 +13,10 @@ public class BrandFilter {
 
     @Schema(description = "Filter by status: ACTIVE or INACTIVE", example = "ACTIVE")
     private BrandStatus status;
+
+    @Schema(description = "Soft delete filter: false=active only, true=deleted only", example = "false")
+    private Boolean isDeleted;
+
+    @Schema(description = "Include both active and deleted rows", example = "false")
+    private Boolean includeDeleted;
 }

@@ -23,4 +23,10 @@ public class ReviewFilter {
 
     @Schema(description = "Maximum rating (1–5)")
     private Integer maxRating;
+
+    @Schema(description = "Soft delete filter: false=active only, true=deleted only")
+    private Boolean isDeleted;
+
+    @Schema(description = "Include both active and deleted rows")
+    private Boolean includeDeleted;
 }

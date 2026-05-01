@@ -37,4 +37,10 @@ public class ProductFilter {
 
     @Schema(description = "Show only featured products", example = "false")
     private Boolean featured;
+
+    @Schema(description = "Soft delete filter: false=active only, true=deleted only", example = "false")
+    private Boolean isDeleted;
+
+    @Schema(description = "Include both active and deleted rows", example = "false")
+    private Boolean includeDeleted;
 }

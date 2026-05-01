@@ -43,6 +43,7 @@ public interface ProductMapper {
     @org.mapstruct.Named("extractMinPrice")
     default BigDecimal extractMinPrice(Product product) {
         return product.getVariants().stream()
+                .filter(variant -> !variant.isDeleted())
                 .map(this::effectivePrice)
                 .min(BigDecimal::compareTo)
                 .orElse(null);
@@ -51,6 +52,7 @@ public interface ProductMapper {
     @org.mapstruct.Named("extractMaxPrice")
     default BigDecimal extractMaxPrice(Product product) {
         return product.getVariants().stream()
+                .filter(variant -> !variant.isDeleted())
                 .map(this::effectivePrice)
                 .max(BigDecimal::compareTo)
                 .orElse(null);
@@ -58,12 +60,15 @@ public interface ProductMapper {
 
     @org.mapstruct.Named("extractBrandName")
     default String extractBrandName(Product product) {
-        return product.getBrand() != null ? product.getBrand().getName() : null;
+        return product.getBrand() != null && !product.getBrand().isDeleted()
+                ? product.getBrand().getName()
+                : null;
     }
 
     @org.mapstruct.Named("extractCategoryNames")
     default java.util.List<String> extractCategoryNames(Product product) {
         return product.getCategories().stream()
+                .filter(category -> !category.isDeleted())
                 .map(com.locnguyen.ecommerce.domains.category.entity.Category::getName)
                 .collect(Collectors.toList());
     }

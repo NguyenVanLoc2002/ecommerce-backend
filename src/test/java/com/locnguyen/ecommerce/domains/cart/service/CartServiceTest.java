@@ -164,7 +164,7 @@ class CartServiceTest {
             Cart c = cart(uuid(5), cust);
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(c));
-            when(productVariantRepository.findById(uuid(99))).thenReturn(Optional.empty());
+            when(productVariantRepository.findByIdAndDeletedFalse(uuid(99))).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> cartService.addItem(cust, addRequest(uuid(99), 1)))
                     .isInstanceOf(AppException.class)
@@ -181,7 +181,7 @@ class CartServiceTest {
 
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(c));
-            when(productVariantRepository.findById(uuid(1))).thenReturn(Optional.of(v));
+            when(productVariantRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(v));
 
             assertThatThrownBy(() -> cartService.addItem(cust, addRequest(uuid(1), 1)))
                     .isInstanceOf(AppException.class)
@@ -197,7 +197,7 @@ class CartServiceTest {
 
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(c));
-            when(productVariantRepository.findById(uuid(1))).thenReturn(Optional.of(v));
+            when(productVariantRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(v));
             // validateQuantity throws before cartItemRepository is ever consulted
             when(inventoryRepository.sumAvailableByVariantId(uuid(1))).thenReturn(3); // only 3 available
 
@@ -215,7 +215,7 @@ class CartServiceTest {
 
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(c));
-            when(productVariantRepository.findById(uuid(1))).thenReturn(Optional.of(v));
+            when(productVariantRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(v));
 
             assertThatThrownBy(() -> cartService.addItem(cust, addRequest(uuid(1), 0)))
                     .isInstanceOf(AppException.class)
@@ -231,7 +231,7 @@ class CartServiceTest {
 
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(c));
-            when(productVariantRepository.findById(uuid(1))).thenReturn(Optional.of(v));
+            when(productVariantRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(v));
             when(inventoryRepository.sumAvailableByVariantId(uuid(1))).thenReturn(20);
             when(cartItemRepository.findByCartIdAndVariantId(uuid(5), uuid(1))).thenReturn(Optional.empty());
             when(cartItemRepository.save(any())).thenAnswer(inv -> {
@@ -245,7 +245,7 @@ class CartServiceTest {
 
             verify(cartItemRepository).save(argThat(ci ->
                     ci.getQuantity() == 3
-                    && ci.getVariant().getId() == uuid(1)));
+                    && uuid(1).equals(ci.getVariant().getId())));
         }
 
         @Test
@@ -257,7 +257,7 @@ class CartServiceTest {
 
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(c));
-            when(productVariantRepository.findById(uuid(1))).thenReturn(Optional.of(v));
+            when(productVariantRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(v));
             when(inventoryRepository.sumAvailableByVariantId(uuid(1))).thenReturn(10);
             when(cartItemRepository.findByCartIdAndVariantId(uuid(5), uuid(1)))
                     .thenReturn(Optional.of(existingItem));
@@ -279,7 +279,7 @@ class CartServiceTest {
 
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(c));
-            when(productVariantRepository.findById(uuid(1))).thenReturn(Optional.of(v));
+            when(productVariantRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(v));
             // First validateQuantity(3, uuid(1)) passes, second validateQuantity(8+3=11, uuid(1)) fails
             when(inventoryRepository.sumAvailableByVariantId(uuid(1))).thenReturn(10); // only 10 available
             when(cartItemRepository.findByCartIdAndVariantId(uuid(5), uuid(1)))
@@ -531,3 +531,4 @@ class CartServiceTest {
         }
     }
 }
+

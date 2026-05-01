@@ -15,7 +15,13 @@ public interface VoucherRepository extends JpaRepository<Voucher, UUID>,
 
     Optional<Voucher> findByCodeIgnoreCase(String code);
 
+    Optional<Voucher> findByCodeIgnoreCaseAndDeletedFalse(String code);
+
     boolean existsByCodeIgnoreCase(String code);
+
+    Optional<Voucher> findByIdAndDeletedFalse(UUID id);
+
+    boolean existsByIdAndDeletedFalse(UUID id);
 
     /**
      * Loads the voucher with its promotion and promotion rules in one query.
@@ -27,6 +33,7 @@ public interface VoucherRepository extends JpaRepository<Voucher, UUID>,
             LEFT JOIN FETCH p.rules
             WHERE UPPER(v.code) = UPPER(:code)
             AND v.deleted = false
+            AND p.deleted = false
             """)
     Optional<Voucher> findByCodeWithRules(@Param("code") String code);
 

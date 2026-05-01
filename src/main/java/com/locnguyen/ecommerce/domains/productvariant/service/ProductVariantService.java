@@ -43,7 +43,7 @@ public class ProductVariantService {
 
     @Transactional
     public VariantResponse createVariant(UUID productId, CreateVariantRequest request) {
-        Product product = productRepository.findById(productId)
+        Product product = productRepository.findByIdAndDeletedFalse(productId)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
         validatePrices(request.getBasePrice(), request.getSalePrice(), request.getCompareAtPrice());
@@ -80,7 +80,7 @@ public class ProductVariantService {
 
     @Transactional
     public VariantResponse updateVariant(UUID productId, UUID variantId, UpdateVariantRequest request) {
-        ProductVariant variant = variantRepository.findByIdAndProductId(variantId, productId)
+        ProductVariant variant = variantRepository.findByIdAndProductIdAndDeletedFalse(variantId, productId)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_VARIANT_NOT_FOUND));
 
         BigDecimal nextBase = request.getBasePrice() != null ? request.getBasePrice() : variant.getBasePrice();
@@ -128,7 +128,7 @@ public class ProductVariantService {
 
     @Transactional
     public void deleteVariant(UUID productId, UUID variantId) {
-        ProductVariant variant = variantRepository.findByIdAndProductId(variantId, productId)
+        ProductVariant variant = variantRepository.findByIdAndProductIdAndDeletedFalse(variantId, productId)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_VARIANT_NOT_FOUND));
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
         variant.softDelete(actor);
@@ -137,8 +137,28 @@ public class ProductVariantService {
     }
 
     @Transactional(readOnly = true)
-    public List<VariantResponse> getVariantsByProduct(UUID productId) {
-        return variantRepository.findByProductIdOrderByCreatedAtAsc(productId)
+    public List<VariantResponse> getVariantsByProduct(UUID productId,
+                                                      Boolean isDeleted,
+                                                      Boolean includeDeleted) {
+        if (!productRepository.existsByIdAndDeletedFalse(productId)) {
+            throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+        }
+
+        List<ProductVariant> variants = Boolean.TRUE.equals(includeDeleted)
+                ? variantRepository.findByProductIdOrderByCreatedAtAsc(productId)
+                : variantRepository.findByProductIdAndDeletedFalseOrderByCreatedAtAsc(productId);
+
+        if (!Boolean.TRUE.equals(includeDeleted) && Boolean.TRUE.equals(isDeleted)) {
+            variants = variantRepository.findByProductIdOrderByCreatedAtAsc(productId).stream()
+                    .filter(ProductVariant::isDeleted)
+                    .toList();
+        }
+
+        if (!Boolean.TRUE.equals(includeDeleted) && Boolean.FALSE.equals(isDeleted)) {
+            variants = variantRepository.findByProductIdAndDeletedFalseOrderByCreatedAtAsc(productId);
+        }
+
+        return variants
                 .stream().map(variantMapper::toResponse).toList();
     }
 
