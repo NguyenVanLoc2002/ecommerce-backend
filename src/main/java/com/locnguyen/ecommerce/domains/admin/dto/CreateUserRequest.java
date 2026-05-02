@@ -39,7 +39,9 @@ public class CreateUserRequest {
     private String phoneNumber;
 
     @NotEmpty(message = "At least one role is required")
-    @Schema(description = "Roles to assign. CUSTOMER role cannot be assigned via this endpoint — use the public register API.",
-            example = "[\"STAFF\"]", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "System roles to assign. Only STAFF, ADMIN, and SUPER_ADMIN are accepted; " +
+            "CUSTOMER is rejected (use the public /auth/register API to create customer accounts).",
+            example = "[\"STAFF\"]", requiredMode = Schema.RequiredMode.REQUIRED,
+            allowableValues = {"STAFF", "ADMIN", "SUPER_ADMIN"})
     private Set<RoleName> roles;
 }

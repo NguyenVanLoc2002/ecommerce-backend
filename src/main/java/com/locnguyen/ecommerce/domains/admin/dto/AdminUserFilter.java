@@ -22,7 +22,9 @@ public class AdminUserFilter {
     @Schema(description = "Filter by account status", example = "ACTIVE")
     private UserStatus status;
 
-    @Schema(description = "Filter by assigned role", example = "ADMIN")
+    @Schema(description = "Filter by assigned system role. Only STAFF, ADMIN, or SUPER_ADMIN are accepted; " +
+            "CUSTOMER is rejected because customer accounts are managed under /api/v1/admin/customers.",
+            example = "ADMIN", allowableValues = {"STAFF", "ADMIN", "SUPER_ADMIN"})
     private RoleName role;
 
     @Schema(description = "Soft-delete filter: false=active only, true=deleted only", example = "false")

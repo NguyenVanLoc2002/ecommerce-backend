@@ -21,6 +21,11 @@ public enum AuditAction {
     USER_DISABLED,
     USER_ENABLED,
 
+    // ─── Customer ────────────────────────────────────────────────────────────
+    CUSTOMER_UPDATED,
+    CUSTOMER_STATUS_CHANGED,
+    CUSTOMER_DELETED,
+
     // ─── Product ─────────────────────────────────────────────────────────────
     PRODUCT_CREATED,
     PRODUCT_UPDATED,

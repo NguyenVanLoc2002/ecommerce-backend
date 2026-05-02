@@ -30,14 +30,13 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Admin-only user management service.
+ * Admin-only system-user management service.
  *
- * <p>Separated from {@link com.locnguyen.ecommerce.domains.auth.service.AuthService} because
- * role assignment is an admin concern — the public register API always assigns CUSTOMER.
- * Admin APIs can assign STAFF, ADMIN, or SUPER_ADMIN without going through the auth flow.
+ * <p>Scope: STAFF, ADMIN, SUPER_ADMIN. CUSTOMER accounts are managed under
+ * {@code /api/v1/admin/customers} (see {@link AdminCustomerService}).
  *
- * <p>Scope: this service deals only with system users (STAFF/ADMIN/SUPER_ADMIN). CUSTOMER
- * accounts are managed via auth/customer endpoints.
+ * <p>All read endpoints exclude CUSTOMER-only users via {@link UserSpecification},
+ * and all mutating endpoints reject the CUSTOMER role outright.
  */
 @Slf4j
 @Service
@@ -52,19 +51,11 @@ public class AdminUserService {
 
     // ─── Create ─────────────────────────────────────────────────────────────
 
-    /**
-     * Create a system user with explicit role assignment.
-     *
-     * <ol>
-     *   <li>Validate email and phone uniqueness</li>
-     *   <li>Resolve all requested roles from the database</li>
-     *   <li>Hash password and persist user</li>
-     * </ol>
-     *
-     * <p>Note: no Customer profile is created here — admin/staff accounts don't need one.
-     */
     @Transactional
     public UserResponse createUser(CreateUserRequest request) {
+        rejectCustomerRole(request.getRoles());
+        requireAtLeastOneSystemRole(request.getRoles());
+
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new AppException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
@@ -86,7 +77,7 @@ public class AdminUserService {
 
         user = userRepository.save(user);
 
-        log.info("Admin created user: id={} email={} roles={}",
+        log.info("Admin created system user: id={} email={} roles={}",
                 user.getId(), user.getEmail(), request.getRoles());
         auditLogService.log(AuditAction.USER_CREATED, "USER",
                 String.valueOf(user.getId()),
@@ -97,9 +88,12 @@ public class AdminUserService {
 
     // ─── Read ───────────────────────────────────────────────────────────────
 
-    /** Paginated, filterable system user list for admin. */
     @Transactional(readOnly = true)
     public PagedResponse<UserResponse> getUsers(AdminUserFilter filter, Pageable pageable) {
+        if (filter != null && filter.getRole() == RoleName.CUSTOMER) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "CUSTOMER role is not supported here — use /api/v1/admin/customers");
+        }
         return PagedResponse.of(
                 userRepository.findAll(UserSpecification.withFilter(filter), pageable)
                         .map(userMapper::toUserResponse)
@@ -108,18 +102,14 @@ public class AdminUserService {
 
     @Transactional(readOnly = true)
     public UserResponse getUserById(UUID id) {
-        return userMapper.toUserResponse(findOrThrow(id));
+        return userMapper.toUserResponse(findSystemUserOrThrow(id));
     }
 
     // ─── Update ─────────────────────────────────────────────────────────────
 
-    /**
-     * Partially update a system user. Only provided fields are applied.
-     * Password and email are intentionally not updatable here.
-     */
     @Transactional
     public UserResponse updateUser(UUID id, UpdateUserRequest request) {
-        User user = findOrThrow(id);
+        User user = findSystemUserOrThrow(id);
         UUID currentUserId = resolveCurrentUserId();
         boolean isSelf = currentUserId != null && currentUserId.equals(user.getId());
 
@@ -143,6 +133,9 @@ public class AdminUserService {
                 throw new AppException(ErrorCode.VALIDATION_ERROR,
                         "Roles must not be empty when provided");
             }
+            rejectCustomerRole(request.getRoles());
+            requireAtLeastOneSystemRole(request.getRoles());
+
             Set<Role> newRoles = resolveRoles(request.getRoles());
 
             if (isSelf) {
@@ -183,7 +176,7 @@ public class AdminUserService {
 
         user = userRepository.save(user);
 
-        log.info("Admin updated user: id={} by={}", id, SecurityUtils.getCurrentUsernameOrSystem());
+        log.info("Admin updated system user: id={} by={}", id, SecurityUtils.getCurrentUsernameOrSystem());
         auditLogService.log(AuditAction.USER_UPDATED, "USER", String.valueOf(id));
 
         return userMapper.toUserResponse(user);
@@ -191,14 +184,9 @@ public class AdminUserService {
 
     // ─── Delete / deactivate ────────────────────────────────────────────────
 
-    /**
-     * Soft-delete a system user. Deleted users cannot log in (filtered by SQLRestriction
-     * on User), and their access tokens become invalid on next request because
-     * {@code findByEmailAndDeletedFalse} returns empty.
-     */
     @Transactional
     public void deleteUser(UUID id) {
-        User user = findOrThrow(id);
+        User user = findSystemUserOrThrow(id);
 
         UUID currentUserId = resolveCurrentUserId();
         if (currentUserId != null && currentUserId.equals(user.getId())) {
@@ -215,16 +203,43 @@ public class AdminUserService {
         user.softDelete(actor);
         userRepository.save(user);
 
-        log.info("Admin deleted user: id={} by={}", id, actor);
+        log.info("Admin deleted system user: id={} by={}", id, actor);
         auditLogService.log(AuditAction.USER_DISABLED, "USER", String.valueOf(id),
                 "soft delete by admin");
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────────
 
-    private User findOrThrow(UUID id) {
-        return userRepository.findByIdAndDeletedFalse(id)
+    private User findSystemUserOrThrow(UUID id) {
+        User user = userRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        if (!isSystemUser(user)) {
+            // Treat CUSTOMER-only accounts as not-found from the admin-user perspective
+            // so the surface of /api/v1/admin/users never leaks them.
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
+        return user;
+    }
+
+    private boolean isSystemUser(User user) {
+        return user.getRoles().stream()
+                .map(Role::getName)
+                .anyMatch(UserSpecification.SYSTEM_ROLES::contains);
+    }
+
+    private void rejectCustomerRole(Set<RoleName> roles) {
+        if (roles != null && roles.contains(RoleName.CUSTOMER)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "CUSTOMER role cannot be assigned via /api/v1/admin/users — " +
+                            "customer accounts are created via /auth/register");
+        }
+    }
+
+    private void requireAtLeastOneSystemRole(Set<RoleName> roles) {
+        if (roles == null || roles.stream().noneMatch(UserSpecification.SYSTEM_ROLES::contains)) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR,
+                    "At least one system role (STAFF, ADMIN, SUPER_ADMIN) is required");
+        }
     }
 
     private Set<Role> resolveRoles(Set<RoleName> requestedRoles) {

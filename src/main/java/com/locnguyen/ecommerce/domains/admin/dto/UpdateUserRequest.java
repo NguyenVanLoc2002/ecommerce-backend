@@ -34,8 +34,9 @@ public class UpdateUserRequest {
     @Schema(description = "Account status", example = "ACTIVE")
     private UserStatus status;
 
-    @Schema(description = "Replace assigned roles. CUSTOMER role cannot be assigned via this endpoint. " +
-            "Must be non-empty when provided.",
-            example = "[\"STAFF\"]")
+    @Schema(description = "Replace assigned system roles. Only STAFF, ADMIN, and SUPER_ADMIN are accepted; " +
+            "CUSTOMER is rejected. Must be non-empty when provided.",
+            example = "[\"STAFF\"]",
+            allowableValues = {"STAFF", "ADMIN", "SUPER_ADMIN"})
     private Set<RoleName> roles;
 }

@@ -31,6 +31,7 @@ Role summary by module:
   - admin notifications broadcast
   - admin audit logs
   - admin users
+  - admin customer mutations (`PATCH`/`DELETE` under `/api/v1/admin/customers`)
   - admin order cancel
   - admin inventory mutations
   - admin warehouse mutations
@@ -45,6 +46,7 @@ Role summary by module:
   - shipments
   - invoices
   - `/api/v1/admin/reviews`
+  - admin customer reads (`GET` under `/api/v1/admin/customers`)
 
 ---
 
@@ -1031,8 +1033,17 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
 
 ## 11. User
 
-Manages system users only — STAFF, ADMIN, SUPER_ADMIN. CUSTOMER accounts are managed via the
-public `/auth/register` flow and customer-facing endpoints.
+Manages **system users only** — STAFF, ADMIN, SUPER_ADMIN. CUSTOMER accounts are
+created via the public `/auth/register` flow and managed under
+`/api/v1/admin/customers` (see section 17). The list, detail, create and update
+endpoints all reject CUSTOMER-only accounts:
+
+- `GET /api/v1/admin/users` and `GET /api/v1/admin/users/{id}` exclude users
+  whose only role is CUSTOMER (a system-role guard is applied via `UserSpecification`).
+- `POST /api/v1/admin/users` and `PATCH /api/v1/admin/users/{id}` reject any
+  request whose `roles` set contains `CUSTOMER`.
+- `AdminUserFilter.role` only accepts STAFF / ADMIN / SUPER_ADMIN; passing
+  `CUSTOMER` returns `BAD_REQUEST`.
 
 ### DTOs
 
@@ -1041,7 +1052,7 @@ public `/auth/register` flow and customer-facing endpoints.
   - `email`: partial, case-insensitive
   - `phoneNumber`: partial match
   - `status`: `UserStatus` (`ACTIVE`, `INACTIVE`, `LOCKED`)
-  - `role`: `RoleName` (`SUPER_ADMIN`, `ADMIN`, `STAFF`, `CUSTOMER`)
+  - `role`: `RoleName`, restricted to `STAFF`, `ADMIN`, `SUPER_ADMIN` — `CUSTOMER` is rejected
   - `isDeleted`: optional — `false` = active only (default), `true` = deleted only
   - `includeDeleted`: optional — `true` returns both active and deleted rows
 - `CreateUserRequest`
@@ -1050,14 +1061,14 @@ public `/auth/register` flow and customer-facing endpoints.
   - `firstName`: required, max 100
   - `lastName`: optional, max 100
   - `phoneNumber`: optional, `@PhoneNumber`
-  - `roles`: required non-empty set of `RoleName`
+  - `roles`: required non-empty set of `RoleName`, restricted to `STAFF`, `ADMIN`, `SUPER_ADMIN`
 - `UpdateUserRequest`
   - all fields optional — partial update
   - `firstName`: max 100
   - `lastName`: max 100
   - `phoneNumber`: `@PhoneNumber`; uniqueness enforced server-side
   - `status`: `UserStatus`
-  - `roles`: replace assigned roles. Must be non-empty when provided.
+  - `roles`: replace assigned roles. Must be non-empty when provided. `CUSTOMER` is rejected.
   - **Not updatable** here: `email`, `password`. Update these via dedicated flows.
 - `UserResponse`
   - `id`, `email`, `firstName`, `lastName`, `phoneNumber`
@@ -1094,11 +1105,11 @@ The following are enforced by `AdminUserService` and return `403 FORBIDDEN`:
 
 | Code | When |
 | --- | --- |
-| `USER_NOT_FOUND` | id does not exist or user is soft-deleted |
+| `USER_NOT_FOUND` | id does not exist, user is soft-deleted, or the user is CUSTOMER-only (treated as not-found here) |
 | `EMAIL_ALREADY_EXISTS` | create with duplicate email |
 | `PHONE_ALREADY_EXISTS` | create or update with duplicate phone |
-| `VALIDATION_ERROR` | `roles` provided but empty in `UpdateUserRequest` |
-| `BAD_REQUEST` | unknown role names supplied |
+| `VALIDATION_ERROR` | `roles` provided but empty, or `roles` contains no system role |
+| `BAD_REQUEST` | unknown role names supplied, `roles` contains `CUSTOMER`, or `filter.role=CUSTOMER` |
 | `FORBIDDEN` | safety rule violation (self-delete, last SUPER_ADMIN, etc.) or insufficient privileges |
 
 ### GET `/api/v1/admin/users`
@@ -1501,4 +1512,130 @@ Those legacy moderation endpoints exist in code but are not under `/api/v1/admin
 - Description: get one audit log entry
 - Response:
   - `ApiResponse<AuditLogResponse>`
+
+---
+
+## 17. Customer
+
+Manages **customer profiles only**. The list, detail, update, status and delete
+endpoints all query `Customer` joined with the linked `User` — they never
+operate on the `users` table directly. System users (STAFF/ADMIN/SUPER_ADMIN)
+are managed under `/api/v1/admin/users` (see section 11).
+
+Customer APIs cannot assign STAFF / ADMIN / SUPER_ADMIN roles — role assignment
+is intentionally outside the surface of this module.
+
+### DTOs
+
+- `AdminCustomerFilter`
+  - `keyword`: free-text, matched against `email`, `firstName`, `lastName`, `phoneNumber` of the linked user
+  - `email`: partial, case-insensitive on linked user's email
+  - `phoneNumber`: partial match on linked user's phone
+  - `status`: `UserStatus` (`ACTIVE`, `INACTIVE`, `LOCKED`) — applied to the linked user
+  - `gender`: `Gender` (`MALE`, `FEMALE`, `OTHER`)
+  - `minLoyaltyPoints`: optional, inclusive lower bound
+  - `maxLoyaltyPoints`: optional, inclusive upper bound
+  - `dateFrom`: optional ISO date — inclusive lower bound on `Customer.createdAt`
+  - `dateTo`: optional ISO date — inclusive upper bound on `Customer.createdAt`
+  - `isDeleted`: optional — `false` = active only (default), `true` = deleted only
+  - `includeDeleted`: optional — `true` returns both active and deleted rows
+- `AdminCustomerResponse`
+  - `id` (customerId), `userId`, `email`
+  - `firstName`, `lastName`, `phoneNumber`
+  - `status` (from linked user), `gender`, `birthDate`, `avatarUrl`, `loyaltyPoints`
+  - `createdAt`, `updatedAt` (from `Customer`)
+  - never exposes the user's `passwordHash`
+- `UpdateCustomerRequest` — all fields optional, partial update
+  - `firstName`, `lastName`: max 100; applied to `User`
+  - `phoneNumber`: `@PhoneNumber`; applied to `User`; uniqueness enforced
+  - `gender`, `birthDate`: applied to `Customer`
+  - `avatarUrl`: max 500; applied to `Customer`; blank string clears the avatar
+  - **Not updatable** here: `email`, `password`, `status`, `roles`. Use `/status` for status, `admin/users` for system roles.
+- `UpdateCustomerStatusRequest`
+  - `status`: required `UserStatus` — propagated to the linked `User.status`
+
+### Access
+
+- `GET` endpoints: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- `PATCH` and `DELETE`: `ADMIN`, `SUPER_ADMIN`
+- All endpoints require `Authorization: Bearer <accessToken>`
+
+### Pagination & sorting
+
+- Default `page = 0`, `size = 20` (`AppConstants.DEFAULT_PAGE_SIZE`), `sort = createdAt,desc` on `Customer.createdAt`.
+- Standard `page`, `size`, `sort` query params (see [api-common.md](./api-common.md)).
+
+### Soft-delete behaviour
+
+- `DELETE` is a soft delete only — there is no hard-delete path.
+- Both `Customer` and the linked `User` rows are marked deleted, and the user's
+  status is forced to `INACTIVE` so the account cannot authenticate.
+- Deleted customers are filtered out by Hibernate `@SQLRestriction`. Pass
+  `includeDeleted=true` (or `isDeleted=true`) on the list endpoint to surface
+  them.
+- Historical orders, reviews, payments, invoices, shipments and audit log rows
+  remain intact at the database level — they continue to reference the
+  customer/user PKs.
+
+### Error codes
+
+| Code | When |
+| --- | --- |
+| `CUSTOMER_NOT_FOUND` | id does not exist or customer is soft-deleted |
+| `USER_NOT_FOUND` | linked user is missing (defensive — should not happen) |
+| `PHONE_ALREADY_EXISTS` | update with a phone number that belongs to another active user |
+| `VALIDATION_ERROR` | DTO field violation (`@Size`, `@PhoneNumber`, `@NotNull` on status) |
+| `BAD_REQUEST` | malformed payload |
+| `FORBIDDEN` | insufficient privileges |
+
+### GET `/api/v1/admin/customers`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: list customer profiles with filter and pagination
+- Soft-delete behavior:
+  - soft-deleted customers are excluded by default
+- Filters:
+  - `AdminCustomerFilter` fields (see DTOs)
+- Pagination:
+  - `page`, `size`, `sort`
+  - default: `size=20`, `sort=createdAt,desc`
+- Response:
+  - `ApiResponse<PagedResponse<AdminCustomerResponse>>`
+
+### GET `/api/v1/admin/customers/{id}`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: get a single customer profile by id
+- Soft-delete behaviour: a soft-deleted customer returns `CUSTOMER_NOT_FOUND`
+- Response:
+  - `ApiResponse<AdminCustomerResponse>`
+
+### PATCH `/api/v1/admin/customers/{id}`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: partial update of customer profile fields. Updates `User` for
+  `firstName` / `lastName` / `phoneNumber`, and `Customer` for `gender` /
+  `birthDate` / `avatarUrl`. Roles cannot be changed here.
+- Request body:
+  - `UpdateCustomerRequest`
+- Response:
+  - `ApiResponse<AdminCustomerResponse>`
+
+### PATCH `/api/v1/admin/customers/{id}/status`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: change the customer's account status. The status is applied to
+  the linked `User.status`; `INACTIVE` and `LOCKED` immediately prevent login.
+- Request body:
+  - `UpdateCustomerStatusRequest`
+- Response:
+  - `ApiResponse<AdminCustomerResponse>`
+
+### DELETE `/api/v1/admin/customers/{id}`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: soft-delete the customer profile and the linked user account
+  (see soft-delete behaviour above)
+- Response:
+  - `ApiResponse<Void>` with `data = null`
 
