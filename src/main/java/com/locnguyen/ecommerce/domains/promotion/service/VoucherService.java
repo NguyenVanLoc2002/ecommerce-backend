@@ -127,7 +127,7 @@ public class VoucherService {
 
     @Transactional(readOnly = true)
     public PagedResponse<VoucherUsageResponse> getUsages(UUID voucherId, Pageable pageable) {
-        if (!voucherRepository.existsById(voucherId)) {
+        if (!voucherRepository.existsByIdAndDeletedFalse(voucherId)) {
             throw new AppException(ErrorCode.VOUCHER_NOT_FOUND);
         }
         Page<VoucherUsage> page = voucherUsageRepository.findByVoucherId(voucherId, pageable);
@@ -392,12 +392,12 @@ public class VoucherService {
     // ─── Internal helpers ─────────────────────────────────────────────────────
 
     private Voucher findByIdOrThrow(UUID id) {
-        return voucherRepository.findById(id)
+        return voucherRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_NOT_FOUND));
     }
 
     private Voucher findByCodeOrThrow(String code) {
-        return voucherRepository.findByCodeIgnoreCase(code)
+        return voucherRepository.findByCodeIgnoreCaseAndDeletedFalse(code)
                 .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_NOT_FOUND));
     }
 

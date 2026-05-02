@@ -25,7 +25,17 @@ public interface InventoryRepository extends
      * Batch-load inventories for multiple variants in one query.
      * Use this in order creation to avoid N+1 selects per cart item.
      */
-    @Query("SELECT i FROM Inventory i JOIN FETCH i.warehouse WHERE i.variant.id IN :variantIds")
+    @Query("""
+            SELECT i
+            FROM Inventory i
+            JOIN FETCH i.warehouse w
+            JOIN i.variant v
+            JOIN v.product p
+            WHERE v.id IN :variantIds
+              AND v.deleted = false
+              AND p.deleted = false
+              AND w.deleted = false
+            """)
     List<Inventory> findByVariantIdIn(@Param("variantIds") List<UUID> variantIds);
 
     List<Inventory> findByWarehouseId(UUID warehouseId);
@@ -34,7 +44,17 @@ public interface InventoryRepository extends
      * Sum available stock across all warehouses for a given variant.
      * Used by cart to validate quantity before add/update.
      */
-    @Query("SELECT COALESCE(SUM(i.onHand - i.reserved), 0) FROM Inventory i WHERE i.variant.id = :variantId")
+    @Query("""
+            SELECT COALESCE(SUM(i.onHand - i.reserved), 0)
+            FROM Inventory i
+            JOIN i.warehouse w
+            JOIN i.variant v
+            JOIN v.product p
+            WHERE v.id = :variantId
+              AND v.deleted = false
+              AND p.deleted = false
+              AND w.deleted = false
+            """)
     int sumAvailableByVariantId(@Param("variantId") UUID variantId);
 
     /**

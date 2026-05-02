@@ -18,11 +18,19 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     boolean existsByBarcode(String barcode);
 
+    boolean existsByIdAndDeletedFalse(UUID id);
+
     Optional<ProductVariant> findBySku(String sku);
+
+    Optional<ProductVariant> findByIdAndDeletedFalse(UUID id);
 
     Optional<ProductVariant> findByIdAndProductId(UUID id, UUID productId);
 
+    Optional<ProductVariant> findByIdAndProductIdAndDeletedFalse(UUID id, UUID productId);
+
     List<ProductVariant> findByProductIdOrderByCreatedAtAsc(UUID productId);
+
+    List<ProductVariant> findByProductIdAndDeletedFalseOrderByCreatedAtAsc(UUID productId);
 
     long countByProductId(UUID productId);
 
@@ -37,13 +45,15 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
             FROM ProductVariant v
             JOIN v.attributeValues av
             WHERE v.product.id = :productId
+              AND v.deleted = false
               AND av.id IN :valueIds
             GROUP BY v.id
             HAVING COUNT(DISTINCT av.id) = :size
                 AND (SELECT COUNT(av2)
                      FROM ProductVariant v2
                      JOIN v2.attributeValues av2
-                     WHERE v2.id = v.id) = :size
+                     WHERE v2.id = v.id
+                       AND v2.deleted = false) = :size
             """)
     List<UUID> findVariantIdsWithExactAttributeSet(@Param("productId") UUID productId,
                                                    @Param("valueIds") Collection<UUID> valueIds,

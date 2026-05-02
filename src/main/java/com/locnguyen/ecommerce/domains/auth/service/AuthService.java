@@ -183,7 +183,7 @@ public class AuthService {
         }
 
         // Load full user entity (roles are eagerly fetched)
-        User user = userRepository.findByEmail(authentication.getName())
+        User user = userRepository.findByEmailAndDeletedFalse(authentication.getName())
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         // Update last login timestamp
@@ -232,7 +232,7 @@ public class AuthService {
 
         // Load user from subject claim
         String email = tokenProvider.extractUsername(token);
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailAndDeletedFalse(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         if (user.getStatus() != UserStatus.ACTIVE) {

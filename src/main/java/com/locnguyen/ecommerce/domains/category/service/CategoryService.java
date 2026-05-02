@@ -97,7 +97,7 @@ public class CategoryService {
         category.setSortOrder(request.getSortOrder() != null ? request.getSortOrder() : 0);
 
         if (request.getParentId() != null) {
-            Category parent = categoryRepository.findById(request.getParentId())
+            Category parent = categoryRepository.findByIdAndDeletedFalse(request.getParentId())
                     .orElseThrow(() -> new AppException(ErrorCode.CATEGORY_NOT_FOUND));
             category.setParent(parent);
         }
@@ -140,7 +140,7 @@ public class CategoryService {
             if (request.getParentId().equals(id)) {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Category cannot be its own parent");
             }
-            Category parent = categoryRepository.findById(request.getParentId())
+            Category parent = categoryRepository.findByIdAndDeletedFalse(request.getParentId())
                     .orElseThrow(() -> new AppException(ErrorCode.CATEGORY_NOT_FOUND));
             category.setParent(parent);
         }
@@ -165,7 +165,7 @@ public class CategoryService {
     // ─── Internal ────────────────────────────────────────────────────────────
 
     private Category findOrThrow(UUID id) {
-        return categoryRepository.findById(id)
+        return categoryRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CATEGORY_NOT_FOUND));
     }
 }

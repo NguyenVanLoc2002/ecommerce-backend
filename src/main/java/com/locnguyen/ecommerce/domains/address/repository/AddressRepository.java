@@ -16,6 +16,10 @@ public interface AddressRepository extends JpaRepository<Address, UUID> {
 
     List<Address> findByCustomerId(UUID customerId, Sort sort);
 
+    List<Address> findByCustomerIdAndDeletedFalse(UUID customerId, Sort sort);
+
+    java.util.Optional<Address> findByIdAndDeletedFalse(java.util.UUID id);
+
     @Modifying
     @Query("UPDATE Address a SET a.defaultAddress = false WHERE a.customer.id = :customerId AND a.defaultAddress = true")
     void clearDefaultByCustomerId(@Param("customerId") UUID customerId);

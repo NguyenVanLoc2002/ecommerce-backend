@@ -139,7 +139,7 @@ public class CartService {
     // ─── Internal ────────────────────────────────────────────────────────────
 
     private ProductVariant findActiveVariant(UUID variantId) {
-        ProductVariant variant = productVariantRepository.findById(variantId)
+        ProductVariant variant = productVariantRepository.findByIdAndDeletedFalse(variantId)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_VARIANT_NOT_FOUND));
         if (variant.getStatus() != ProductVariantStatus.ACTIVE) {
             throw new AppException(ErrorCode.PRODUCT_VARIANT_INACTIVE);

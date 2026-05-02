@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.promotion.specification;
 
+import com.locnguyen.ecommerce.common.specification.SoftDeleteSpecificationHelper;
 import com.locnguyen.ecommerce.domains.promotion.dto.PromotionFilter;
 import com.locnguyen.ecommerce.domains.promotion.entity.Promotion;
 import com.locnguyen.ecommerce.domains.promotion.enums.PromotionScope;
@@ -17,35 +18,43 @@ public class PromotionSpecification {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            if (filter.getName() != null && !filter.getName().isBlank()) {
+            SoftDeleteSpecificationHelper.addDeletedFilter(
+                    predicates,
+                    root.get("deleted"),
+                    cb,
+                    filter != null ? filter.getIsDeleted() : null,
+                    filter != null ? filter.getIncludeDeleted() : null
+            );
+
+            if (filter != null && filter.getName() != null && !filter.getName().isBlank()) {
                 predicates.add(cb.like(
                         cb.upper(root.get("name")),
                         "%" + filter.getName().trim().toUpperCase() + "%"
                 ));
             }
 
-            if (filter.getScope() != null && !filter.getScope().isBlank()) {
+            if (filter != null && filter.getScope() != null && !filter.getScope().isBlank()) {
                 try {
                     PromotionScope scope = PromotionScope.valueOf(
                             filter.getScope().trim().toUpperCase());
                     predicates.add(cb.equal(root.get("scope"), scope));
                 } catch (IllegalArgumentException ignored) {
-                    // unknown scope value — skip predicate
+                    // unknown scope value -> skip predicate
                 }
             }
 
-            if (filter.getActive() != null) {
+            if (filter != null && filter.getActive() != null) {
                 predicates.add(cb.equal(root.get("active"), filter.getActive()));
             }
 
-            if (filter.getDateFrom() != null) {
+            if (filter != null && filter.getDateFrom() != null) {
                 predicates.add(cb.greaterThanOrEqualTo(
                         root.get("startDate"),
                         filter.getDateFrom().atStartOfDay()
                 ));
             }
 
-            if (filter.getDateTo() != null) {
+            if (filter != null && filter.getDateTo() != null) {
                 predicates.add(cb.lessThanOrEqualTo(
                         root.get("endDate"),
                         filter.getDateTo().atTime(23, 59, 59)

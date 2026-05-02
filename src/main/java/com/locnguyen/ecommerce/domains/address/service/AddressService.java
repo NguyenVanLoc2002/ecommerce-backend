@@ -40,7 +40,7 @@ public class AddressService {
     @Transactional(readOnly = true)
     public List<AddressResponse> getMyAddresses() {
         Customer customer = userService.getCurrentCustomer();
-        List<Address> addresses = addressRepository.findByCustomerId(
+        List<Address> addresses = addressRepository.findByCustomerIdAndDeletedFalse(
                 customer.getId(),
                 Sort.by(Sort.Order.desc("defaultAddress"), Sort.Order.desc("createdAt"))
         );
@@ -167,7 +167,7 @@ public class AddressService {
      */
     private Address findOwnedAddress(UUID addressId) {
         Customer customer = userService.getCurrentCustomer();
-        Address address = addressRepository.findById(addressId)
+        Address address = addressRepository.findByIdAndDeletedFalse(addressId)
                 .orElseThrow(() -> new AppException(ErrorCode.ADDRESS_NOT_FOUND));
 
         if (!address.getCustomer().getId().equals(customer.getId())) {

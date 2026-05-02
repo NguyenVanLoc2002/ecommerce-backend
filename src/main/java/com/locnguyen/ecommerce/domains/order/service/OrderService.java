@@ -96,7 +96,7 @@ public class OrderService {
         }
 
         // 2. Validate and snapshot shipping address
-        Address address = addressRepository.findById(request.getShippingAddressId())
+        Address address = addressRepository.findByIdAndDeletedFalse(request.getShippingAddressId())
                 .orElseThrow(() -> new AppException(ErrorCode.ADDRESS_NOT_FOUND));
         if (!address.getCustomer().getId().equals(customer.getId())) {
             throw new AppException(ErrorCode.ADDRESS_NOT_FOUND);

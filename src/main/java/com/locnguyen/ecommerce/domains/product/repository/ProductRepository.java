@@ -22,6 +22,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID>,
 
     Optional<Product> findBySlug(String slug);
 
+    Optional<Product> findByIdAndDeletedFalse(UUID id);
+
+    boolean existsByIdAndDeletedFalse(UUID id);
+
     @EntityGraph(attributePaths = {"brand", "categories"})
     Page<Product> findAll(Specification<Product> spec, Pageable pageable);
 
@@ -34,6 +38,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID>,
             LEFT JOIN FETCH av.attribute
             LEFT JOIN FETCH p.media
             WHERE p.id = :id
+              AND p.deleted = false
             """)
     Optional<Product> findDetailById(@Param("id") UUID id);
 }

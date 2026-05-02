@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.domains.inventory.dto.CreateWarehouseRequest;
 import com.locnguyen.ecommerce.domains.inventory.dto.UpdateWarehouseRequest;
+import com.locnguyen.ecommerce.domains.inventory.dto.WarehouseFilter;
 import com.locnguyen.ecommerce.domains.inventory.dto.WarehouseResponse;
 import com.locnguyen.ecommerce.domains.inventory.service.WarehouseService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,10 +34,10 @@ public class AdminWarehouseController {
 
     private final WarehouseService warehouseService;
 
-    @Operation(summary = "List all active warehouses")
+    @Operation(summary = "List warehouses")
     @GetMapping
-    public ApiResponse<List<WarehouseResponse>> listWarehouses() {
-        return ApiResponse.success(warehouseService.getActiveWarehouses());
+    public ApiResponse<List<WarehouseResponse>> listWarehouses(WarehouseFilter filter) {
+        return ApiResponse.success(warehouseService.getWarehouses(filter));
     }
 
     @Operation(summary = "Get warehouse by ID")

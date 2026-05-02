@@ -21,7 +21,6 @@ import com.locnguyen.ecommerce.domains.productvariant.repository.ProductVariantR
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,19 +54,30 @@ public class InventoryService {
 
     @Transactional(readOnly = true)
     public List<InventoryResponse> getInventoryByVariant(UUID variantId) {
+        validateVariant(variantId);
         List<Inventory> inventories = inventoryRepository.findByVariantId(variantId);
-        return inventories.stream().map(inventoryMapper::toResponse).toList();
+        return inventories.stream()
+                .filter(inventory -> !inventory.getWarehouse().isDeleted())
+                .map(inventoryMapper::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public List<InventoryResponse> getInventoryByWarehouse(UUID warehouseId) {
         warehouseService.findOrThrow(warehouseId);
         List<Inventory> inventories = inventoryRepository.findByWarehouseId(warehouseId);
-        return inventories.stream().map(inventoryMapper::toResponse).toList();
+        return inventories.stream()
+                .filter(inventory -> !inventory.getVariant().isDeleted())
+                .filter(inventory -> inventory.getVariant().getProduct() == null
+                        || !inventory.getVariant().getProduct().isDeleted())
+                .map(inventoryMapper::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public InventoryResponse getInventoryDetail(UUID variantId, UUID warehouseId) {
+        validateVariant(variantId);
+        warehouseService.findOrThrow(warehouseId);
         Inventory inventory = inventoryRepository.findByVariantIdAndWarehouseId(variantId, warehouseId)
                 .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_NOT_FOUND));
         return inventoryMapper.toResponse(inventory);
@@ -467,7 +477,7 @@ public class InventoryService {
     // ─── Internal helpers ────────────────────────────────────────────────────
 
     private void validateVariant(UUID variantId) {
-        if (!productVariantRepository.existsById(variantId)) {
+        if (!productVariantRepository.existsByIdAndDeletedFalse(variantId)) {
             throw new AppException(ErrorCode.PRODUCT_VARIANT_NOT_FOUND);
         }
     }
@@ -476,7 +486,7 @@ public class InventoryService {
         return inventoryRepository.findByVariantIdAndWarehouseId(variantId, warehouseId)
                 .orElseGet(() -> {
                     Warehouse warehouse = warehouseService.findOrThrow(warehouseId);
-                    ProductVariant variant = productVariantRepository.findById(variantId)
+                    ProductVariant variant = productVariantRepository.findByIdAndDeletedFalse(variantId)
                             .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_VARIANT_NOT_FOUND));
 
                     Inventory newInv = new Inventory();

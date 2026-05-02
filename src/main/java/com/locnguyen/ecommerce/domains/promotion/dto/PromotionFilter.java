@@ -13,4 +13,6 @@ public class PromotionFilter {
     private Boolean active;
     private LocalDate dateFrom;
     private LocalDate dateTo;
+    private Boolean isDeleted;
+    private Boolean includeDeleted;
 }

@@ -86,8 +86,10 @@ public class AdminProductController {
 
     @Operation(summary = "List variants for a product")
     @GetMapping("/{productId}/variants")
-    public ApiResponse<List<VariantResponse>> getVariants(@PathVariable UUID productId) {
-        return ApiResponse.success(variantService.getVariantsByProduct(productId));
+    public ApiResponse<List<VariantResponse>> getVariants(@PathVariable UUID productId,
+                                                          @RequestParam(required = false) Boolean isDeleted,
+                                                          @RequestParam(required = false) Boolean includeDeleted) {
+        return ApiResponse.success(variantService.getVariantsByProduct(productId, isDeleted, includeDeleted));
     }
 
     @Operation(summary = "Create variant for a product")

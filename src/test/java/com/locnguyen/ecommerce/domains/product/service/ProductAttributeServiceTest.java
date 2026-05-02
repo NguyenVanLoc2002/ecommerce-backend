@@ -132,7 +132,7 @@ class ProductAttributeServiceTest {
         @Test
         void adds_value_to_existing_attribute() {
             ProductAttribute color = attribute(uuid(1), "Color", "COLOR", AttributeType.VARIANT);
-            when(attributeRepository.findById(uuid(1))).thenReturn(Optional.of(color));
+            when(attributeRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(color));
             when(valueRepository.existsByAttributeIdAndValue(uuid(1), "Navy")).thenReturn(false);
             when(valueRepository.save(any(ProductAttributeValue.class))).thenAnswer(inv -> {
                 ProductAttributeValue v = inv.getArgument(0);
@@ -152,7 +152,7 @@ class ProductAttributeServiceTest {
         @Test
         void rejects_duplicate_value_under_same_attribute() {
             ProductAttribute color = attribute(uuid(1), "Color", "COLOR", AttributeType.VARIANT);
-            when(attributeRepository.findById(uuid(1))).thenReturn(Optional.of(color));
+            when(attributeRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(color));
             when(valueRepository.existsByAttributeIdAndValue(uuid(1), "White")).thenReturn(true);
 
             assertThatThrownBy(() -> service.addValue(uuid(1), valueRequest("White", null)))
@@ -172,7 +172,7 @@ class ProductAttributeServiceTest {
         void rejects_when_value_in_use_by_a_variant() {
             ProductAttribute color = attribute(uuid(1), "Color", "COLOR", AttributeType.VARIANT);
             ProductAttributeValue white = value(uuid(2), color, "White", "Trắng");
-            when(valueRepository.findById(uuid(2))).thenReturn(Optional.of(white));
+            when(valueRepository.findByIdAndDeletedFalse(uuid(2))).thenReturn(Optional.of(white));
             when(valueRepository.isUsedByAnyVariant(uuid(2))).thenReturn(true);
 
             assertThatThrownBy(() -> service.deleteValue(uuid(1), uuid(2)))
@@ -185,7 +185,7 @@ class ProductAttributeServiceTest {
         void soft_deletes_when_not_in_use() {
             ProductAttribute color = attribute(uuid(1), "Color", "COLOR", AttributeType.VARIANT);
             ProductAttributeValue white = value(uuid(2), color, "White", "Trắng");
-            when(valueRepository.findById(uuid(2))).thenReturn(Optional.of(white));
+            when(valueRepository.findByIdAndDeletedFalse(uuid(2))).thenReturn(Optional.of(white));
             when(valueRepository.isUsedByAnyVariant(uuid(2))).thenReturn(false);
             when(valueRepository.save(any(ProductAttributeValue.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -205,7 +205,7 @@ class ProductAttributeServiceTest {
         void blocks_value_removal_when_value_in_use() {
             ProductAttribute color = attribute(uuid(1), "Color", "COLOR", AttributeType.VARIANT);
             ProductAttributeValue white = value(uuid(2), color, "White", "Trắng");
-            when(attributeRepository.findById(uuid(1))).thenReturn(Optional.of(color));
+            when(attributeRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(color));
             when(valueRepository.isUsedByAnyVariant(uuid(2))).thenReturn(true);
 
             UpdateProductAttributeRequest request = new UpdateProductAttributeRequest();
@@ -223,11 +223,63 @@ class ProductAttributeServiceTest {
     // ─── getAttributes ───────────────────────────────────────────────────────
 
     @Nested
+    class GetAttribute {
+
+        @Test
+        void returns_not_found_for_soft_deleted_attribute() {
+            when(attributeRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.getAttribute(uuid(1)))
+                    .isInstanceOf(AppException.class)
+                    .extracting(e -> ((AppException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.PRODUCT_ATTRIBUTE_NOT_FOUND);
+        }
+
+        @Test
+        void excludes_soft_deleted_values_from_response() {
+            ProductAttribute color = attribute(uuid(1), "Color", "COLOR", AttributeType.VARIANT);
+            value(uuid(2), color, "White", "Tráº¯ng");
+            ProductAttributeValue black = value(uuid(3), color, "Black", "Äen");
+            black.softDelete("tester");
+            when(attributeRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(color));
+
+            ProductAttributeResponse result = service.getAttribute(uuid(1));
+
+            assertThat(result.getValues()).extracting(ProductAttributeValueResponse::getValue)
+                    .containsExactly("White");
+        }
+    }
+
+    @Nested
+    class DeleteAttribute {
+
+        @Test
+        void soft_deletes_attribute_and_active_values() {
+            ProductAttribute color = attribute(uuid(1), "Color", "COLOR", AttributeType.VARIANT);
+            ProductAttributeValue white = value(uuid(2), color, "White", "Tráº¯ng");
+            ProductAttributeValue black = value(uuid(3), color, "Black", "Äen");
+            black.softDelete("tester");
+            when(attributeRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(color));
+            when(attributeRepository.save(any(ProductAttribute.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            service.deleteAttribute(uuid(1));
+
+            assertThat(color.isDeleted()).isTrue();
+            assertThat(white.isDeleted()).isTrue();
+            assertThat(black.isDeleted()).isTrue();
+            verify(attributeRepository).save(color);
+        }
+    }
+
+    @Nested
     class ListAttributes {
 
         @Test
         void filters_by_type() {
             ProductAttribute color = attribute(uuid(1), "Color", "COLOR", AttributeType.VARIANT);
+            value(uuid(2), color, "White", "White");
+            ProductAttributeValue black = value(uuid(3), color, "Black", "Black");
+            black.softDelete("tester");
             Page<ProductAttribute> page = new PageImpl<>(List.of(color));
             when(attributeRepository.findAll(any(Specification.class), any(PageRequest.class)))
                     .thenReturn(page);
@@ -237,8 +289,11 @@ class ProductAttributeServiceTest {
 
             assertThat(service.getAttributes(filter, PageRequest.of(0, 20)).getItems())
                     .singleElement()
-                    .extracting(ProductAttributeResponse::getCode)
-                    .isEqualTo("COLOR");
+                    .satisfies(item -> {
+                        assertThat(item.getCode()).isEqualTo("COLOR");
+                        assertThat(item.getValues()).extracting(ProductAttributeValueResponse::getValue)
+                                .containsExactly("White");
+                    });
         }
     }
 }

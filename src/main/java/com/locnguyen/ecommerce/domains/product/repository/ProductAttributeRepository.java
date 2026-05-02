@@ -17,4 +17,6 @@ public interface ProductAttributeRepository
     boolean existsByCodeAndIdNot(String code, UUID id);
 
     Optional<ProductAttribute> findByCode(String code);
+
+    Optional<ProductAttribute> findByIdAndDeletedFalse(UUID id);
 }

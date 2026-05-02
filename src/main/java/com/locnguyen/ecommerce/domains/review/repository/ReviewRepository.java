@@ -7,16 +7,22 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import java.util.Optional;
 import java.util.UUID;
+
 public interface ReviewRepository extends JpaRepository<Review, UUID>, JpaSpecificationExecutor<Review> {
 
     /** Check whether an order item has already been reviewed (prevents duplicates). */
     boolean existsByOrderItemId(UUID orderItemId);
 
-    /** All reviews by a customer, newest first — for "my reviews" feed. */
+    Optional<Review> findByIdAndDeletedFalse(UUID id);
+
+    /** All reviews by a customer, newest first â€” for "my reviews" feed. */
     Page<Review> findByCustomerIdOrderByCreatedAtDesc(UUID customerId, Pageable pageable);
 
-    /** Approved reviews for a product — shown on the public product page. */
+    Page<Review> findByCustomerIdAndDeletedFalseOrderByCreatedAtDesc(UUID customerId, Pageable pageable);
+
+    /** Approved reviews for a product â€” shown on the public product page. */
     Page<Review> findByProductIdAndStatusOrderByCreatedAtDesc(
             UUID productId, ReviewStatus status, Pageable pageable);
 
@@ -24,6 +30,6 @@ public interface ReviewRepository extends JpaRepository<Review, UUID>, JpaSpecif
     Page<Review> findByVariantIdAndStatusOrderByCreatedAtDesc(
             UUID variantId, ReviewStatus status, Pageable pageable);
 
-    /** All reviews pending moderation — for the admin moderation queue. */
+    /** All reviews pending moderation â€” for the admin moderation queue. */
     Page<Review> findByStatusOrderByCreatedAtAsc(ReviewStatus status, Pageable pageable);
 }

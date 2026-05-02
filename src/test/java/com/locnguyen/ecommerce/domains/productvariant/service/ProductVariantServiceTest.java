@@ -107,7 +107,7 @@ class ProductVariantServiceTest {
             ProductAttributeValue white = value(uuid(20), color, "White", "Trắng");
             ProductAttributeValue m = value(uuid(21), size, "M", "M");
 
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
             when(attributeValueRepository.findByIdIn(anyCollection())).thenReturn(List.of(white, m));
             when(variantRepository.findVariantIdsWithExactAttributeSet(any(), anyCollection(), anyLong()))
                     .thenReturn(List.of());
@@ -135,7 +135,7 @@ class ProductVariantServiceTest {
         @Test
         void uses_manual_sku_when_unique() {
             Product product = product(uuid(1), "ao-thun-nam");
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
             // Empty attributeValueIds -> findByIdIn / findVariantIdsWithExactAttributeSet
             // are not called by the service.
             when(variantRepository.findBySku("MANUAL-SKU-001")).thenReturn(Optional.empty());
@@ -156,7 +156,7 @@ class ProductVariantServiceTest {
             Product product = product(uuid(1), "ao-thun-nam");
             ProductVariant existing = new ProductVariant();
             ReflectionTestUtils.setField(existing, "id", uuid(99));
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
             when(variantRepository.findBySku("DUP-SKU")).thenReturn(Optional.of(existing));
 
             CreateVariantRequest request = createRequest(new BigDecimal("100000"), Set.of());
@@ -175,7 +175,7 @@ class ProductVariantServiceTest {
             ProductAttribute material = attribute(uuid(10), "Material", "MATERIAL", AttributeType.DESCRIPTIVE);
             ProductAttributeValue cotton = value(uuid(20), material, "Cotton", "Cotton");
 
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
             when(attributeValueRepository.findByIdIn(anyCollection())).thenReturn(List.of(cotton));
 
             CreateVariantRequest request = createRequest(new BigDecimal("100000"), Set.of(uuid(20)));
@@ -193,7 +193,7 @@ class ProductVariantServiceTest {
             ProductAttributeValue white = value(uuid(20), color, "White", "Trắng");
             ProductAttributeValue black = value(uuid(21), color, "Black", "Đen");
 
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
             when(attributeValueRepository.findByIdIn(anyCollection())).thenReturn(List.of(white, black));
 
             CreateVariantRequest request = createRequest(new BigDecimal("100000"),
@@ -208,7 +208,7 @@ class ProductVariantServiceTest {
         @Test
         void rejects_unknown_attribute_value_id() {
             Product product = product(uuid(1), "ao-thun-nam");
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
             when(attributeValueRepository.findByIdIn(anyCollection())).thenReturn(List.of());
 
             CreateVariantRequest request = createRequest(new BigDecimal("100000"), Set.of(uuid(20)));
@@ -225,7 +225,7 @@ class ProductVariantServiceTest {
             ProductAttribute color = attribute(uuid(10), "Color", "COLOR", AttributeType.VARIANT);
             ProductAttributeValue white = value(uuid(20), color, "White", "Trắng");
 
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
             when(attributeValueRepository.findByIdIn(anyCollection())).thenReturn(List.of(white));
             when(variantRepository.findVariantIdsWithExactAttributeSet(any(), anyCollection(), anyLong()))
                     .thenReturn(List.of(uuid(500)));
@@ -241,7 +241,7 @@ class ProductVariantServiceTest {
         @Test
         void rejects_sale_price_greater_than_base_price() {
             Product product = product(uuid(1), "ao-thun-nam");
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
 
             CreateVariantRequest request = createRequest(new BigDecimal("100000"), Set.of());
             request.setSalePrice(new BigDecimal("150000"));
@@ -255,7 +255,7 @@ class ProductVariantServiceTest {
         @Test
         void rejects_compare_at_price_below_base_price() {
             Product product = product(uuid(1), "ao-thun-nam");
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
 
             CreateVariantRequest request = createRequest(new BigDecimal("100000"), Set.of());
             request.setCompareAtPrice(new BigDecimal("80000"));
@@ -269,7 +269,7 @@ class ProductVariantServiceTest {
         @Test
         void rejects_zero_or_negative_weight() {
             Product product = product(uuid(1), "ao-thun-nam");
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
 
             CreateVariantRequest request = createRequest(new BigDecimal("100000"), Set.of());
             request.setWeightGram(0);
@@ -283,7 +283,7 @@ class ProductVariantServiceTest {
         @Test
         void auto_generates_barcode_when_requested() {
             Product product = product(uuid(1), "ao-thun-nam");
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
             when(variantRepository.findBySku(anyString())).thenReturn(Optional.empty());
             when(variantRepository.existsByBarcode(anyString())).thenReturn(false);
             stubVariantSave();
@@ -303,7 +303,7 @@ class ProductVariantServiceTest {
         @Test
         void rejects_manual_barcode_collision() {
             Product product = product(uuid(1), "ao-thun-nam");
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
             when(variantRepository.findBySku(anyString())).thenReturn(Optional.empty());
             when(variantRepository.existsByBarcode("DUP-BC")).thenReturn(true);
 
@@ -325,7 +325,7 @@ class ProductVariantServiceTest {
             ProductAttributeValue white = value(uuid(20), color, "White", "Trắng");
             ProductAttributeValue m = value(uuid(21), size, "M", null);
 
-            when(productRepository.findById(uuid(1))).thenReturn(Optional.of(product));
+            when(productRepository.findByIdAndDeletedFalse(uuid(1))).thenReturn(Optional.of(product));
             when(attributeValueRepository.findByIdIn(anyCollection())).thenReturn(List.of(white, m));
             when(variantRepository.findVariantIdsWithExactAttributeSet(any(), anyCollection(), anyLong()))
                     .thenReturn(List.of());
@@ -364,7 +364,7 @@ class ProductVariantServiceTest {
             variant.setBasePrice(new BigDecimal("100000"));
             variant.setAttributeValues(new HashSet<>(Set.of(white)));
 
-            when(variantRepository.findByIdAndProductId(uuid(900), uuid(1)))
+            when(variantRepository.findByIdAndProductIdAndDeletedFalse(uuid(900), uuid(1)))
                     .thenReturn(Optional.of(variant));
             when(attributeValueRepository.findByIdIn(anyCollection())).thenReturn(List.of(black));
             // The same variant id may come back; service should ignore self when checking duplicates.
@@ -382,3 +382,4 @@ class ProductVariantServiceTest {
         }
     }
 }
+

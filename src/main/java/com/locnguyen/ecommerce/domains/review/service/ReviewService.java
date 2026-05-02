@@ -128,7 +128,7 @@ public class ReviewService {
     @Transactional(readOnly = true)
     public PagedResponse<ReviewResponse> getMyReviews(Customer customer, Pageable pageable) {
         Page<Review> page = reviewRepository
-                .findByCustomerIdOrderByCreatedAtDesc(customer.getId(), pageable);
+                .findByCustomerIdAndDeletedFalseOrderByCreatedAtDesc(customer.getId(), pageable);
         return PagedResponse.of(page.map(reviewMapper::toResponse));
     }
 
@@ -243,7 +243,7 @@ public class ReviewService {
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private Review findOrThrow(UUID id) {
-        return reviewRepository.findById(id)
+        return reviewRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.REVIEW_NOT_FOUND));
     }
 }

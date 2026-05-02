@@ -230,7 +230,7 @@ class OrderServiceTest {
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(cart));
             when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(uuid(5))).thenReturn(List.of(ci));
-            when(addressRepository.findById(uuid(99))).thenReturn(Optional.empty());
+            when(addressRepository.findByIdAndDeletedFalse(uuid(99))).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> orderService.createOrder(cust, createRequest(uuid(99), null)))
                     .isInstanceOf(AppException.class)
@@ -250,7 +250,7 @@ class OrderServiceTest {
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(cart));
             when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(uuid(5))).thenReturn(List.of(ci));
-            when(addressRepository.findById(uuid(10))).thenReturn(Optional.of(addr));
+            when(addressRepository.findByIdAndDeletedFalse(uuid(10))).thenReturn(Optional.of(addr));
 
             assertThatThrownBy(() -> orderService.createOrder(cust, createRequest(uuid(10), null)))
                     .isInstanceOf(AppException.class)
@@ -269,7 +269,7 @@ class OrderServiceTest {
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(cart));
             when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(uuid(5))).thenReturn(List.of(ci));
-            when(addressRepository.findById(uuid(10))).thenReturn(Optional.of(addr));
+            when(addressRepository.findByIdAndDeletedFalse(uuid(10))).thenReturn(Optional.of(addr));
             when(inventoryRepository.findByVariantIdIn(List.of(uuid(1)))).thenReturn(List.of());
 
             assertThatThrownBy(() -> orderService.createOrder(cust, createRequest(uuid(10), null)))
@@ -446,7 +446,7 @@ class OrderServiceTest {
             orderService.createOrder(cust, createRequest(uuid(10), "COD"));
 
             // Should reserve from warehouse 2 (available=18 > available=2)
-            verify(inventoryService).reserveStock(argThat(req -> req.getWarehouseId() == uuid(2)));
+            verify(inventoryService).reserveStock(argThat(req -> uuid(2).equals(req.getWarehouseId())));
         }
 
         @Test
@@ -465,7 +465,7 @@ class OrderServiceTest {
                     .thenReturn(Optional.of(cart));
             when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(uuid(5)))
                     .thenReturn(List.of(ci1, ci2));
-            when(addressRepository.findById(uuid(10))).thenReturn(Optional.of(addr));
+            when(addressRepository.findByIdAndDeletedFalse(uuid(10))).thenReturn(Optional.of(addr));
             when(inventoryRepository.findByVariantIdIn(List.of(uuid(1), uuid(2))))
                     .thenReturn(List.of(inv1, inv2));
             when(orderItemRepository.findByOrderIdOrderByCreatedAtAsc(any(UUID.class)))
@@ -483,7 +483,7 @@ class OrderServiceTest {
                     .thenReturn(Optional.of(cart));
             when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId()))
                     .thenReturn(items);
-            when(addressRepository.findById(addr.getId())).thenReturn(Optional.of(addr));
+            when(addressRepository.findByIdAndDeletedFalse(addr.getId())).thenReturn(Optional.of(addr));
             List<UUID> variantIds = items.stream()
                     .map(ci -> ci.getVariant().getId())
                     .toList();
@@ -761,3 +761,4 @@ class OrderServiceTest {
         }
     }
 }
+

@@ -19,7 +19,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -40,6 +42,7 @@ import java.util.UUID;
  * apply/release lifecycle, and admin CRUD edge cases.
  */
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class VoucherServiceTest {
 
     private static UUID uuid(long n) { return new UUID(0L, n); }
@@ -590,7 +593,7 @@ class VoucherServiceTest {
             // Rule 1 passes (order >= 100,000), Rule 2 fails (product 99 not in order)
             promo.setRules(List.of(
                     rule(promo, RuleType.MIN_ORDER_AMOUNT, "100000.00"),
-                    rule(promo, RuleType.SPECIFIC_PRODUCTS, "99")
+                    rule(promo, RuleType.SPECIFIC_PRODUCTS, idCsv(99L))
             ));
             Voucher v = voucher(promo);
             when(voucherRepository.findByCodeWithRules("TESTCODE")).thenReturn(Optional.of(v));
@@ -852,7 +855,7 @@ class VoucherServiceTest {
 
         @Test
         void throws_NOT_FOUND_when_voucher_does_not_exist() {
-            when(voucherRepository.findById(uuid(99))).thenReturn(Optional.empty());
+            when(voucherRepository.findByIdAndDeletedFalse(uuid(99))).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> voucherService.deleteVoucher(uuid(99)))
                     .isInstanceOf(AppException.class)
@@ -863,7 +866,7 @@ class VoucherServiceTest {
         @Test
         void soft_deletes_voucher_without_removing_from_db() {
             Voucher v = voucher(promotion(DiscountType.FIXED_AMOUNT, BigDecimal.TEN));
-            when(voucherRepository.findById(uuid(10))).thenReturn(Optional.of(v));
+            when(voucherRepository.findByIdAndDeletedFalse(uuid(10))).thenReturn(Optional.of(v));
             when(voucherRepository.save(any())).thenReturn(v);
 
             voucherService.deleteVoucher(uuid(10));
@@ -872,3 +875,4 @@ class VoucherServiceTest {
         }
     }
 }
+

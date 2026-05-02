@@ -18,13 +18,21 @@ public interface ProductAttributeValueRepository extends JpaRepository<ProductAt
 
     Optional<ProductAttributeValue> findByAttributeIdAndValue(UUID attributeId, String value);
 
+    Optional<ProductAttributeValue> findByIdAndDeletedFalse(UUID id);
+
     boolean existsByAttributeIdAndValue(UUID attributeId, String value);
 
     boolean existsByAttributeIdAndValueAndIdNot(UUID attributeId, String value, UUID id);
 
     List<ProductAttributeValue> findByAttributeId(UUID attributeId);
 
-    List<ProductAttributeValue> findByIdIn(Collection<UUID> ids);
+    @Query("""
+            SELECT pav
+            FROM ProductAttributeValue pav
+            WHERE pav.id IN :ids
+              AND pav.deleted = false
+            """)
+    List<ProductAttributeValue> findByIdIn(@Param("ids") Collection<UUID> ids);
 
     /**
      * True iff at least one (non-deleted) variant references the given attribute value.
@@ -34,6 +42,7 @@ public interface ProductAttributeValueRepository extends JpaRepository<ProductAt
             FROM com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant v
             JOIN v.attributeValues av
             WHERE av.id = :valueId
+              AND v.deleted = false
             """)
     boolean isUsedByAnyVariant(@Param("valueId") UUID valueId);
 }

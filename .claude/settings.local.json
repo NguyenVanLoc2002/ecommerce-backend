@@ -29,7 +29,13 @@
       "Bash(./mvnw -Dtest='CartServiceTest,OrderServiceTest' test)",
       "Bash(./mvnw -DskipTests clean compile)",
       "Bash(./mvnw -Dtest='ProductAttributeServiceTest,ProductVariantServiceTest' test)",
-      "Bash(./mvnw -Dtest='CartServiceTest,OrderServiceTest,InventoryServiceTest,PaymentServiceTest,OrderStatusTest,EcommercePlatformApplicationTests' test)"
+      "Bash(./mvnw -Dtest='CartServiceTest,OrderServiceTest,InventoryServiceTest,PaymentServiceTest,OrderStatusTest,EcommercePlatformApplicationTests' test)",
+      "Bash(./mvnw -o compile -DskipTests)",
+      "Bash(./mvnw -o test -Dtest='AdminUserServiceTest')",
+      "Bash(./mvnw -o test)",
+      "Bash(./mvnw -q -DskipTests compile)",
+      "Bash(./mvnw -DskipTests compile)",
+      "Bash(./mvnw -q test)"
     ]
   }
 }

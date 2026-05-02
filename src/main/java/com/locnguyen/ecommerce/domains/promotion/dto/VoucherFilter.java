@@ -14,4 +14,6 @@ public class VoucherFilter {
     private Boolean active;
     private LocalDate dateFrom;
     private LocalDate dateTo;
+    private Boolean isDeleted;
+    private Boolean includeDeleted;
 }

@@ -113,8 +113,8 @@ public class NotificationService {
     public int broadcast(BroadcastNotificationRequest request) {
         java.util.List<Customer> targets = (request.getCustomerIds() == null
                 || request.getCustomerIds().isEmpty())
-                ? customerRepository.findAll()
-                : customerRepository.findAllById(request.getCustomerIds());
+                ? customerRepository.findAllByDeletedFalse()
+                : customerRepository.findByIdInAndDeletedFalse(request.getCustomerIds());
 
         for (Customer customer : targets) {
             Notification entry = new Notification();
