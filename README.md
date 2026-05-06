@@ -247,9 +247,9 @@ logging.level.org.springframework.security=INFO
 app.cors.allowed-origins=http://localhost:3000,http://localhost:5173,http://localhost:8081
 
 # JWT
-security.jwt.secret-key=your_dev_secret_key
-security.jwt.access-token-expiration-ms=3600000
-security.jwt.refresh-token-expiration-ms=2592000000
+app.jwt.secret=your_dev_secret_key
+app.jwt.access-token-expiration=3600000
+app.jwt.refresh-token-expiration=604800000
 ```
 
 **application-prod.properties**
@@ -277,9 +277,9 @@ logging.level.root=INFO
 app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS}
 
 # JWT
-security.jwt.secret-key=${JWT_SECRET_KEY}
-security.jwt.access-token-expiration-ms=3600000
-security.jwt.refresh-token-expiration-ms=2592000000
+app.jwt.secret=${JWT_SECRET}
+app.jwt.access-token-expiration=${JWT_ACCESS_EXPIRY:3600000}
+app.jwt.refresh-token-expiration=${JWT_REFRESH_EXPIRY:604800000}
 ```
 
 ---
@@ -349,6 +349,41 @@ Sau khi backend chạy local:
 - `docs/order-lifecycle.md`
 - `docs/inventory-lifecycle.md`
 - `docs/deployment.md`
+
+---
+
+## 10.1. Current Auth Flow
+
+Current backend implementation:
+
+- `POST /api/v1/auth/register` and `POST /api/v1/auth/login` return `ApiResponse<AuthResponse>`.
+- `AuthResponse.data.tokens` includes `accessToken`, `tokenType`, and `expiresIn`.
+- Register and login set the refresh token via `Set-Cookie`.
+- `POST /api/v1/auth/refresh-token` reads the refresh token from the HttpOnly cookie and still accepts a deprecated request-body fallback.
+- Access tokens are used in `Authorization: Bearer <accessToken>`.
+- `POST /api/v1/auth/logout` blacklists the current access token in Redis when valid, revokes the refresh session when present, and clears the refresh cookie.
+- No password-change or password-reset flow is implemented in the current source tree.
+- Admin/staff/customer accounts all authenticate through the same `/api/v1/auth/login` endpoint.
+
+Current limitations:
+
+- A deprecated body-based refresh fallback still exists during migration.
+- No password-change or password-reset endpoint exists yet to call principal-wide session revocation.
+- CSRF remains disabled; the current auth-cookie mitigations are restricted origins, `SameSite`, and the narrow auth cookie path.
+
+Implemented target behavior:
+
+- Keep returning the access token in the response body.
+- Store the refresh token in an `HttpOnly`, environment-configurable `Secure`, `SameSite` cookie.
+- Do not return `refreshToken` in the JSON response body.
+- Store a hashed refresh-session record in Redis with TTL.
+- Revoke the refresh session on logout and clear the cookie.
+- Revoke all refresh sessions on password change through `AuthService.revokeAllRefreshSessions(...)` when that flow is added.
+
+Frontend note:
+
+- Frontends should use `withCredentials` for login, refresh, and logout.
+- Frontends should stop storing refresh tokens in LocalStorage or other JavaScript-accessible storage.
 
 ---
 

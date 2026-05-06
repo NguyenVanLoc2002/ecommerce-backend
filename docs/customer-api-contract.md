@@ -60,7 +60,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `email`: required, valid email
   - `password`: required
 - `RefreshTokenRequest`
-  - `refreshToken`: required
+  - `refreshToken`: optional, deprecated fallback for refresh only
 - `AuthResponse`
   - `user`
   - `tokens`
@@ -68,7 +68,24 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `id`, `email`, `firstName`, `lastName`, `phoneNumber`
   - `status`, `roles`, `createdAt`
 - `TokenResponse`
-  - `accessToken`, `refreshToken`, `tokenType`, `expiresIn`
+  - `accessToken`, `tokenType`, `expiresIn`
+
+### Current auth contract
+
+- Register and login both return `ApiResponse<AuthResponse>`.
+- `AuthResponse.data.tokens` contains `accessToken`, `tokenType`, and `expiresIn`.
+- Register and login set the refresh token in an HttpOnly cookie.
+- Refresh reads the cookie by default and returns only a new access token in the JSON body.
+- A JSON-body `refreshToken` fallback is still accepted temporarily for refresh and is deprecated.
+- Logout revokes the current refresh session, clears the cookie, and blacklists the presented access token when valid.
+- There is no password-change or password-reset endpoint in the current backend source.
+- The same login endpoint is used for customer and non-customer accounts; authorization is role-based after login.
+
+### Frontend contract notes
+
+- Frontends must call login, refresh, and logout with `withCredentials: true`.
+- Frontends must not store refresh tokens in LocalStorage, sessionStorage, or other JavaScript-accessible storage.
+- Frontends may keep a temporary body-based refresh fallback only during migration and should remove it once all environments rely on the cookie flow.
 
 ### POST `/api/v1/auth/register`
 
@@ -89,22 +106,58 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `LoginRequest`
 - Response:
   - `ApiResponse<AuthResponse>`
+- Current response behavior:
+  - returns `data.user`
+  - returns `data.tokens.accessToken`
+  - returns `data.tokens.tokenType`
+  - returns `data.tokens.expiresIn`
+- Cookie behavior:
+  - sets the refresh-token cookie
+  - cookie defaults: `HttpOnly`, `SameSite=Lax`, `Path=/api/v1/auth`
+  - `Secure` is configurable and should be `true` in production
 
 ### POST `/api/v1/auth/refresh-token`
 
 - Access: public
-- Description: exchange refresh token for a new token pair
+- Description: exchange refresh token for a new access token and rotated refresh cookie
 - Request body:
   - `RefreshTokenRequest`
 - Response:
   - `ApiResponse<TokenResponse>`
+- Transport behavior:
+  - reads refresh token from HttpOnly cookie by default
+  - temporarily supports `refreshToken` from request JSON body as a deprecated fallback
+  - does not read from `Authorization`
+- Rotation behavior:
+  - rotates the refresh token cookie on every success
+  - returns only `accessToken`, `tokenType`, and `expiresIn`
+  - revokes the previously issued refresh session
+  - rejects reused/mismatched refresh tokens with `401`
 
 ### POST `/api/v1/auth/logout`
 
-- Access: authenticated
-- Description: blacklist current access token
+- Access: public/idempotent
+- Description: revoke current refresh session, clear refresh cookie, and blacklist current access token when supplied
 - Response:
   - `ApiResponse<Void>`
+- Current behavior:
+  - accepts missing or expired access token without failing
+  - blacklists the presented access token in Redis until access-token expiry when valid
+  - revokes the matching refresh session when the refresh cookie is present
+  - clears the refresh-token cookie
+
+### Current auth storage model
+
+- Refresh sessions are stored in Redis with TTL.
+- Redis stores a SHA-256 hash of the refresh token, not the raw token.
+- Refresh tokens carry session identity (`jti`) plus principal and family claims for server-side validation and revocation.
+- `AuthService.revokeAllRefreshSessions(principalType, principalId)` is available for a future password-change integration.
+
+### TODO / Future work
+
+- Remove deprecated request-body refresh fallback after frontend migration.
+- Add password-change and password-reset flows with session revocation.
+- Consider adding dedicated CSRF protection for auth-cookie flows if the deployment model requires weaker `SameSite` settings.
 
 ---
 
@@ -704,4 +757,3 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - Description: mark all notifications as read
 - Response:
   - `ApiResponse<Void>`
-

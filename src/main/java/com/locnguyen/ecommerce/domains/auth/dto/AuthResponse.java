@@ -5,17 +5,17 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * Combined response for register and login — returns both user info and tokens
- * so the client has everything needed after authentication.
+ * Combined response for register and login.
+ * Returns user info and access-token metadata while the refresh token is managed via HttpOnly cookie.
  */
 @Getter
 @Builder
-@Schema(description = "Authentication response — user profile + token pair")
+@Schema(description = "Authentication response containing user profile and access-token metadata")
 public class AuthResponse {
 
     @Schema(description = "Authenticated user profile")
     private final UserResponse user;
 
-    @Schema(description = "JWT token pair")
+    @Schema(description = "Access-token metadata")
     private final TokenResponse tokens;
 }

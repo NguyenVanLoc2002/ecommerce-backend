@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Stateless JWT token generation and validation.
@@ -20,7 +21,8 @@ import java.util.List;
  * <ul>
  *   <li><b>Access token</b> — contains {@code sub} (username) + {@code roles} claim.
  *       Short-lived (default 1 hour). Used by API clients on every request.</li>
- *   <li><b>Refresh token</b> — contains only {@code sub}.
+ *   <li><b>Refresh token</b> — contains {@code sub}, token type, session id ({@code jti}),
+ *       principal identity, and a family id for rotation/reuse detection.
  *       Long-lived (default 7 days). Used solely to obtain a new access token.</li>
  * </ul>
  *
@@ -37,6 +39,9 @@ public class JwtTokenProvider {
 
     private static final String ROLES_CLAIM = "roles";
     private static final String TOKEN_TYPE_CLAIM = "type";
+    private static final String PRINCIPAL_TYPE_CLAIM = "ptype";
+    private static final String PRINCIPAL_ID_CLAIM = "pid";
+    private static final String FAMILY_ID_CLAIM = "fid";
     private static final String ACCESS_TOKEN_TYPE = "access";
     private static final String REFRESH_TOKEN_TYPE = "refresh";
 
@@ -65,17 +70,26 @@ public class JwtTokenProvider {
     }
 
     /**
-     * Generate a signed refresh token — no roles, just the subject.
+     * Generate a signed refresh token carrying the claims needed for
+     * server-side session validation and rotation.
      *
      * @param username authenticated user's identifier
      */
-    public String generateRefreshToken(String username) {
+    public String generateRefreshToken(String username,
+                                       AuthPrincipalType principalType,
+                                       UUID principalId,
+                                       String sessionId,
+                                       String familyId) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + appProperties.getJwt().getRefreshTokenExpiration());
 
         return Jwts.builder()
                 .subject(username)
+                .id(sessionId)
                 .claim(TOKEN_TYPE_CLAIM, REFRESH_TOKEN_TYPE)
+                .claim(PRINCIPAL_TYPE_CLAIM, principalType.name())
+                .claim(PRINCIPAL_ID_CLAIM, principalId.toString())
+                .claim(FAMILY_ID_CLAIM, familyId)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(signingKey())
@@ -197,6 +211,20 @@ public class JwtTokenProvider {
         }
     }
 
+    public RefreshTokenClaims extractRefreshTokenClaims(String token) {
+        return buildRefreshTokenClaims(parseClaims(token));
+    }
+
+    public RefreshTokenClaims extractRefreshTokenClaimsAllowExpired(String token) {
+        try {
+            return buildRefreshTokenClaims(parseClaims(token));
+        } catch (ExpiredJwtException e) {
+            return buildRefreshTokenClaims(e.getClaims());
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
+        }
+    }
+
     // ─── Internal ────────────────────────────────────────────────────────────
 
     private Claims parseClaims(String token) {
@@ -211,5 +239,50 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(
                 appProperties.getJwt().getSecret().getBytes(StandardCharsets.UTF_8)
         );
+    }
+
+    private RefreshTokenClaims buildRefreshTokenClaims(Claims claims) {
+        if (claims == null) {
+            return null;
+        }
+
+        try {
+            String tokenType = claims.get(TOKEN_TYPE_CLAIM, String.class);
+            String sessionId = claims.getId();
+            String principalType = claims.get(PRINCIPAL_TYPE_CLAIM, String.class);
+            String principalId = claims.get(PRINCIPAL_ID_CLAIM, String.class);
+            String familyId = claims.get(FAMILY_ID_CLAIM, String.class);
+
+            if (!REFRESH_TOKEN_TYPE.equals(tokenType)
+                    || sessionId == null
+                    || principalType == null
+                    || principalId == null
+                    || familyId == null) {
+                return null;
+            }
+
+            return new RefreshTokenClaims(
+                    claims.getSubject(),
+                    AuthPrincipalType.valueOf(principalType),
+                    UUID.fromString(principalId),
+                    sessionId,
+                    familyId,
+                    claims.getIssuedAt(),
+                    claims.getExpiration()
+            );
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    public record RefreshTokenClaims(
+            String username,
+            AuthPrincipalType principalType,
+            UUID principalId,
+            String sessionId,
+            String familyId,
+            Date issuedAt,
+            Date expiresAt
+    ) {
     }
 }

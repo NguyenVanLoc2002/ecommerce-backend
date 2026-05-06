@@ -161,7 +161,8 @@ public class OrderServiceImpl implements OrderService {
         // Voucher discount is a prepare hook — will be properly calculated
         // when the promotion module is implemented. For now, discount = 0.
         BigDecimal discountAmount = BigDecimal.ZERO;
-        BigDecimal shippingFee = BigDecimal.ZERO; // TODO: calculate based on rules
+        // TODO: calculate based on rules
+        BigDecimal shippingFee = BigDecimal.ZERO;
 
         order.setSubTotal(subTotal);
         order.setDiscountAmount(discountAmount);

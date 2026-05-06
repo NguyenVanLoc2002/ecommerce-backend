@@ -11,6 +11,7 @@ public class AppProperties {
 
     private Jwt jwt = new Jwt();
     private Cors cors = new Cors();
+    private Auth auth = new Auth();
 
     @Getter
     @Setter
@@ -24,5 +25,22 @@ public class AppProperties {
     @Setter
     public static class Cors {
         private String[] allowedOrigins = {"http://localhost:3000"};
+    }
+
+    @Getter
+    @Setter
+    public static class Auth {
+        private RefreshCookie refreshCookie = new RefreshCookie();
+    }
+
+    @Getter
+    @Setter
+    public static class RefreshCookie {
+        private String name = "fashion-shop.refresh-token";
+        private String path = "/api/v1/auth";
+        private String sameSite = "Lax";
+        private boolean secure = false;
+        private boolean httpOnly = true;
+        private long maxAge = -1L;
     }
 }

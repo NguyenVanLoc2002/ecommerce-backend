@@ -3,11 +3,17 @@ package com.locnguyen.ecommerce.domains.auth.service.impl;
 import com.locnguyen.ecommerce.common.config.AppProperties;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
+import com.locnguyen.ecommerce.common.security.AuthPrincipalType;
 import com.locnguyen.ecommerce.common.security.JwtTokenProvider;
+import com.locnguyen.ecommerce.common.security.RefreshSession;
+import com.locnguyen.ecommerce.common.security.RefreshSessionService;
 import com.locnguyen.ecommerce.common.security.TokenBlacklistService;
 import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
-import com.locnguyen.ecommerce.domains.auth.dto.*;
+import com.locnguyen.ecommerce.domains.auth.dto.AuthResponse;
+import com.locnguyen.ecommerce.domains.auth.dto.LoginRequest;
+import com.locnguyen.ecommerce.domains.auth.dto.RegisterRequest;
+import com.locnguyen.ecommerce.domains.auth.dto.TokenResponse;
 import com.locnguyen.ecommerce.domains.auth.mapper.UserMapper;
 import com.locnguyen.ecommerce.domains.auth.service.AuthService;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
@@ -30,23 +36,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
-/**
- * Authentication service — handles register, login, and token refresh.
- *
- * <p>Token strategy:
- * <ul>
- *   <li>Access token carries {@code sub} (email) + {@code roles} claim — validated
- *       per-request by {@link com.locnguyen.ecommerce.common.security.JwtAuthenticationFilter}</li>
- *   <li>Refresh token carries only {@code sub} — exchanged for a new token pair</li>
- *   <li>Tokens are currently stateless (self-contained JWT). Token revocation via
- *       Redis blacklist will be added when logout is implemented.</li>
- * </ul>
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -55,6 +52,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
     private final TokenBlacklistService tokenBlacklistService;
+    private final RefreshSessionService refreshSessionService;
     private final PasswordEncoder passwordEncoder;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -63,45 +61,27 @@ public class AuthServiceImpl implements AuthService {
     private final AppProperties appProperties;
     private final AuditLogService auditLogService;
 
-    // ─── Logout ──────────────────────────────────────────────────────────────
+    @Override
+    public void logout(String accessToken, String refreshToken) {
+        boolean accessTokenBlacklisted = false;
 
-    /**
-     * Invalidate the caller's access token by adding it to the Redis blacklist.
-     *
-     * <p>The token remains in Redis until its natural expiry — no cleanup job needed.
-     * All subsequent requests with this token will be rejected by {@link com.locnguyen.ecommerce.common.security.JwtAuthenticationFilter}.
-     *
-     * @param token raw access token extracted from the Authorization header
-     */
-    public void logout(String token) {
-        if (!tokenProvider.validateToken(token) || !tokenProvider.isAccessToken(token)) {
-            throw new AppException(ErrorCode.TOKEN_INVALID);
+        if (tokenProvider.validateToken(accessToken) && tokenProvider.isAccessToken(accessToken)) {
+            tokenBlacklistService.blacklist(accessToken);
+            accessTokenBlacklisted = true;
         }
-        tokenBlacklistService.blacklist(token);
-        String email = tokenProvider.extractUsername(token);
-        log.info("User logged out: email={}", email);
-        auditLogService.log(AuditAction.LOGOUT, "USER", email, "access_token_blacklisted");
+
+        revokeRefreshTokenIfPossible(refreshToken);
+
+        if (accessTokenBlacklisted) {
+            String email = tokenProvider.extractUsername(accessToken);
+            log.info("User logged out: email={}", email);
+            auditLogService.log(AuditAction.LOGOUT, "USER", email, "access_token_blacklisted");
+        }
     }
 
-    // ─── Register ────────────────────────────────────────────────────────────
-
-    /**
-     * Register a new customer account.
-     *
-     * <ol>
-     *   <li>Validate email uniqueness</li>
-     *   <li>Validate phone uniqueness (if provided)</li>
-     *   <li>Hash password with BCrypt</li>
-     *   <li>Assign CUSTOMER role</li>
-     *   <li>Persist user</li>
-     *   <li>Generate tokens (auto-login)</li>
-     * </ol>
-     *
-     * @return auth response with user profile and token pair
-     */
+    @Override
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
-        // Business validation
+    public AuthenticatedSessionResponse register(RegisterRequest request, ClientMetadata clientMetadata) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new AppException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
@@ -110,12 +90,10 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.PHONE_ALREADY_EXISTS);
         }
 
-        // Resolve CUSTOMER role from seed data
         Role customerRole = roleRepository.findByName(RoleName.CUSTOMER)
                 .orElseThrow(() -> new IllegalStateException(
-                        "CUSTOMER role not found — check Flyway V2 seed data"));
+                        "CUSTOMER role not found - check Flyway V2 seed data"));
 
-        // Build user entity
         User user = new User();
         user.setEmail(request.getEmail().toLowerCase().trim());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
@@ -127,40 +105,28 @@ public class AuthServiceImpl implements AuthService {
 
         user = userRepository.save(user);
 
-        // Create customer profile for the new user
-        Customer customer = new Customer(user);
-        customerRepository.save(customer);
+        Customer customer = customerRepository.save(new Customer(user));
 
         log.info("User registered: id={} email={} customerId={}", user.getId(), user.getEmail(), customer.getId());
         auditLogService.log(AuditAction.USER_REGISTERED, "USER",
                 String.valueOf(user.getId()), "email=" + user.getEmail());
 
-        // Auto-login: generate tokens so the client can start immediately
-        TokenResponse tokens = generateTokenPair(user);
-        return AuthResponse.builder()
+        AuthenticatedPrincipal principal = new AuthenticatedPrincipal(
+                AuthPrincipalType.CUSTOMER,
+                customer.getId(),
+                user
+        );
+        SessionTokenBundle tokens = issueSession(principal, clientMetadata, null);
+        AuthResponse response = AuthResponse.builder()
                 .user(userMapper.toUserResponse(user))
-                .tokens(tokens)
+                .tokens(tokens.response())
                 .build();
+        return new AuthenticatedSessionResponse(response, tokens.refreshToken());
     }
 
-    // ─── Login ───────────────────────────────────────────────────────────────
-
-    /**
-     * Authenticate with email and password.
-     *
-     * <p>Delegates credential verification to Spring Security's
-     * {@link AuthenticationManager}, which uses
-     * {@link com.locnguyen.ecommerce.common.security.CustomUserDetailsService}.
-     *
-     * <p>Error mapping:
-     * <ul>
-     *   <li>wrong email/password → {@code INVALID_CREDENTIALS}</li>
-     *   <li>disabled account → {@code ACCOUNT_DISABLED}</li>
-     *   <li>locked account → {@code ACCOUNT_DISABLED}</li>
-     * </ul>
-     */
+    @Override
     @Transactional
-    public AuthResponse login(LoginRequest request) {
+    public AuthenticatedSessionResponse login(LoginRequest request, ClientMetadata clientMetadata) {
         Authentication authentication;
         try {
             authentication = authenticationManager.authenticate(
@@ -183,11 +149,9 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.INVALID_CREDENTIALS);
         }
 
-        // Load full user entity (roles are eagerly fetched)
         User user = userRepository.findByEmailAndDeletedFalse(authentication.getName())
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
-        // Update last login timestamp
         user.setLastLoginAt(LocalDateTime.now());
         userRepository.save(user);
 
@@ -195,71 +159,178 @@ public class AuthServiceImpl implements AuthService {
         auditLogService.log(AuditAction.LOGIN_SUCCESS, "USER",
                 String.valueOf(user.getId()), "email=" + user.getEmail());
 
-        TokenResponse tokens = generateTokenPair(user);
-        return AuthResponse.builder()
+        AuthenticatedPrincipal principal = resolvePrincipal(user);
+        SessionTokenBundle tokens = issueSession(principal, clientMetadata, null);
+        AuthResponse response = AuthResponse.builder()
                 .user(userMapper.toUserResponse(user))
-                .tokens(tokens)
+                .tokens(tokens.response())
                 .build();
+        return new AuthenticatedSessionResponse(response, tokens.refreshToken());
     }
 
-    // ─── Refresh Token ───────────────────────────────────────────────────────
-
-    /**
-     * Exchange a valid refresh token for a new access + refresh token pair.
-     *
-     * <p>Validates:
-     * <ul>
-     *   <li>Token signature and expiration</li>
-     *   <li>Token type is {@code refresh} (rejects access tokens)</li>
-     *   <li>User exists and is active</li>
-     * </ul>
-     *
-     * @return new token pair
-     */
+    @Override
     @Transactional
-    public TokenResponse refreshToken(RefreshTokenRequest request) {
-        String token = request.getRefreshToken();
+    public TokenRefreshResponse refreshToken(String refreshTokenFromCookie,
+                                             String refreshTokenFromBody,
+                                             ClientMetadata clientMetadata) {
+        String token = resolveRefreshToken(refreshTokenFromCookie, refreshTokenFromBody);
 
-        // Validate token integrity
         if (!tokenProvider.validateToken(token)) {
+            cleanupExpiredRefreshTokenIfPossible(token);
             throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
         }
 
-        // Must be a refresh token — reject access tokens
         if (!tokenProvider.isRefreshToken(token)) {
             throw new AppException(ErrorCode.TOKEN_INVALID,
                     "Expected a refresh token, but received an access token");
         }
 
-        // Load user from subject claim
-        String email = tokenProvider.extractUsername(token);
-        User user = userRepository.findByEmailAndDeletedFalse(email)
-                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new AppException(ErrorCode.ACCOUNT_DISABLED);
+        JwtTokenProvider.RefreshTokenClaims claims = tokenProvider.extractRefreshTokenClaims(token);
+        if (claims == null) {
+            throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
         }
 
-        log.info("Token refreshed for user: id={} email={}", user.getId(), user.getEmail());
+        RefreshSession storedSession = refreshSessionService.getSession(
+                claims.principalType(),
+                claims.principalId(),
+                claims.sessionId()
+        );
+        if (storedSession == null) {
+            refreshSessionService.revokeFamily(claims.principalType(), claims.principalId(), claims.familyId());
+            throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
+        }
 
-        return generateTokenPair(user);
+        String tokenHash = refreshSessionService.hashToken(token);
+        if (!tokenHash.equals(storedSession.getTokenHash())) {
+            refreshSessionService.revokeFamily(claims.principalType(), claims.principalId(), claims.familyId());
+            throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
+        }
+
+        AuthenticatedPrincipal principal = loadPrincipal(claims.principalType(), claims.principalId());
+        ensurePrincipalActive(principal);
+
+        refreshSessionService.revokeSession(claims.principalType(), claims.principalId(), claims.sessionId());
+
+        log.info("Token refreshed: principalType={} principalId={} userId={}",
+                claims.principalType(), claims.principalId(), principal.user().getId());
+
+        SessionTokenBundle tokens = issueSession(principal, clientMetadata, claims.familyId());
+        return new TokenRefreshResponse(tokens.response(), tokens.refreshToken());
     }
 
-    // ─── Internal ────────────────────────────────────────────────────────────
+    @Override
+    public void revokeAllRefreshSessions(AuthPrincipalType principalType, UUID principalId) {
+        refreshSessionService.revokeAllRefreshSessions(principalType, principalId);
+    }
 
-    private TokenResponse generateTokenPair(User user) {
+    private SessionTokenBundle issueSession(AuthenticatedPrincipal principal,
+                                            ClientMetadata clientMetadata,
+                                            String existingFamilyId) {
+        User user = principal.user();
         List<String> roleNames = user.getRoles().stream()
                 .map(role -> role.getName().name())
                 .collect(Collectors.toList());
 
         String accessToken = tokenProvider.generateAccessToken(user.getEmail(), roleNames);
-        String refreshToken = tokenProvider.generateRefreshToken(user.getEmail());
+        String sessionId = UUID.randomUUID().toString();
+        String familyId = existingFamilyId != null ? existingFamilyId : UUID.randomUUID().toString();
+        String refreshToken = tokenProvider.generateRefreshToken(
+                user.getEmail(),
+                principal.principalType(),
+                principal.principalId(),
+                sessionId,
+                familyId
+        );
 
-        return TokenResponse.builder()
+        Instant now = Instant.now();
+        refreshSessionService.storeSession(
+                RefreshSession.builder()
+                        .sessionId(sessionId)
+                        .familyId(familyId)
+                        .principalType(principal.principalType())
+                        .principalId(principal.principalId())
+                        .tokenHash(refreshSessionService.hashToken(refreshToken))
+                        .issuedAt(now)
+                        .expiresAt(now.plusMillis(appProperties.getJwt().getRefreshTokenExpiration()))
+                        .userAgent(clientMetadata.userAgent())
+                        .ipAddress(clientMetadata.ipAddress())
+                        .build(),
+                Duration.ofMillis(appProperties.getJwt().getRefreshTokenExpiration())
+        );
+
+        TokenResponse response = TokenResponse.builder()
                 .accessToken(accessToken)
-                .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .expiresIn(appProperties.getJwt().getAccessTokenExpiration() / 1000)
                 .build();
+        return new SessionTokenBundle(response, refreshToken);
+    }
+
+    private AuthenticatedPrincipal resolvePrincipal(User user) {
+        boolean customerOnly = user.getRoles().size() == 1
+                && user.getRoles().stream().allMatch(role -> role.getName() == RoleName.CUSTOMER);
+
+        if (customerOnly) {
+            Customer customer = customerRepository.findByUserIdAndDeletedFalse(user.getId())
+                    .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
+            return new AuthenticatedPrincipal(AuthPrincipalType.CUSTOMER, customer.getId(), user);
+        }
+
+        return new AuthenticatedPrincipal(AuthPrincipalType.USER, user.getId(), user);
+    }
+
+    private AuthenticatedPrincipal loadPrincipal(AuthPrincipalType principalType, UUID principalId) {
+        if (principalType == AuthPrincipalType.CUSTOMER) {
+            Customer customer = customerRepository.findByIdAndDeletedFalse(principalId)
+                    .orElseThrow(() -> new AppException(ErrorCode.CUSTOMER_NOT_FOUND));
+            return new AuthenticatedPrincipal(AuthPrincipalType.CUSTOMER, customer.getId(), customer.getUser());
+        }
+
+        User user = userRepository.findByIdAndDeletedFalse(principalId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        return new AuthenticatedPrincipal(AuthPrincipalType.USER, user.getId(), user);
+    }
+
+    private void ensurePrincipalActive(AuthenticatedPrincipal principal) {
+        if (principal.user().getStatus() != UserStatus.ACTIVE) {
+            refreshSessionService.revokeAllRefreshSessions(principal.principalType(), principal.principalId());
+            throw new AppException(ErrorCode.ACCOUNT_DISABLED);
+        }
+    }
+
+    private String resolveRefreshToken(String refreshTokenFromCookie, String refreshTokenFromBody) {
+        if (refreshTokenFromCookie != null && !refreshTokenFromCookie.isBlank()) {
+            return refreshTokenFromCookie;
+        }
+        if (refreshTokenFromBody != null && !refreshTokenFromBody.isBlank()) {
+            return refreshTokenFromBody;
+        }
+        throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
+    }
+
+    private void cleanupExpiredRefreshTokenIfPossible(String token) {
+        JwtTokenProvider.RefreshTokenClaims claims = tokenProvider.extractRefreshTokenClaimsAllowExpired(token);
+        if (claims != null) {
+            refreshSessionService.revokeSession(claims.principalType(), claims.principalId(), claims.sessionId());
+        }
+    }
+
+    private void revokeRefreshTokenIfPossible(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return;
+        }
+
+        JwtTokenProvider.RefreshTokenClaims claims = tokenProvider.extractRefreshTokenClaimsAllowExpired(refreshToken);
+        if (claims == null) {
+            return;
+        }
+
+        refreshSessionService.revokeSession(claims.principalType(), claims.principalId(), claims.sessionId());
+    }
+
+    private record AuthenticatedPrincipal(AuthPrincipalType principalType, UUID principalId, User user) {
+    }
+
+    private record SessionTokenBundle(TokenResponse response, String refreshToken) {
     }
 }

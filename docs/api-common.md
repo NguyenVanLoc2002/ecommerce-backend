@@ -33,12 +33,26 @@ Authorization: Bearer <accessToken>
 ### 2.2 JWT model
 
 - The API is stateless JWT only.
-- No session or cookie auth is used by the backend.
-- Login/register/refresh responses return:
+- Access tokens are sent in `Authorization: Bearer <accessToken>`.
+- Refresh tokens are transported primarily via an HttpOnly cookie on `/api/v1/auth/**`.
+- CORS allows credentials for configured frontend origins so refresh/logout can use cookies.
+- `POST /api/v1/auth/register` and `POST /api/v1/auth/login` return:
   - `accessToken`
-  - `refreshToken`
   - `tokenType`
   - `expiresIn`
+- `POST /api/v1/auth/register` and `POST /api/v1/auth/login` also set a refresh-token cookie.
+- `POST /api/v1/auth/refresh-token` also returns:
+  - `accessToken`
+  - `tokenType`
+  - `expiresIn`
+- `POST /api/v1/auth/refresh-token` reads the refresh token from the HttpOnly cookie.
+- `POST /api/v1/auth/refresh-token` still accepts `RefreshTokenRequest` in the JSON body as a temporary backward-compatible fallback and that body contract is deprecated.
+- Refresh rotates the refresh token on every success and returns only a new access token in the JSON body.
+- `POST /api/v1/auth/logout` is public/idempotent at the filter-chain level so it can still clear the cookie when the access token is missing or expired.
+- `POST /api/v1/auth/logout` blacklists the presented access token when valid, revokes the refresh session when a refresh cookie is present, and clears the refresh cookie.
+- No password-change or password-reset API is implemented in the current source tree.
+- `AuthService.revokeAllRefreshSessions(principalType, principalId)` exists as the reusable integration point for a future password-change flow.
+- The same `/api/v1/auth/login` flow authenticates `CUSTOMER`, `STAFF`, `ADMIN`, and `SUPER_ADMIN` accounts.
 
 ### 2.3 Role hierarchy
 
@@ -57,6 +71,7 @@ These routes are currently unauthenticated at the filter-chain level:
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh-token`
+- `POST /api/v1/auth/logout`
 - `GET /api/v1/products/**`
 - `GET /api/v1/categories/**`
 - `GET /api/v1/brands/**`
@@ -78,6 +93,12 @@ These routes are currently unauthenticated at the filter-chain level:
 ### 2.6 Important current-code note
 
 `POST /api/v1/payments/callback` is described in its controller as a gateway callback, but it is **not** whitelisted in `SecurityConfig`. In the current backend source, it therefore requires authentication.
+
+### 2.7 Current refresh-token limitations
+
+- A temporary deprecated fallback still allows sending `refreshToken` in the JSON body to `/api/v1/auth/refresh-token`.
+- No password-change endpoint exists yet, so session-family revocation is not yet wired into an account-credential change flow.
+- `SecurityConfig` remains stateless and CSRF is disabled; cookie-based refresh relies on restricted CORS origins, `SameSite`, and the narrow `/api/v1/auth` cookie path rather than a dedicated CSRF token.
 
 ---
 

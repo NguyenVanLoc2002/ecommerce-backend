@@ -8,14 +8,11 @@ import lombok.Getter;
 @Getter
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@Schema(description = "JWT token pair")
+@Schema(description = "Access-token response payload")
 public class TokenResponse {
 
-    @Schema(description = "JWT access token — short-lived, used in Authorization header", example = "eyJhbGci...")
+    @Schema(description = "JWT access token used in the Authorization header", example = "eyJhbGci...")
     private final String accessToken;
-
-    @Schema(description = "JWT refresh token — long-lived, used to obtain new access tokens", example = "eyJhbGci...")
-    private final String refreshToken;
 
     @Schema(description = "Token type", example = "Bearer")
     private final String tokenType;

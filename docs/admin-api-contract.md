@@ -19,6 +19,10 @@ Shared response, error, auth, enum, and pagination rules are defined in [api-com
 ## 1. Access model
 
 - All routes here require `Authorization: Bearer <accessToken>`.
+- Admin and staff users authenticate through the same public `POST /api/v1/auth/login` endpoint used by customers.
+- The shared auth backend returns only the access token in the JSON response body for all user types.
+- The shared auth backend stores the refresh token in an HttpOnly cookie for all user types.
+- There is no separate admin login controller or separate admin refresh-token mechanism.
 - URL-level access for `/api/v1/admin/**`: `STAFF`, `ADMIN`, or `SUPER_ADMIN`
 - Some endpoints are stricter via `@PreAuthorize`.
 

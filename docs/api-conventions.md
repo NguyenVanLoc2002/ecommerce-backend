@@ -337,14 +337,19 @@ Authorization: Bearer <access_token>
 
 ### 10.1. Refresh token
 
-Có thể dùng:
-- request body
-- httpOnly cookie
+Current implementation:
+- login/register return `accessToken` in JSON and set the refresh token in an HttpOnly cookie
+- refresh reads the cookie by default, rotates it on success, and returns only `accessToken` in JSON
+- request-body refresh token fallback still exists temporarily for migration
+- logout revokes the refresh session, clears the cookie, and blacklists the current access token when valid
 
-**Khuyến nghị production:**
-- access token ngắn hạn
-- refresh token dài hạn
-- refresh token rotation
+Recommended target for production:
+- short-lived access token in the response body
+- long-lived refresh token in an `HttpOnly` + `Secure` + `SameSite` cookie
+- refresh session stored server-side
+- store token hash, not raw refresh token
+- revoke refresh session on logout
+- revoke all sessions on password change
 
 ---
 

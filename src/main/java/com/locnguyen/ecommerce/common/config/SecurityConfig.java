@@ -28,8 +28,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * Central security configuration for the application.
  *
  * <h2>Authentication model</h2>
- * Stateless JWT — every request must carry a valid Bearer token in the
- * {@code Authorization} header. No sessions, no cookies.
+ * Stateless JWT — protected API requests carry a valid Bearer token in the
+ * {@code Authorization} header, while refresh-token rotation uses an HttpOnly
+ * cookie only on the auth endpoints.
  *
  * <h2>Role hierarchy</h2>
  * <pre>
@@ -70,6 +71,7 @@ public class SecurityConfig {
             "/api/v1/auth/register",
             "/api/v1/auth/login",
             "/api/v1/auth/refresh-token",
+            "/api/v1/auth/logout",
     };
 
     /** Public GET-only endpoints for product browsing. */
@@ -96,7 +98,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Disable CSRF — not needed for stateless JWT APIs
+                // Disable CSRF — this API remains stateless; auth-cookie refresh relies on
+                // SameSite/path/origin restrictions rather than server-side CSRF tokens.
                 .csrf(AbstractHttpConfigurer::disable)
 
                 // CORS — delegates to WebMvcConfig.addCorsMappings()

@@ -1,14 +1,16 @@
 package com.locnguyen.ecommerce.domains.auth.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 @Data
-@Schema(description = "Refresh token request")
+@Schema(description = "Deprecated refresh token request body. Prefer the HttpOnly refresh-token cookie.")
 public class RefreshTokenRequest {
 
-    @NotBlank(message = "Refresh token is required")
-    @Schema(example = "eyJhbGciOiJIUzI1NiJ9...", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(
+            example = "eyJhbGciOiJIUzI1NiJ9...",
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            deprecated = true
+    )
     private String refreshToken;
 }

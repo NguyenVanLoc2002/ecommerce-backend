@@ -491,6 +491,26 @@ Khi admin cập nhật product/category/brand phải evict cache liên quan ngay
 
 ---
 
+### 13.1. Current Auth Implementation
+
+- `POST /api/v1/auth/register` and `POST /api/v1/auth/login` return only the access token in the JSON response body and set the refresh token in an HttpOnly cookie.
+- `POST /api/v1/auth/refresh-token` reads the refresh token from the cookie and still accepts a deprecated request-body fallback.
+- Redis is used for both access-token blacklist on logout and refresh-session storage with TTL.
+- Refresh sessions store a SHA-256 token hash, not the raw refresh token.
+- Logout revokes the refresh session, clears the cookie, and blacklists the presented access token when valid.
+- There is no implemented password-change/reset endpoint yet, but `AuthService.revokeAllRefreshSessions(...)` is available as the integration point.
+
+### 13.2. Recommended Target
+
+- access token in response body
+- refresh token only in `HttpOnly` + `Secure` + `SameSite` cookie
+- refresh session stored server-side in Redis with TTL, or in DB if Redis session storage is not ready
+- server stores token hash, not raw refresh token
+- logout revokes refresh session and clears cookie
+- password change revokes all active refresh sessions
+
+---
+
 ## 14. Environment Profiles
 
 Có 2 profile chính:

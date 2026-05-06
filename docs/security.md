@@ -1,209 +1,171 @@
 # Security Guidelines
 
-Tài liệu mô tả nguyên tắc bảo mật cho hệ thống.
+This file documents the security behavior implemented in the current backend source and the recommended target architecture for the refresh-token flow.
+
+Source of truth:
+- `src/main/java/com/locnguyen/ecommerce/domains/auth/controller/AuthController.java`
+- `src/main/java/com/locnguyen/ecommerce/domains/auth/service/impl/AuthServiceImpl.java`
+- `src/main/java/com/locnguyen/ecommerce/common/security/JwtTokenProvider.java`
+- `src/main/java/com/locnguyen/ecommerce/common/security/JwtAuthenticationFilter.java`
+- `src/main/java/com/locnguyen/ecommerce/common/security/TokenBlacklistService.java`
+- `src/main/java/com/locnguyen/ecommerce/common/config/SecurityConfig.java`
+- `src/main/java/com/locnguyen/ecommerce/common/config/WebMvcConfig.java`
+- `src/main/resources/application-dev.properties`
+- `src/main/resources/application-prod.properties`
 
 ---
 
-## 1. Authentication
+## 1. Current implemented auth model
 
-* **JWT access token**
-* **Refresh token**
+### 1.1 Login and register
 
-Header mẫu:
-```http
-Authorization: Bearer <token>
-```
+- `POST /api/v1/auth/register` returns `ApiResponse<AuthResponse>`
+- `POST /api/v1/auth/login` returns `ApiResponse<AuthResponse>`
+- `AuthResponse.data.tokens` includes:
+  - `accessToken`
+  - `tokenType`
+  - `expiresIn`
+- Register and login also set the refresh token in a `Set-Cookie` header.
 
----
+### 1.2 Access token usage
 
-## 2. Token Strategy
+- Protected routes use `Authorization: Bearer <accessToken>`.
+- `JwtAuthenticationFilter` reads only the Bearer token from the `Authorization` header.
+- Refresh tokens are rejected if sent as access tokens.
 
-* **Access token**: short-lived (thời gian sống ngắn, ví dụ: 1h).
-* **Refresh token**: long-lived (thời gian sống dài, ví dụ: 30 ngày).
-* **Refresh rotation**: mỗi lần refresh phải tạo refresh token mới, token cũ bị vô hiệu hóa.
-* **Token blacklist**: dùng Redis lưu danh sách access token đã logout hoặc bị revoke trước khi hết hạn.
+### 1.3 Refresh token usage
 
----
+- `POST /api/v1/auth/refresh-token` reads the refresh token from the configured HttpOnly cookie.
+- `POST /api/v1/auth/refresh-token` still accepts `RefreshTokenRequest` in the JSON body as a temporary deprecated fallback.
+- The refresh endpoint does not read the refresh token from the `Authorization` header.
+- The refresh endpoint returns a new `TokenResponse` containing only a new access token.
+- Refresh rotates the refresh token on every success, revokes the previous refresh session, and sets a replacement cookie.
+- If the session is missing or the token hash mismatches, the backend revokes the session family when it can identify it and returns `401`.
 
-## 3. Password
+### 1.4 Logout
 
-* Bắt buộc hash bằng **BCrypt** hoặc **Argon2**.
-* Tuyệt đối không lưu mật khẩu dưới dạng plain text.
-* Yêu cầu mật khẩu tối thiểu: ≥ 8 ký tự, có chữ hoa, chữ thường, số.
+- `POST /api/v1/auth/logout` is public/idempotent so it can clear the cookie even when the access token is missing or expired.
+- Logout blacklists the presented access token in Redis until that access token expires when a valid Bearer token is supplied.
+- Logout revokes the refresh session referenced by the refresh-token cookie when present.
+- Logout clears the refresh-token cookie.
 
----
+### 1.5 Password change / password reset
 
-## 4. Authorization
+- No password-change endpoint is implemented in the current source tree.
+- No forgot-password or reset-password endpoint is implemented in the current source tree.
+- `AuthService.revokeAllRefreshSessions(principalType, principalId)` is now the reusable integration point a future password-change/reset flow must call.
 
-Sử dụng cơ chế **RBAC** (Role-Based Access Control) với các quyền:
-* **SUPER_ADMIN**: toàn quyền hệ thống
-* **ADMIN**: quản trị catalog, đơn hàng, khuyến mãi
-* **STAFF**: xử lý đơn hàng, kho
-* **CUSTOMER**: nghiệp vụ mua hàng
+### 1.6 Customer vs admin auth separation
 
----
-
-## 5. Email Verification & OTP
-
-### 5.1. Email verification
-Sau khi đăng ký, gửi email xác minh.  
-Tài khoản chưa xác minh email có thể bị giới hạn quyền (tùy business rule).
-
-### 5.2. OTP
-OTP phải:
-- Lưu trong **Redis** với TTL (ví dụ: 5 phút), **không** lưu trong database
-- Là chuỗi 6 chữ số ngẫu nhiên
-- Chỉ dùng được 1 lần (xóa khỏi Redis sau khi verify thành công)
-- Giới hạn số lần nhập sai (ví dụ: max 5 lần, sau đó tạo OTP mới)
-
-### 5.3. Forgot password flow
-1. Customer nhập email → gửi OTP về email
-2. Customer nhập OTP → server verify → trả `reset_token` (short-lived, lưu Redis)
-3. Customer nhập mật khẩu mới kèm `reset_token` → đổi mật khẩu thành công
+- Customers, staff, admins, and super admins all use the same `/api/v1/auth/login` endpoint.
+- Separation happens through roles inside the access token and the Spring Security authorization rules.
+- There is no separate admin login controller or separate admin refresh-token mechanism.
 
 ---
 
-## 6. API Protection
+## 2. Current storage model
 
-### Public API
-* Login / Register
-* Forgot password / Reset password / Verify email
-* Product listing, product detail
-* Category listing, brand listing, collection listing
+### 2.1 Access token and refresh token format
 
-### Protected API (Customer)
-* Cart, Wishlist, Address
-* Checkout, Order history
-* Review
+- Both access tokens and refresh tokens are self-contained signed JWTs.
+- Access token contains subject and roles.
+- Refresh token contains subject and token type, but no roles.
 
-### Admin API
-* Giới hạn trong pattern: `/api/v1/admin/**`
-* Bắt buộc role ADMIN hoặc STAFF
+### 2.2 Server-side storage
 
----
+- Refresh sessions are stored in Redis through `RefreshSessionService`.
+- Session records are stored under keys shaped like `auth:refresh:{principalType}:{principalId}:{sessionId}`.
+- Principal/session indexes are also maintained in Redis to support family or principal-wide revocation.
+- Redis is still used for access-token blacklist entries on logout.
 
-## 7. Rate Limiting
+### 2.3 Hashing
 
-### 7.1. Các endpoint cần rate limit
-
-| Endpoint                         | Giới hạn gợi ý         |
-|----------------------------------|------------------------|
-| `POST /api/v1/auth/login`        | 10 requests / phút / IP |
-| `POST /api/v1/auth/register`     | 5 requests / phút / IP  |
-| `POST /api/v1/auth/forgot-password` | 3 requests / phút / IP |
-| `POST /api/v1/webhooks/**`       | Whitelist IP provider   |
-| `POST /api/v1/payments/**`       | 20 requests / phút / user |
-
-### 7.2. Implement
-
-Phase đầu: dùng Redis + Spring interceptor hoặc Bucket4j.  
-Response khi bị rate limit: `429 Too Many Requests` với error code `RATE_LIMIT_EXCEEDED`.
+- Refresh tokens are hashed with SHA-256 before being stored in Redis session records.
+- Access tokens are also not hashed in Redis blacklist; the raw access token string is used as part of the Redis key.
 
 ---
 
-## 8. Validation
+## 3. Current configuration
 
-* Validate input DTO chặt chẽ ở tầng Controller.
-* Không tin tưởng bất kỳ input nào từ phía client.
-* Áp dụng các biện pháp chống SQL injection (dùng JPA Parameterized Query, không string concat SQL).
-* Chống XSS: sanitize output nếu cần render HTML.
-
----
-
-## 9. File Upload Security
-
-* Whitelist content type: `image/jpeg`, `image/png`, `image/webp`
-* Giới hạn dung lượng file (ví dụ: max 5MB ảnh product)
-* Sanitize / rename filename về UUID trước khi lưu
-* Không cho upload file thực thi: `.exe`, `.php`, `.sh`, `.js` server-side
-* Lưu file ngoài webroot, không cho truy cập direct URL nếu cần bảo mật
-
----
-
-## 10. Sensitive Data
-
-Tuyệt đối **không log** các thông tin nhạy cảm:
-* Password
-* JWT Token / Refresh Token
-* OTP
-* Payment card number / CVV
-* Payment callback payload chứa thông tin nhạy cảm (chỉ log transaction ID)
+- Access-token expiry property: `app.jwt.access-token-expiration`
+- Refresh-token expiry property: `app.jwt.refresh-token-expiration`
+- Refresh-cookie properties:
+  - `app.auth.refresh-cookie.name`
+  - `app.auth.refresh-cookie.path`
+  - `app.auth.refresh-cookie.same-site`
+  - `app.auth.refresh-cookie.secure`
+  - `app.auth.refresh-cookie.http-only`
+  - `app.auth.refresh-cookie.max-age`
+- Development defaults:
+  - access token: `3600000` ms (1 hour)
+  - refresh token: `604800000` ms (7 days)
+  - refresh cookie: `fashion-shop.refresh-token`, `Path=/api/v1/auth`, `SameSite=Lax`, `Secure=false`, `HttpOnly=true`, `Max-Age=604800`
+- Production defaults:
+  - access token: `${JWT_ACCESS_EXPIRY:3600000}`
+  - refresh token: `${JWT_REFRESH_EXPIRY:604800000}`
+  - refresh cookie secure flag defaults to `${AUTH_REFRESH_COOKIE_SECURE:true}`
 
 ---
 
-## 11. Error Handling
+## 4. Current security limitations
 
-Tuân thủ theo API convention:
-* Không bao giờ trả `stacktrace` về phía client.
-* Trả error theo cấu trúc chuẩn đã quy định.
-* Log đầy đủ nội bộ để debug, nhưng không lộ ra response.
-
----
-
-## 12. CORS
-
-* Cấu hình (config) nghiêm ngặt theo từng environment.
-* Tuyệt đối không sử dụng dấu `*` (allow all) ở môi trường production.
-* Whitelist origin rõ ràng:
-  - dev: `http://localhost:3000`, `http://localhost:5173`, `http://localhost:8081`
-  - prod: chỉ domain thực tế của admin web và customer web
+- A deprecated request-body fallback still accepts `refreshToken` JSON on `/api/v1/auth/refresh-token`; this should be removed after frontend migration.
+- Cookie-based refresh is used while CSRF remains disabled. Current mitigations are restricted `allowedOrigins`, `allowCredentials(true)`, `SameSite=Lax`, and `Path=/api/v1/auth`.
+- Access-token blacklist still stores the raw token string as part of the Redis key.
+- No password-change or reset flow exists yet, so principal-wide session revocation is only available as a service method and not yet exposed by an endpoint.
 
 ---
 
-## 13. Payment Webhook Security
+## 5. Implemented target architecture
 
-* Mọi request từ payment gateway phải validate **chữ ký (signature/HMAC)** trước khi xử lý.
-* Secret key dùng để verify signature phải lưu trong environment variable, không hardcode.
-* Nếu signature không hợp lệ: từ chối ngay với `400 Bad Request`, log cảnh báo.
-* Whitelist IP của provider nếu provider cung cấp danh sách IP cố định.
+### 5.1 Transport
+
+- Return the access token in the JSON response body.
+- Deliver the refresh token only via `Set-Cookie`.
+- Cookie attributes in the current implementation:
+  - `HttpOnly`
+  - `Secure` configurable by environment
+  - `SameSite=Lax` by default
+  - `Path=/api/v1/auth`
+  - `Max-Age` aligned with refresh-session TTL
+
+### 5.2 Server-side storage
+
+- Store refresh-session state server-side.
+- Current option: Redis with TTL for each refresh session.
+- Fallback option for future deployments: database refresh-session table if Redis session storage is not available.
+- Store a token hash server-side, not the raw refresh token.
+
+### 5.3 Rotation and revocation
+
+- Rotate the refresh token on every refresh.
+- Revoke the previous refresh-session record during refresh.
+- Detect reuse of an already-rotated refresh token and revoke the session family.
+- On logout:
+  - revoke the server-side refresh session
+  - blacklist the current access token if immediate access-token invalidation is still desired
+  - clear the refresh-token cookie
+- On password change:
+  - revoke all active refresh sessions for that user
+  - clear the current refresh-token cookie
+
+### 5.4 Frontend contract after migration
+
+- Frontends should use `withCredentials`.
+- Frontends should stop storing refresh tokens in LocalStorage, sessionStorage, or other JavaScript-accessible storage.
+- Frontends should continue sending the access token in `Authorization: Bearer <accessToken>`.
 
 ---
 
-## 14. Rate Limit cho Auth Brute Force
+## 6. Current vs target checklist
 
-* Sau N lần login sai liên tiếp (ví dụ: 5 lần), khóa account tạm thời hoặc yêu cầu CAPTCHA.
-* Đếm số lần sai theo `email + IP`.
-* Dùng Redis để lưu counter với TTL.
-
----
-
-## 15. Audit Log
-
-Bắt buộc ghi log lịch sử đối với các hành động:
-* Đăng nhập thành công / thất bại
-* Đổi mật khẩu
-* Thao tác của Admin (Admin action)
-* Thanh toán
-* Thay đổi trạng thái đơn hàng
-* Chỉnh sửa tồn kho
-* Tạo/sửa/vô hiệu hóa voucher
-
----
-
-## 16. Common Attack Cần Chống
-
-Hệ thống cần có cơ chế phòng chống:
-* **SQL Injection**: dùng Parameterized Query / JPA
-* **XSS (Cross-Site Scripting)**: sanitize input/output HTML
-* **CSRF (Cross-Site Request Forgery)**: dùng SameSite cookie hoặc CSRF token nếu dùng session
-* **Brute force**: rate limit + account lockout
-* **Replay Attack**: idempotency key cho payment
-* **Path Traversal**: sanitize filename upload
-
----
-
-## 17. Security Checklist
-
-- [ ] JWT config đúng (secret đủ mạnh, expiration hợp lý)
-- [ ] Refresh token rotation
-- [ ] Password hash (BCrypt/Argon2)
-- [ ] OTP lưu Redis, TTL đúng
-- [ ] Email verification flow
-- [ ] Input validation
-- [ ] Role check trên mọi protected endpoint
-- [ ] Rate limit cho auth endpoints
-- [ ] Payment webhook signature validation
-- [ ] CORS đúng theo environment
-- [ ] File upload security
-- [ ] Audit log
-- [ ] Không expose sensitive data trong log / response
+- [x] Access token uses Bearer header
+- [x] Passwords are stored as hashes
+- [x] Logout blacklists presented access token in Redis
+- [x] JWT expiration is configured via application properties
+- [x] Refresh token in HttpOnly cookie
+- [x] Refresh session stored server-side
+- [x] Server-side hashed refresh token
+- [x] Refresh-session revocation on logout
+- [ ] Refresh-session revocation on password change
+- [x] Refresh-token reuse detection

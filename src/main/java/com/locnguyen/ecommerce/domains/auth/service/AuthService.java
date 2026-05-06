@@ -1,18 +1,33 @@
 package com.locnguyen.ecommerce.domains.auth.service;
 
+import com.locnguyen.ecommerce.common.security.AuthPrincipalType;
 import com.locnguyen.ecommerce.domains.auth.dto.AuthResponse;
 import com.locnguyen.ecommerce.domains.auth.dto.LoginRequest;
-import com.locnguyen.ecommerce.domains.auth.dto.RefreshTokenRequest;
 import com.locnguyen.ecommerce.domains.auth.dto.RegisterRequest;
 import com.locnguyen.ecommerce.domains.auth.dto.TokenResponse;
 
+import java.util.UUID;
+
 public interface AuthService {
 
-    void logout(String token);
+    void logout(String accessToken, String refreshToken);
 
-    AuthResponse register(RegisterRequest request);
+    AuthenticatedSessionResponse register(RegisterRequest request, ClientMetadata clientMetadata);
 
-    AuthResponse login(LoginRequest request);
+    AuthenticatedSessionResponse login(LoginRequest request, ClientMetadata clientMetadata);
 
-    TokenResponse refreshToken(RefreshTokenRequest request);
+    TokenRefreshResponse refreshToken(String refreshTokenFromCookie,
+                                      String refreshTokenFromBody,
+                                      ClientMetadata clientMetadata);
+
+    void revokeAllRefreshSessions(AuthPrincipalType principalType, UUID principalId);
+
+    record ClientMetadata(String userAgent, String ipAddress) {
+    }
+
+    record AuthenticatedSessionResponse(AuthResponse response, String refreshToken) {
+    }
+
+    record TokenRefreshResponse(TokenResponse response, String refreshToken) {
+    }
 }
