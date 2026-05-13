@@ -16,32 +16,35 @@ import com.locnguyen.ecommerce.domains.product.entity.Product;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import com.locnguyen.ecommerce.domains.productvariant.enums.ProductVariantStatus;
 import com.locnguyen.ecommerce.domains.productvariant.repository.ProductVariantRepository;
+import com.locnguyen.ecommerce.domains.cart.service.impl.CartCreatorService;
 import com.locnguyen.ecommerce.domains.cart.service.impl.CartServiceImpl;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import java.util.UUID;
 /**
  * Unit tests for {@link CartService}.
  *
  * Tests cover:
- * - getOrCreateCart: creates cart when absent, returns existing
+ * - getOrCreateCart: creates cart, reuses existing, race condition, post-checkout reactivation
+ * - getMyCart: returns empty response when no active cart exists
  * - addItem: variant not found, inactive variant, quantity > available, increments existing item
  * - updateItemQuantity: ownership, quantity validation
  * - removeItem: ownership enforcement
@@ -56,6 +59,7 @@ class CartServiceTest {
     @Mock CartItemRepository cartItemRepository;
     @Mock ProductVariantRepository productVariantRepository;
     @Mock InventoryRepository inventoryRepository;
+    @Mock CartCreatorService cartCreatorService;
 
     @InjectMocks CartServiceImpl cartService;
 
@@ -72,6 +76,15 @@ class CartServiceTest {
         setId(c, id);
         c.setCustomer(customer);
         c.setStatus(CartStatus.ACTIVE);
+        c.setItems(new ArrayList<>());
+        return c;
+    }
+
+    private Cart checkedOutCart(UUID id, Customer customer) {
+        Cart c = new Cart();
+        setId(c, id);
+        c.setCustomer(customer);
+        c.setStatus(CartStatus.CHECKED_OUT);
         c.setItems(new ArrayList<>());
         return c;
     }
@@ -114,6 +127,18 @@ class CartServiceTest {
         return req;
     }
 
+    private static DataIntegrityViolationException cartDuplicateKeyEx() {
+        SQLException sqlEx = new SQLException(
+                "Duplicate entry 'xxx' for key 'uq_carts_customer_active'");
+        return new DataIntegrityViolationException("constraint", sqlEx);
+    }
+
+    private static DataIntegrityViolationException otherConstraintEx() {
+        SQLException sqlEx = new SQLException(
+                "Cannot add or update a child row: a foreign key constraint fails");
+        return new DataIntegrityViolationException("constraint", sqlEx);
+    }
+
     private static void setId(Object entity, UUID id) {
         ReflectionTestUtils.setField(entity, "id", id);
     }
@@ -133,24 +158,103 @@ class CartServiceTest {
             Cart result = cartService.getOrCreateCart(cust);
 
             assertThat(result.getId()).isEqualTo(uuid(5));
-            verify(cartRepository, never()).save(any());
+            verify(cartCreatorService, never()).createCart(any());
         }
 
         @Test
         void creates_new_cart_when_none_exists() {
             Customer cust = customer(uuid(1));
+            Cart newCart = cart(uuid(99), cust);
             when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
                     .thenReturn(Optional.empty());
-            when(cartRepository.save(any())).thenAnswer(inv -> {
-                Cart c = inv.getArgument(0);
-                setId(c, uuid(99));
-                return c;
-            });
+            when(cartCreatorService.createCart(cust)).thenReturn(newCart);
 
             Cart result = cartService.getOrCreateCart(cust);
 
-            assertThat(result).isNotNull();
-            verify(cartRepository).save(any(Cart.class));
+            assertThat(result.getId()).isEqualTo(uuid(99));
+            verify(cartCreatorService).createCart(cust);
+        }
+
+        @Test
+        void race_condition_duplicate_key_reloads_active_cart() {
+            Customer cust = customer(uuid(1));
+            Cart raceWinnerCart = cart(uuid(5), cust);
+
+            when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
+                    .thenReturn(Optional.empty());
+            when(cartCreatorService.createCart(cust)).thenThrow(cartDuplicateKeyEx());
+            // reload after race: finds the cart created by the concurrent request
+            when(cartRepository.findByCustomerId(uuid(1))).thenReturn(Optional.of(raceWinnerCart));
+
+            Cart result = cartService.getOrCreateCart(cust);
+
+            assertThat(result.getId()).isEqualTo(uuid(5));
+        }
+
+        @Test
+        void post_checkout_reactivates_checked_out_cart_and_clears_items() {
+            Customer cust = customer(uuid(1));
+            Cart checkedOut = checkedOutCart(uuid(5), cust);
+            // Add a stale item from the previous order to verify it is cleared
+            ProductVariant v = activeVariant(uuid(1), new BigDecimal("100000"), null);
+            checkedOut.getItems().add(cartItem(uuid(100), checkedOut, v, 2));
+
+            when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
+                    .thenReturn(Optional.empty());
+            when(cartCreatorService.createCart(cust)).thenThrow(cartDuplicateKeyEx());
+            when(cartRepository.findByCustomerId(uuid(1))).thenReturn(Optional.of(checkedOut));
+            when(cartRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            Cart result = cartService.getOrCreateCart(cust);
+
+            assertThat(result.getStatus()).isEqualTo(CartStatus.ACTIVE);
+            assertThat(result.getItems()).isEmpty();
+            verify(cartRepository).save(checkedOut);
+        }
+
+        @Test
+        void non_cart_duplicate_key_is_rethrown() {
+            Customer cust = customer(uuid(1));
+            when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
+                    .thenReturn(Optional.empty());
+            when(cartCreatorService.createCart(cust)).thenThrow(otherConstraintEx());
+
+            assertThatThrownBy(() -> cartService.getOrCreateCart(cust))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+        }
+
+        @Test
+        void race_condition_reload_still_empty_throws_CART_NOT_FOUND() {
+            Customer cust = customer(uuid(1));
+            when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
+                    .thenReturn(Optional.empty());
+            when(cartCreatorService.createCart(cust)).thenThrow(cartDuplicateKeyEx());
+            when(cartRepository.findByCustomerId(uuid(1))).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> cartService.getOrCreateCart(cust))
+                    .isInstanceOf(AppException.class)
+                    .extracting(e -> ((AppException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.CART_NOT_FOUND);
+        }
+    }
+
+    // ─── getMyCart ───────────────────────────────────────────────────────────
+
+    @Nested
+    class GetMyCart {
+
+        @Test
+        void returns_empty_response_when_no_active_cart() {
+            Customer cust = customer(uuid(1));
+            when(cartRepository.findByCustomerIdAndStatus(uuid(1), CartStatus.ACTIVE))
+                    .thenReturn(Optional.empty());
+
+            CartResponse resp = cartService.getMyCart(cust);
+
+            assertThat(resp.getTotalItems()).isZero();
+            assertThat(resp.getSubTotal()).isEqualByComparingTo(BigDecimal.ZERO);
+            assertThat(resp.getItems()).isEmpty();
+            verify(cartCreatorService, never()).createCart(any());
         }
     }
 
@@ -532,4 +636,3 @@ class CartServiceTest {
         }
     }
 }
-

@@ -61,7 +61,25 @@
       "Bash(./mvnw verify *)",
       "Bash(Select-String -Pattern \"Tests run:|BUILD|FAILED\")",
       "Bash(Select-Object -Last 20)",
-      "PowerShell(cd \"T:\\\\Project\\\\ecommerce-backend\"; ./mvnw test 2>&1 | Select-String -Pattern \"Tests run:|BUILD|FAILED|ERROR\" | Where-Object { $_ -notmatch \"logback|INFO|WARN\" } | Select-Object -Last 30)"
+      "PowerShell(cd \"T:\\\\Project\\\\ecommerce-backend\"; ./mvnw test 2>&1 | Select-String -Pattern \"Tests run:|BUILD|FAILED|ERROR\" | Where-Object { $_ -notmatch \"logback|INFO|WARN\" } | Select-Object -Last 30)",
+      "Bash(grep -E \"\\\\.\\(java|sql\\)$\")",
+      "Bash(curl *)",
+      "Bash(Get-Content logs/ecommerce-platform.log -Tail 100)",
+      "Bash(Select-String -Pattern \"ERROR|Exception|cart\")",
+      "Bash(Select-Object -Last 40)",
+      "PowerShell(Get-Item *)",
+      "Bash(mysql -u root -ppassword ecommerce_dev -e ' *)",
+      "Bash(mysql -u root ecommerce_dev -e ' *)",
+      "PowerShell(& \"C:\\\\Program Files\\\\MariaDB 11.3\\\\bin\\\\mysql.exe\" -u root -p0986045812a ecommerce_dev -e \"SELECT u.id, u.email, c.id as customer_id, c.deleted FROM users u LEFT JOIN customers c ON c.user_id = u.id WHERE u.email = 'customer195@dev.fashionshop.local';\" 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\MariaDB 11.3\\\\bin\\\\mysql.exe\" -u root -p0986045812a ecommerce_dev -e \"SELECT u.id, u.email, c.id as customer_id, c.is_deleted FROM users u LEFT JOIN customers c ON c.user_id = u.id WHERE u.email = 'customer195@dev.fashionshop.local';\" 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\MariaDB 11.3\\\\bin\\\\mysql.exe\" -u root -p0986045812a ecommerce_dev -e \"SELECT id, customer_id, status, created_at FROM carts WHERE customer_id = 'e27d0ec3-bd08-5325-ab94-422d83d2e778';\" 2>&1)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2, ensure_ascii=False\\)\\)\")",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(netstat *)",
+      "PowerShell(Stop-Process *)",
+      "Bash(nohup ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev)",
+      "Bash(echo \"PID: $!\")"
     ]
   }
 }

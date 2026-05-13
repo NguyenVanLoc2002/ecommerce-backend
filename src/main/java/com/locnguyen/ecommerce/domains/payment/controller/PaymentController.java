@@ -4,7 +4,6 @@ import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.domains.idempotency.service.IdempotencyService;
 import com.locnguyen.ecommerce.domains.payment.dto.InitPaymentRequest;
-import com.locnguyen.ecommerce.domains.payment.dto.PaymentCallbackRequest;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentResponse;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import com.locnguyen.ecommerce.domains.user.service.UserService;
@@ -59,16 +58,4 @@ public class PaymentController {
                         orderId, userService.getCurrentCustomer(), request, key));
     }
 
-    // ─── Gateway callback (no auth — called by external payment provider) ───
-
-    @Operation(
-            summary = "[Gateway] Payment callback",
-            description = "Endpoint for payment gateway to notify payment result. " +
-                    "No authentication required. Idempotent on duplicate providerTxnId."
-    )
-    @PostMapping("/callback")
-    public ApiResponse<PaymentResponse> processCallback(
-            @Valid @RequestBody PaymentCallbackRequest request) {
-        return ApiResponse.success(paymentService.processCallback(request));
-    }
 }

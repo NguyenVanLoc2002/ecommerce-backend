@@ -127,6 +127,16 @@ public enum ErrorCode {
             "Payment has already been processed"),
     PAYMENT_CALLBACK_INVALID(HttpStatus.BAD_REQUEST, "PAYMENT_CALLBACK_INVALID",
             "Invalid payment callback received"),
+    PAYMENT_REFUND_NOT_FOUND(HttpStatus.NOT_FOUND, "PAYMENT_REFUND_NOT_FOUND",
+            "Refund record not found"),
+    PAYMENT_REFUND_AMOUNT_EXCEEDED(HttpStatus.UNPROCESSABLE_ENTITY, "PAYMENT_REFUND_AMOUNT_EXCEEDED",
+            "Refund amount exceeds the remaining refundable amount"),
+    PAYMENT_REFUND_INVALID_STATUS(HttpStatus.UNPROCESSABLE_ENTITY, "PAYMENT_REFUND_INVALID_STATUS",
+            "Payment must be PAID before a refund can be initiated"),
+    PAYMENT_WEBHOOK_SIGNATURE_INVALID(HttpStatus.BAD_REQUEST, "PAYMENT_WEBHOOK_SIGNATURE_INVALID",
+            "Webhook signature verification failed"),
+    PAYMENT_PROVIDER_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "PAYMENT_PROVIDER_NOT_SUPPORTED",
+            "Payment provider is not supported"),
 
     // ─── Promotion / Voucher ────────────────────────────────────────────────
     VOUCHER_NOT_FOUND(HttpStatus.NOT_FOUND, "VOUCHER_NOT_FOUND", "Voucher not found"),

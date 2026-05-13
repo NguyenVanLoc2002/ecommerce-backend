@@ -15,6 +15,8 @@ public interface CartRepository extends JpaRepository<Cart, UUID> {
 
     Optional<Cart> findByCustomerIdAndStatus(UUID customerId, CartStatus status);
 
+    Optional<Cart> findByCustomerId(UUID customerId);
+
     /**
      * Load the ACTIVE cart with a PESSIMISTIC_WRITE (SELECT ... FOR UPDATE) lock.
      *

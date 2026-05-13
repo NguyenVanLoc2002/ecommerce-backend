@@ -17,13 +17,15 @@ import com.locnguyen.ecommerce.domains.productvariant.enums.ProductVariantStatus
 import com.locnguyen.ecommerce.domains.productvariant.repository.ProductVariantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
-
+import java.util.Optional;
 import java.util.UUID;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -33,28 +35,66 @@ public class CartServiceImpl implements CartService {
     private final CartItemRepository cartItemRepository;
     private final ProductVariantRepository productVariantRepository;
     private final InventoryRepository inventoryRepository;
+    private final CartCreatorService cartCreatorService;
 
     // ─── Cart retrieval ──────────────────────────────────────────────────────
 
     /**
-     * Get or create the active cart for the current customer.
+     * Return the current customer's cart summary. Does NOT create or reactivate
+     * a cart — a GET should never mutate state.
+     */
+    @Transactional(readOnly = true)
+    public CartResponse getMyCart(Customer customer) {
+        return cartRepository.findByCustomerIdAndStatus(customer.getId(), CartStatus.ACTIVE)
+                .map(this::buildCartResponse)
+                .orElseGet(() -> CartResponse.builder()
+                        .items(List.of())
+                        .totalItems(0)
+                        .subTotal(BigDecimal.ZERO)
+                        .build());
+    }
+
+    /**
+     * Find the customer's ACTIVE cart or create one.
+     *
+     * <p>Three cases handled:
+     * <ol>
+     *   <li>ACTIVE cart already exists → return it immediately.</li>
+     *   <li>No cart at all → {@link CartCreatorService#createCart} succeeds → return new cart.</li>
+     *   <li>Duplicate-key on uq_carts_customer_active:
+     *     <ul>
+     *       <li>Race condition (concurrent insert won) → reload the ACTIVE cart.</li>
+     *       <li>Post-checkout (CHECKED_OUT cart exists) → reset it to ACTIVE,
+     *           clear stale items, and return.</li>
+     *     </ul>
+     *   </li>
+     * </ol>
+     *
+     * <p>The catch lives HERE (outside the {@code REQUIRES_NEW} transaction in
+     * {@link CartCreatorService}). Catching a {@code DataIntegrityViolationException}
+     * inside a {@code REQUIRES_NEW} transaction and returning normally forces Spring
+     * to commit a session already marked rollback-only, causing
+     * {@code UnexpectedRollbackException}. By letting the exception propagate out of
+     * the inner transaction first, Spring rolls back the inner session cleanly; the
+     * outer transaction's session is unaffected and safe to continue.
      */
     @Transactional
     public Cart getOrCreateCart(Customer customer) {
-        return cartRepository.findByCustomerIdAndStatus(customer.getId(), CartStatus.ACTIVE)
-                .orElseGet(() -> {
-                    Cart cart = new Cart();
-                    cart.setCustomer(customer);
-                    cart = cartRepository.save(cart);
-                    log.info("Cart created: id={} customerId={}", cart.getId(), customer.getId());
-                    return cart;
-                });
-    }
-
-    @Transactional(readOnly = true)
-    public CartResponse getMyCart(Customer customer) {
-        Cart cart = getOrCreateCart(customer);
-        return buildCartResponse(cart);
+        Optional<Cart> existing = cartRepository.findByCustomerIdAndStatus(customer.getId(), CartStatus.ACTIVE);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        try {
+            return cartCreatorService.createCart(customer);
+        } catch (DataIntegrityViolationException ex) {
+            if (!isCartDuplicateKey(ex)) {
+                throw ex;
+            }
+            log.debug("Duplicate cart key for customerId={}, reloading existing cart", customer.getId());
+            return cartRepository.findByCustomerId(customer.getId())
+                    .map(this::reactivateIfCheckedOut)
+                    .orElseThrow(() -> new AppException(ErrorCode.CART_NOT_FOUND));
+        }
     }
 
     // ─── Item operations ─────────────────────────────────────────────────────
@@ -138,6 +178,26 @@ public class CartServiceImpl implements CartService {
     }
 
     // ─── Internal ────────────────────────────────────────────────────────────
+
+    /**
+     * If the cart is CHECKED_OUT (post-checkout), reset it to ACTIVE and clear
+     * stale items so the customer starts a fresh shopping session.
+     */
+    private Cart reactivateIfCheckedOut(Cart cart) {
+        if (cart.getStatus() == CartStatus.CHECKED_OUT) {
+            log.info("Reactivating CHECKED_OUT cart id={} customerId={}",
+                    cart.getId(), cart.getCustomer().getId());
+            cart.getItems().clear();
+            cart.setStatus(CartStatus.ACTIVE);
+            return cartRepository.save(cart);
+        }
+        return cart;
+    }
+
+    private boolean isCartDuplicateKey(DataIntegrityViolationException ex) {
+        String msg = ex.getMostSpecificCause().getMessage();
+        return msg != null && msg.contains("uq_carts_customer_active");
+    }
 
     private ProductVariant findActiveVariant(UUID variantId) {
         ProductVariant variant = productVariantRepository.findByIdAndDeletedFalse(variantId)
