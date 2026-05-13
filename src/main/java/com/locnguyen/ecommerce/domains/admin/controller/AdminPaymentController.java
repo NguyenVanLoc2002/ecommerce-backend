@@ -5,11 +5,17 @@ import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentFilter;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentResponse;
+import com.locnguyen.ecommerce.domains.payment.dto.RefundRequest;
+import com.locnguyen.ecommerce.domains.payment.dto.RefundResponse;
 import com.locnguyen.ecommerce.domains.payment.dto.TransactionResponse;
+import com.locnguyen.ecommerce.domains.payment.dto.WebhookLogResponse;
+import com.locnguyen.ecommerce.domains.payment.service.PaymentRefundService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
+import com.locnguyen.ecommerce.domains.payment.service.PaymentWebhookService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -17,8 +23,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
 import java.util.UUID;
+
 @Tag(name = "Admin Payment", description = "Admin payment management")
 @RestController
 @RequiredArgsConstructor
@@ -28,6 +34,8 @@ import java.util.UUID;
 public class AdminPaymentController {
 
     private final PaymentService paymentService;
+    private final PaymentRefundService paymentRefundService;
+    private final PaymentWebhookService paymentWebhookService;
 
     @Operation(summary = "[Admin] List all payments (paginated, filterable)")
     @GetMapping
@@ -70,5 +78,34 @@ public class AdminPaymentController {
     @GetMapping("/{id}/transactions")
     public ApiResponse<List<TransactionResponse>> getTransactions(@PathVariable UUID id) {
         return ApiResponse.success(paymentService.getTransactions(id));
+    }
+
+    // ─── Refund operations ────────────────────────────────────────────────────
+
+    @Operation(
+            summary = "[Admin] Initiate a refund for a payment",
+            description = "Creates a PENDING refund record. Partial refunds are supported. " +
+                    "Requires ADMIN or SUPER_ADMIN role."
+    )
+    @PostMapping("/{id}/refund")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    public ApiResponse<RefundResponse> initiateRefund(
+            @PathVariable UUID id,
+            @Valid @RequestBody RefundRequest request) {
+        return ApiResponse.created(paymentRefundService.initiateRefund(id, request));
+    }
+
+    @Operation(summary = "[Admin] List all refunds for a payment")
+    @GetMapping("/{id}/refunds")
+    public ApiResponse<List<RefundResponse>> getRefunds(@PathVariable UUID id) {
+        return ApiResponse.success(paymentRefundService.getRefundsForPayment(id));
+    }
+
+    // ─── Webhook log operations ───────────────────────────────────────────────
+
+    @Operation(summary = "[Admin] List webhook logs for a payment")
+    @GetMapping("/{id}/webhook-logs")
+    public ApiResponse<List<WebhookLogResponse>> getWebhookLogs(@PathVariable UUID id) {
+        return ApiResponse.success(paymentWebhookService.getLogsForPayment(id));
     }
 }
