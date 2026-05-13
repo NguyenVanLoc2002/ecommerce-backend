@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git show*)",
+      "Bash(git stash list)",
+      "Bash(./mvnw.cmd -DskipTests compile)",
+      "Bash(./mvnw.cmd -DskipTests test-compile)",
+      "Bash(./mvnw.cmd test*)",
+      "Bash(./mvnw.cmd verify*)",
+      "Bash(./mvnw.cmd spotless:check)",
+      "Bash(./mvnw.cmd spotless:apply)",
+      "Bash(./mvnw.cmd dependency:tree*)",
+      "Bash(./mvnw.cmd dependency:resolve*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push* main)",
+      "Bash(git push* master)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -f*)",
+      "Bash(git rebase*)",
+      "Bash(rm -rf*)",
+      "Bash(./mvnw.cmd deploy*)",
+      "Bash(./mvnw.cmd release*)",
+      "Bash(DROP DATABASE*)",
+      "Bash(TRUNCATE TABLE*)",
+      "Bash(chmod 777*)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/application-prod.properties)",
+      "Read(**/application-prod.yml)",
+      "Read(**/secrets/**)"
+    ]
+  }
+}

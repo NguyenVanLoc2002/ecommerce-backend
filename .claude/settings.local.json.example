@@ -1,0 +1,15 @@
+{
+  "_comment": "Copy this file to settings.local.json and customize for your local environment. settings.local.json is gitignored.",
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Command*)",
+      "PowerShell(Get-Process*)",
+      "PowerShell(Get-NetTCPConnection*)",
+      "PowerShell(.\\mvnw.cmd*)",
+      "Bash(./mvnw*)",
+      "Bash(curl*)",
+      "Bash(nohup*)",
+      "Bash(mkdir -p*)"
+    ]
+  }
+}

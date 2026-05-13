@@ -92,6 +92,11 @@ out/
 bin/
 
 ############################
+# CLAUDE CODE (LOCAL ONLY)
+############################
+.claude/settings.local.json
+
+############################
 # SPRING BOOT
 ############################
 HELP.md
