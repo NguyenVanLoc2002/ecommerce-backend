@@ -1,4 +1,4 @@
-package com.locnguyen.ecommerce.domains.payment.provider.momo;
+package com.locnguyen.ecommerce.infrastructure.payment.momo;
 
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;

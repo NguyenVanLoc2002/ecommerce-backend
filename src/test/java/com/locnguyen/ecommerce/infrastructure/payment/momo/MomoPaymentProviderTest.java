@@ -1,4 +1,4 @@
-package com.locnguyen.ecommerce.domains.payment.provider.momo;
+package com.locnguyen.ecommerce.infrastructure.payment.momo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.locnguyen.ecommerce.common.exception.AppException;
@@ -7,7 +7,7 @@ import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
 import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderCreateResult;
-import com.locnguyen.ecommerce.domains.payment.provider.momo.dto.MomoCreatePaymentResponse;
+import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoCreatePaymentResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

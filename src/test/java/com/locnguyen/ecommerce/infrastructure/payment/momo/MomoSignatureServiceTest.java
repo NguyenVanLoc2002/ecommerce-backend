@@ -1,6 +1,6 @@
-package com.locnguyen.ecommerce.domains.payment.provider.momo;
+package com.locnguyen.ecommerce.infrastructure.payment.momo;
 
-import com.locnguyen.ecommerce.domains.payment.provider.momo.dto.MomoCreatePaymentRequest;
+import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoCreatePaymentRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

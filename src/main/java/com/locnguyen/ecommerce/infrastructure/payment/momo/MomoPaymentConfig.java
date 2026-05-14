@@ -1,4 +1,4 @@
-package com.locnguyen.ecommerce.domains.payment.provider.momo;
+package com.locnguyen.ecommerce.infrastructure.payment.momo;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

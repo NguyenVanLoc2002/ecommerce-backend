@@ -1,4 +1,4 @@
-package com.locnguyen.ecommerce.domains.payment.provider.momo;
+package com.locnguyen.ecommerce.infrastructure.payment.momo;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,8 +8,8 @@ import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
 import com.locnguyen.ecommerce.domains.payment.provider.PaymentProvider;
 import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderCreateResult;
-import com.locnguyen.ecommerce.domains.payment.provider.momo.dto.MomoCreatePaymentRequest;
-import com.locnguyen.ecommerce.domains.payment.provider.momo.dto.MomoCreatePaymentResponse;
+import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoCreatePaymentRequest;
+import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoCreatePaymentResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

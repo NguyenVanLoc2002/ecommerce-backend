@@ -1,4 +1,4 @@
-package com.locnguyen.ecommerce.domains.payment.provider;
+package com.locnguyen.ecommerce.infrastructure.payment.mock;
 
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;

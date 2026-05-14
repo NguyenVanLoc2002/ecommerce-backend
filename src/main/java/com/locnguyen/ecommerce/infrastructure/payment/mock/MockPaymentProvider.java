@@ -1,9 +1,10 @@
-package com.locnguyen.ecommerce.domains.payment.provider;
+package com.locnguyen.ecommerce.infrastructure.payment.mock;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
+import com.locnguyen.ecommerce.domains.payment.provider.PaymentProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;

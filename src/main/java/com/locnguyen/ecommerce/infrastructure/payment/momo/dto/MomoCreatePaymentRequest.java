@@ -1,4 +1,4 @@
-package com.locnguyen.ecommerce.domains.payment.provider.momo.dto;
+package com.locnguyen.ecommerce.infrastructure.payment.momo.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;

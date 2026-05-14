@@ -205,7 +205,7 @@ All items below are confirmed implemented.
 No concrete `PaymentProvider` bean exists → `PaymentProviderRegistry` always returns `Optional.empty()`.
 
 **Backend Tasks:**
-- [ ] Create `com.locnguyen.ecommerce.domains.payment.provider.MockPaymentProvider implements PaymentProvider`
+- [x] Create `com.locnguyen.ecommerce.infrastructure.payment.mock.MockPaymentProvider implements PaymentProvider`
   - `getProviderName()` → `"MOCK"`
   - `verifySignature(rawBody, signature)` → returns `true` always (dev/test only)
   - `isSuccess(payload)` → parses `"status": "SUCCESS"` or `"SUCCESS"` string from simple JSON/query-param payload
@@ -669,6 +669,8 @@ Phase 3 Gap 3.1: Implement MockPaymentProvider
 Context:
 - PaymentProvider interface: src/main/java/com/locnguyen/ecommerce/domains/payment/provider/PaymentProvider.java
 - PaymentProviderRegistry: src/main/java/com/locnguyen/ecommerce/domains/payment/provider/PaymentProviderRegistry.java
+- MomoPaymentProvider: src/main/java/com/locnguyen/ecommerce/infrastructure/payment/momo/MomoPaymentProvider.java
+- MockPaymentProvider: src/main/java/com/locnguyen/ecommerce/infrastructure/payment/mock/MockPaymentProvider.java
 - PaymentWebhookServiceImpl: src/main/java/com/locnguyen/ecommerce/domains/payment/service/impl/PaymentWebhookServiceImpl.java
 
 Task:
