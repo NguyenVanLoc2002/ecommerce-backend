@@ -35,7 +35,7 @@ Layered modular monolith: `Controller → Service → Repository` per domain.
 | `inventory` | Full: warehouse, inventory, reservation, stock movement, optimistic lock (V20), scheduler |
 | `cart` | Full: cart creation, add/update/remove item |
 | `order` | Full: create (from cart + idempotency), cancel, status machine, admin management |
-| `payment` | Full: COD + online initiate (with paymentUrl/deeplink/qrCodeUrl), callback, webhook (with signature gate), refund (initiate), `PaymentProvider` abstraction, `PaymentProviderRegistry`, `MockPaymentProvider`, `MomoPaymentProvider` (create-payment; IPN in Session 2), V8/V22/V23/V24/V25 migrations |
+| `payment` | Full: COD + online initiate (with paymentUrl/deeplink/qrCodeUrl), callback, webhook (with full HMAC signature gate + amount validation + partnerCode guard + idempotency), refund (initiate), `PaymentProvider` abstraction, `PaymentProviderRegistry`, `MockPaymentProvider`, `MomoPaymentProvider` (create-payment + IPN/webhook fully implemented), V8/V22/V23/V24/V25 migrations |
 | `idempotency` | Full: `IdempotencyKey` entity, service with PROCESSING/COMPLETED/FAILED states |
 | `promotion` | Full: voucher, promotion rule, usage tracking |
 | `shipment` | Full: create, status machine (PENDING→PICKING→IN_TRANSIT→OUT_FOR_DELIVERY→DELIVERED/FAILED→RETURNED), events, optimistic lock (V19) |
@@ -108,7 +108,7 @@ Reindex endpoint: `POST /api/v1/admin/products/search/reindex`.
 | Area | Risk | Severity |
 |------|------|----------|
 | Payment callback HMAC | `processCallback()` has `TODO(phase-2)` — signature verification not yet implemented. Spoofed callbacks can mark orders as paid. | **CRITICAL (pre-prod)** |
-| MoMo IPN signature not wired | `MomoPaymentProvider.verifySignature()` is implemented but `PaymentWebhookServiceImpl` does not call it — webhooks are not yet verified. | HIGH (Session 2) |
+| MoMo IPN signature not wired | ✅ **RESOLVED** — `PaymentWebhookServiceImpl` calls `provider.verifySignature()` + `provider.extractAmount()` before any mutation. partnerCode, HMAC-SHA256, and amount are all validated. | RESOLVED |
 | Refund never completes | `PaymentRefund.status` stays `PENDING` forever; no pathway to `COMPLETED`. | MEDIUM |
 | Customer domain missing | No customer profile API, order history, or address management for customers identified. | MEDIUM |
 | Sensitive config in dev | `app.jwt.secret` and DB password in `application-dev.properties` (not committed to prod). Dev only, but should use env vars. | LOW (dev) |

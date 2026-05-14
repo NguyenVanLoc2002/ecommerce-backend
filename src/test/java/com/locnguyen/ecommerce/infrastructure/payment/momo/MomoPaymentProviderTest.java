@@ -8,6 +8,7 @@ import com.locnguyen.ecommerce.domains.payment.entity.Payment;
 import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderCreateResult;
 import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoCreatePaymentResponse;
+import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoIpnRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -409,6 +410,30 @@ class MomoPaymentProviderTest {
     @Nested
     class VerifySignature {
 
+        private static final ObjectMapper MAPPER = new ObjectMapper();
+
+        /** Builds a minimal IPN with the configured partnerCode so only signature path is tested. */
+        private MomoIpnRequest buildValidIpn() {
+            MomoIpnRequest ipn = new MomoIpnRequest();
+            ipn.setPartnerCode("MOMOTEST01");
+            ipn.setOrderId("MOMO_ORD001_1715700000000");
+            ipn.setRequestId("REQ_PAY001_1715700000000");
+            ipn.setAmount(50_000L);
+            ipn.setOrderInfo("Thanh toan don hang ORD001");
+            ipn.setOrderType("MOMO_WALLET");
+            ipn.setTransId(3455806203L);
+            ipn.setResultCode(0);
+            ipn.setMessage("Successful.");
+            ipn.setPayType("wallet");
+            ipn.setResponseTime(1715700000000L);
+            ipn.setExtraData("");
+            return ipn;
+        }
+
+        private String toJson(MomoIpnRequest ipn) throws Exception {
+            return MAPPER.writeValueAsString(ipn);
+        }
+
         @Test
         void returnsFalse_whenRawBodyIsNull() {
             assertThat(provider.verifySignature(null, "some-sig")).isFalse();
@@ -420,13 +445,98 @@ class MomoPaymentProviderTest {
         }
 
         @Test
-        void returnsFalse_whenSignatureIsNull() {
-            assertThat(provider.verifySignature("{\"resultCode\":0}", null)).isFalse();
+        void returnsFalse_whenPayloadMalformed() {
+            assertThat(provider.verifySignature("not-json", "sig")).isFalse();
         }
 
         @Test
-        void returnsFalse_whenPayloadMalformed() {
-            assertThat(provider.verifySignature("not-json", "sig")).isFalse();
+        void returnsFalse_whenSignatureMissingFromBothHeaderAndBody() throws Exception {
+            // Body has correct partnerCode but no signature field
+            MomoIpnRequest ipn = buildValidIpn();
+            ipn.setSignature(null);
+            assertThat(provider.verifySignature(toJson(ipn), null)).isFalse();
+        }
+
+        @Test
+        void returnsFalse_whenPartnerCodeMismatch() throws Exception {
+            MomoIpnRequest ipn = buildValidIpn();
+            ipn.setPartnerCode("WRONG_PARTNER");
+            ipn.setSignature("any-sig");
+            assertThat(provider.verifySignature(toJson(ipn), null)).isFalse();
+        }
+
+        @Test
+        void returnsFalse_whenSignatureIsWrong() throws Exception {
+            MomoIpnRequest ipn = buildValidIpn();
+            ipn.setSignature("0000000000000000000000000000000000000000000000000000000000000000");
+            assertThat(provider.verifySignature(toJson(ipn), null)).isFalse();
+        }
+
+        @Test
+        void returnsTrue_whenValidSignatureEmbeddedInBody() throws Exception {
+            // MoMo IPN: signature in JSON body, no X-Signature header
+            MomoIpnRequest ipn = buildValidIpn();
+            String computed = signatureService.signIpnRequest(
+                    properties.getAccessKey(), properties.getSecretKey(), ipn);
+            ipn.setSignature(computed);
+            assertThat(provider.verifySignature(toJson(ipn), null)).isTrue();
+        }
+
+        @Test
+        void returnsTrue_whenValidSignatureInHeader_takesPrecedenceOverBody() throws Exception {
+            // If X-Signature header is provided, use it instead of body field
+            MomoIpnRequest ipn = buildValidIpn();
+            // Put wrong value in body signature
+            ipn.setSignature("wrong-body-sig");
+            String computed = signatureService.signIpnRequest(
+                    properties.getAccessKey(), properties.getSecretKey(), ipn);
+            // Override body sig with correct one before serializing
+            ipn.setSignature(computed);
+            String rawBody = toJson(ipn);
+
+            // Header has the correct signature → should verify OK
+            assertThat(provider.verifySignature(rawBody, computed)).isTrue();
+        }
+    }
+
+    // ─── extractAmount ───────────────────────────────────────────────────────
+
+    @Nested
+    class ExtractAmount {
+
+        @Test
+        void returnsAmount_fromValidIpnPayload() {
+            String payload = "{\"partnerCode\":\"MOMOTEST01\",\"amount\":50000,\"resultCode\":0}";
+            assertThat(provider.extractAmount(payload))
+                    .isEqualByComparingTo(new BigDecimal("50000"));
+        }
+
+        @Test
+        void returnsNull_whenAmountFieldMissing() {
+            String payload = "{\"partnerCode\":\"MOMOTEST01\",\"resultCode\":0}";
+            assertThat(provider.extractAmount(payload)).isNull();
+        }
+
+        @Test
+        void returnsNull_whenPayloadIsNull() {
+            assertThat(provider.extractAmount(null)).isNull();
+        }
+
+        @Test
+        void returnsNull_whenPayloadIsBlank() {
+            assertThat(provider.extractAmount("  ")).isNull();
+        }
+
+        @Test
+        void returnsNull_whenPayloadMalformed() {
+            assertThat(provider.extractAmount("not-json")).isNull();
+        }
+
+        @Test
+        void returnsZero_whenAmountIsZero() {
+            String payload = "{\"amount\":0,\"resultCode\":0}";
+            assertThat(provider.extractAmount(payload))
+                    .isEqualByComparingTo(BigDecimal.ZERO);
         }
     }
 }

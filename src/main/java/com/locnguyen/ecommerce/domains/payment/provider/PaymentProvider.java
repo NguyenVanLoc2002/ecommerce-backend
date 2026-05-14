@@ -3,6 +3,8 @@ package com.locnguyen.ecommerce.domains.payment.provider;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
 
+import java.math.BigDecimal;
+
 /**
  * Strategy interface for payment gateway integrations.
  * Implement one bean per gateway (MoMo, ZaloPay, VNPay, etc.).
@@ -44,6 +46,20 @@ public interface PaymentProvider {
      * @return order code string
      */
     String extractOrderCode(String payload);
+
+    /**
+     * Extract the payment amount from the callback payload for server-side amount validation.
+     *
+     * <p>Providers that embed the amount in their IPN payload should override this method.
+     * The returned value is compared to the stored {@link Payment#getAmount()} before any
+     * mutation occurs — a mismatch causes the webhook to be rejected.
+     *
+     * @param payload raw callback payload
+     * @return payment amount as received from the gateway, or {@code null} if not available
+     */
+    default BigDecimal extractAmount(String payload) {
+        return null;
+    }
 
     /**
      * Generate the URL the customer should be redirected to for completing payment.

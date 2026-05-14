@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.infrastructure.payment.momo;
 
 import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoCreatePaymentRequest;
+import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoIpnRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -159,6 +160,109 @@ class MomoSignatureServiceTest {
             assertThat(sig).isNotBlank();
             // Spot-check: signature must be exactly 64 hex chars (SHA-256 output)
             assertThat(sig).hasSize(64);
+        }
+    }
+
+    // ─── IPN signature (DTO overload) ─────────────────────────────────────────
+
+    @Nested
+    class IpnSignature {
+
+        private static final String ACCESS_KEY = "F8BBA842ECF85";
+        private static final String SECRET_KEY = "K951B6PE1waDMi640xX08PD3vg6EkVlz";
+
+        private MomoIpnRequest buildIpn() {
+            MomoIpnRequest ipn = new MomoIpnRequest();
+            ipn.setPartnerCode("MOMO");
+            ipn.setOrderId("MOMO_ORD20260514123456_1715700000000");
+            ipn.setRequestId("REQ_PAY20260514123456_1715700000000");
+            ipn.setAmount(50_000L);
+            ipn.setOrderInfo("Thanh toan don hang ORD20260514123456");
+            ipn.setOrderType("MOMO_WALLET");
+            ipn.setTransId(3455806203L);
+            ipn.setResultCode(0);
+            ipn.setMessage("Successful.");
+            ipn.setPayType("wallet");
+            ipn.setResponseTime(1715700000000L);
+            ipn.setExtraData("");
+            return ipn;
+        }
+
+        @Test
+        void signIpnRequest_producesLowercaseHexString() {
+            String sig = signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, buildIpn());
+            assertThat(sig).matches("[0-9a-f]{64}");
+        }
+
+        @Test
+        void signIpnRequest_isDeterministic() {
+            MomoIpnRequest ipn = buildIpn();
+            assertThat(signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, ipn))
+                    .isEqualTo(signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, ipn));
+        }
+
+        @Test
+        void verifyIpnSignature_returnsTrueWhenSignatureMatches() {
+            MomoIpnRequest ipn = buildIpn();
+            String computed = signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, ipn);
+            ipn.setSignature(computed);
+            assertThat(signatureService.verifyIpnSignature(ACCESS_KEY, SECRET_KEY, ipn)).isTrue();
+        }
+
+        @Test
+        void verifyIpnSignature_returnsFalseWhenSignatureMismatch() {
+            MomoIpnRequest ipn = buildIpn();
+            ipn.setSignature("deadbeef");
+            assertThat(signatureService.verifyIpnSignature(ACCESS_KEY, SECRET_KEY, ipn)).isFalse();
+        }
+
+        @Test
+        void verifyIpnSignature_returnsFalseWhenSignatureIsNull() {
+            MomoIpnRequest ipn = buildIpn();
+            ipn.setSignature(null);
+            assertThat(signatureService.verifyIpnSignature(ACCESS_KEY, SECRET_KEY, ipn)).isFalse();
+        }
+
+        @Test
+        void signIpnRequest_changesWhenAmountChanges() {
+            MomoIpnRequest base = buildIpn();
+            MomoIpnRequest modified = buildIpn();
+            modified.setAmount(base.getAmount() + 1);
+            assertThat(signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, base))
+                    .isNotEqualTo(signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, modified));
+        }
+
+        @Test
+        void signIpnRequest_changesWhenResultCodeChanges() {
+            MomoIpnRequest base = buildIpn();
+            MomoIpnRequest modified = buildIpn();
+            modified.setResultCode(11);
+            assertThat(signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, base))
+                    .isNotEqualTo(signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, modified));
+        }
+
+        @Test
+        void signIpnRequest_matchesRawStringOverload() {
+            // Both overloads must produce the same digest for the same input
+            MomoIpnRequest ipn = buildIpn();
+            String fromDto = signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, ipn);
+            String fromRaw = signatureService.verifyIpnSignature(
+                    ACCESS_KEY, SECRET_KEY,
+                    String.valueOf(ipn.getAmount()),
+                    ipn.getExtraData(),
+                    ipn.getMessage(),
+                    ipn.getOrderId(),
+                    ipn.getOrderInfo(),
+                    ipn.getOrderType(),
+                    ipn.getPartnerCode(),
+                    ipn.getPayType(),
+                    ipn.getRequestId(),
+                    String.valueOf(ipn.getResponseTime()),
+                    String.valueOf(ipn.getResultCode()),
+                    String.valueOf(ipn.getTransId()),
+                    fromDto  // pass the computed digest as receivedSignature → should return true
+            ) ? fromDto : "MISMATCH";
+            assertThat(fromRaw).isEqualTo(fromDto);
         }
     }
 

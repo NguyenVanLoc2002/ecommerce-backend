@@ -10,6 +10,7 @@ import com.locnguyen.ecommerce.domains.payment.provider.PaymentProvider;
 import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderCreateResult;
 import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoCreatePaymentRequest;
 import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoCreatePaymentResponse;
+import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoIpnRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -20,6 +21,7 @@ import org.springframework.web.client.RestClientException;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.io.IOException;
 
 /**
  * MoMo wallet one-time payment provider ({@code captureWallet} flow).
@@ -66,37 +68,66 @@ public class MomoPaymentProvider implements PaymentProvider {
     /**
      * Verifies the HMAC-SHA256 signature of an inbound MoMo IPN webhook.
      *
-     * <p>This method extracts the required fields from the raw JSON body,
-     * recomputes the signature, and compares it to the received one.
-     * Returns {@code false} if the body is malformed or if signature verification fails.
+     * <p>MoMo embeds the signature inside the JSON body as the {@code "signature"} field —
+     * it does NOT use an HTTP signature header. The {@code signature} parameter (from the
+     * {@code X-Signature} header) is used only if non-blank; otherwise the body field is used.
+     *
+     * <p>Also rejects payloads where {@code partnerCode} does not match our configured
+     * partnerCode, preventing spoofed callbacks from another merchant's account.
+     *
+     * <p>Returns {@code false} for any malformed, blank, or signature-mismatching payload.
      */
     @Override
     public boolean verifySignature(String rawBody, String signature) {
-        if (rawBody == null || rawBody.isBlank() || signature == null) {
+        if (rawBody == null || rawBody.isBlank()) {
             return false;
         }
         try {
-            JsonNode json = objectMapper.readTree(rawBody);
+            MomoIpnRequest ipn = objectMapper.readValue(rawBody, MomoIpnRequest.class);
+
+            // partnerCode guard: reject IPN not addressed to us
+            if (!properties.getPartnerCode().equals(ipn.getPartnerCode())) {
+                log.warn("MoMo IPN partnerCode mismatch: expected={} received={}",
+                        properties.getPartnerCode(), ipn.getPartnerCode());
+                return false;
+            }
+
+            // MoMo puts signature inside the JSON body; X-Signature header is not used
+            String receivedSignature = (signature != null && !signature.isBlank())
+                    ? signature
+                    : ipn.getSignature();
+            if (receivedSignature == null || receivedSignature.isBlank()) {
+                return false;
+            }
+
+            // Temporarily override the signature field with the one extracted above
+            // so the DTO-based overload uses the correct received value
+            ipn.setSignature(receivedSignature);
             return signatureService.verifyIpnSignature(
-                    properties.getAccessKey(),
-                    properties.getSecretKey(),
-                    text(json, "amount"),
-                    text(json, "extraData"),
-                    text(json, "message"),
-                    text(json, "orderId"),
-                    text(json, "orderInfo"),
-                    text(json, "orderType"),
-                    text(json, "partnerCode"),
-                    text(json, "payType"),
-                    text(json, "requestId"),
-                    text(json, "responseTime"),
-                    text(json, "resultCode"),
-                    text(json, "transId"),
-                    signature
-            );
-        } catch (Exception e) {
+                    properties.getAccessKey(), properties.getSecretKey(), ipn);
+        } catch (IOException e) {
             log.warn("MoMo IPN signature verification failed — could not parse payload: {}", e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Extracts the payment amount from the MoMo IPN payload for server-side amount validation.
+     *
+     * <p>MoMo sends {@code amount} as a JSON integer (VND, no decimals). This is converted
+     * to {@link BigDecimal} so it can be compared to the stored {@link Payment#getAmount()}.
+     */
+    @Override
+    public BigDecimal extractAmount(String payload) {
+        if (payload == null || payload.isBlank()) return null;
+        try {
+            JsonNode json = objectMapper.readTree(payload);
+            JsonNode amountNode = json.get("amount");
+            if (amountNode == null || amountNode.isNull()) return null;
+            return BigDecimal.valueOf(amountNode.asLong());
+        } catch (Exception e) {
+            log.debug("MoMo extractAmount: failed to parse payload — {}", e.getMessage());
+            return null;
         }
     }
 

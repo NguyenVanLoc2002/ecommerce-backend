@@ -268,52 +268,58 @@ The flag is **disabled by default in dev** to avoid breaking existing clients du
 
 ---
 
-## 10. Payment callback security (HMAC — PENDING)
+## 10. Payment webhook security (HMAC)
 
-`POST /api/v1/payments/callback` is a public endpoint called server-to-server by the payment gateway. It is **not** protected by a Bearer token.
+`POST /api/v1/webhooks/payment/{provider}` is a public endpoint called server-to-server by the payment gateway. It is **not** protected by a Bearer token.
 
-### 10.1 Current protection
+### 10.1 MoMo IPN — fully implemented
 
-Without a gateway-specific HMAC implementation, the only guards are:
+`MomoPaymentProvider.verifySignature()` and `MomoSignatureService` implement end-to-end HMAC-SHA256 verification for MoMo IPN callbacks.
 
-- **State-machine guards**: duplicate SUCCESS callbacks are no-ops (payment already PAID); stale callbacks cannot move a PAID/REFUNDED payment backward.
-- **Duplicate `providerTxnId` check**: application-level deduplication before any mutation.
-- **DB unique constraint on `payment_transactions.provider_txn_id`**: DB-level duplicate protection complementing the application check.
+**Verification steps (in order):**
 
-### 10.2 Missing protection (TODO before production)
+1. **Body guard** — rejects null or blank bodies before parsing.
+2. **partnerCode guard** — rejects IPN whose `partnerCode` does not match `app.payment.momo.partner-code`. Prevents a spoofed callback addressed to a different merchant account.
+3. **Signature extraction** — extracts signature from the JSON body `"signature"` field (MoMo does not use an `X-Signature` HTTP header). Falls back to the `X-Signature` header if present.
+4. **HMAC-SHA256 comparison** — recomputes the digest over the required IPN fields in alphabetical order and compares it to the received signature. Field order (fixed per spec):
+   - `accessKey`, `amount`, `extraData`, `message`, `orderId`, `orderInfo`, `orderType`, `partnerCode`, `payType`, `requestId`, `responseTime`, `resultCode`, `transId`
 
-Each payment gateway (VNPay, MoMo, ZaloPay, etc.) signs its callbacks with an HMAC or RSA signature. Without verifying this signature, any party that knows the callback URL can submit a spoofed `status=SUCCESS` for any order code.
+**Amount validation** — `PaymentWebhookServiceImpl.processWebhook()` calls `provider.extractAmount(rawBody)` after loading the stored `Payment` and rejects the IPN if the amounts differ. This prevents a tampered amount from marking an underpaid transaction as PAID.
 
-**Required implementation before production:**
+**Idempotency** — duplicate IPNs with the same `transId` (as `providerTxnId`) are detected before any mutation and returned as a successful no-op.
 
-```java
-// In PaymentServiceImpl.processCallback — the TODO is already present:
-// TODO(phase-2): HMAC/signature verification must be added here before any
-// business mutation. Each gateway uses a different signing algorithm and
-// secret key. Wire a PaymentGatewaySignatureVerifier when the gateway
-// integration is implemented. Failing signature verification must throw
-// AppException(ErrorCode.PAYMENT_CALLBACK_INVALID) before the order is touched.
-```
+**Outcome rules:**
+- `resultCode == 0` → Payment marked `PAID`, Order `paymentStatus = PAID`, `PaymentTransaction(SUCCESS)` created.
+- `resultCode != 0` → Payment marked `FAILED`, Order `paymentStatus = FAILED`, `PaymentTransaction(FAILED)` created.
+- Signature invalid, partnerCode mismatch, or amount mismatch → `PAYMENT_WEBHOOK_SIGNATURE_INVALID` or `PAYMENT_CALLBACK_INVALID` thrown; no state mutation.
 
-### 10.3 MoMo IPN signature infrastructure (Session 1 complete)
+**Error codes thrown:**
+- `PAYMENT_WEBHOOK_SIGNATURE_INVALID (400)` — signature or partnerCode check failed
+- `PAYMENT_CALLBACK_INVALID (400)` — amount mismatch, or order not found
 
-`MomoPaymentProvider` and `MomoSignatureService` are implemented and wired into the `PaymentProvider` strategy. `MomoSignatureService.verifyIpnSignature()` computes the HMAC-SHA256 over the required IPN fields (accessKey, amount, extraData, message, orderId, orderInfo, orderType, partnerCode, payType, requestId, responseTime, resultCode, transId) and compares it to the received signature.
+### 10.2 MoMo local testing
 
-**Remaining gap**: The existing `PaymentWebhookServiceImpl.processWebhook()` does not yet call `provider.verifySignature()` before mutating order/payment state. This is Session 2 work (IPN state machine).
+The IPN URL must be reachable by MoMo's servers. For local dev:
 
-**MoMo local testing requirement**: the IPN URL must be reachable by MoMo's servers. For local dev:
 1. Start a public tunnel: `cloudflared tunnel --url http://localhost:8080`
-2. Set `APP_PAYMENT_MOMO_IPN_URL=https://<tunnel-domain>/api/v1/payments/webhooks/MOMO`
-3. Set `APP_PAYMENT_MOMO_ENABLED=true` with TEST credentials
+2. Set `APP_PAYMENT_MOMO_IPN_URL=https://<tunnel-domain>/api/v1/webhooks/payment/MOMO`
+3. Set `APP_PAYMENT_MOMO_ENABLED=true` with TEST credentials from the MoMo sandbox portal
 
-### 10.4 Implementation guidance (remaining gateways)
+### 10.3 Current protection summary
 
-1. Create a `PaymentGatewaySignatureVerifier` interface with a `verify(provider, payload, signature)` method.
-2. Implement one class per gateway (e.g., `VnPaySignatureVerifier`, `MoMoSignatureVerifier`).
-3. Inject via a `Map<String, PaymentGatewaySignatureVerifier>` keyed by provider name.
-4. Call before any read of `order` or `payment` state.
-5. Failing verification must throw `AppException(ErrorCode.PAYMENT_CALLBACK_INVALID)` — never log raw payload or secrets.
+| Protection | Status |
+|---|---|
+| HMAC-SHA256 signature verification | ✅ Implemented (MoMo) |
+| partnerCode guard | ✅ Implemented (MoMo) |
+| Amount validation | ✅ Implemented (all providers) |
+| Idempotency on `providerTxnId` | ✅ Implemented (all providers) |
+| State-machine PAID/REFUNDED guard | ✅ Implemented (all providers) |
+| VNPay / ZaloPay signature | ⏳ Pending (not yet integrated) |
 
-### 10.5 Risk level
+### 10.4 Adding a new gateway
 
-**HIGH** — Until `processWebhook()` calls `verifySignature()` for each provider, any attacker who discovers the webhook URL can confirm payments without actually paying. Do not expose this endpoint to the public internet on a production environment without completing HMAC verification in Session 2.
+1. Implement `PaymentProvider` in `infrastructure.payment.{gateway}`.
+2. Override `verifySignature(rawBody, signature)` to perform the gateway-specific HMAC/RSA check.
+3. Override `extractAmount(payload)` if the gateway embeds the amount in the IPN body.
+4. Register as a Spring `@Component` with `@ConditionalOnProperty`.
+5. Never log raw signature strings, secrets, or access keys.

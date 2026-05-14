@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.infrastructure.payment.momo;
 
 import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoCreatePaymentRequest;
+import com.locnguyen.ecommerce.infrastructure.payment.momo.dto.MomoIpnRequest;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
@@ -91,6 +92,48 @@ public class MomoSignatureService {
 
         String computed = hmacSha256(rawSignature, secretKey);
         return computed.equals(receivedSignature);
+    }
+
+    /**
+     * Computes the HMAC-SHA256 signature for an IPN request.
+     *
+     * <p>Uses the same alphabetical raw-string format as the MoMo spec.
+     * Numeric fields are rendered as their integer string form (e.g. {@code "50000"}).
+     * Null numeric fields default to {@code "0"}; null String fields default to {@code ""}.
+     *
+     * @param accessKey  our MoMo access key — never log this value
+     * @param secretKey  our MoMo secret key — never log this value
+     * @param request    deserialized IPN payload (the {@code signature} field is excluded from computation)
+     * @return lowercase hex HMAC-SHA256 signature string
+     */
+    public String signIpnRequest(String accessKey, String secretKey, MomoIpnRequest request) {
+        String rawSignature = "accessKey=" + nullToEmpty(accessKey)
+                + "&amount=" + (request.getAmount() != null ? request.getAmount() : 0L)
+                + "&extraData=" + nullToEmpty(request.getExtraData())
+                + "&message=" + nullToEmpty(request.getMessage())
+                + "&orderId=" + nullToEmpty(request.getOrderId())
+                + "&orderInfo=" + nullToEmpty(request.getOrderInfo())
+                + "&orderType=" + nullToEmpty(request.getOrderType())
+                + "&partnerCode=" + nullToEmpty(request.getPartnerCode())
+                + "&payType=" + nullToEmpty(request.getPayType())
+                + "&requestId=" + nullToEmpty(request.getRequestId())
+                + "&responseTime=" + (request.getResponseTime() != null ? request.getResponseTime() : 0L)
+                + "&resultCode=" + (request.getResultCode() != null ? request.getResultCode() : 0)
+                + "&transId=" + (request.getTransId() != null ? request.getTransId() : 0L);
+        return hmacSha256(rawSignature, secretKey);
+    }
+
+    /**
+     * Convenience overload that accepts an already-deserialized {@link MomoIpnRequest}.
+     *
+     * @param accessKey  our MoMo access key — never log this value
+     * @param secretKey  our MoMo secret key — never log this value
+     * @param request    deserialized IPN payload; {@code request.getSignature()} is the received digest
+     * @return {@code true} if the computed HMAC matches {@code request.getSignature()}
+     */
+    public boolean verifyIpnSignature(String accessKey, String secretKey, MomoIpnRequest request) {
+        String computed = signIpnRequest(accessKey, secretKey, request);
+        return computed.equals(nullToEmpty(request.getSignature()));
     }
 
     // ─── Internal helpers ─────────────────────────────────────────────────────
