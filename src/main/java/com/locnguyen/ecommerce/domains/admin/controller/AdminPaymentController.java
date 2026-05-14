@@ -101,6 +101,20 @@ public class AdminPaymentController {
         return ApiResponse.success(paymentRefundService.getRefundsForPayment(id));
     }
 
+    @Operation(
+            summary = "[Admin] Complete a pending refund",
+            description = "Marks a PENDING refund as COMPLETED after funds are confirmed transferred. " +
+                    "Idempotent: calling again on an already-COMPLETED refund is a no-op. " +
+                    "Requires ADMIN or SUPER_ADMIN role."
+    )
+    @PostMapping("/refunds/{refundCode}/complete")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    public ApiResponse<RefundResponse> completeRefund(
+            @PathVariable String refundCode,
+            @RequestParam(required = false) String providerRefundId) {
+        return ApiResponse.success(paymentRefundService.completeRefund(refundCode, providerRefundId));
+    }
+
     // ─── Webhook log operations ───────────────────────────────────────────────
 
     @Operation(summary = "[Admin] List webhook logs for a payment")

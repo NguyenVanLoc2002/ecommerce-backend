@@ -26,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -135,6 +136,16 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
 
         Payment payment = paymentRepository.findByOrderIdWithLock(order.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        // Amount guard: reject IPN whose amount differs from the stored payment amount
+        BigDecimal ipnAmount = paymentProvider.extractAmount(rawBody);
+        if (ipnAmount != null && payment.getAmount().compareTo(ipnAmount) != 0) {
+            log.warn("Webhook amount mismatch: provider={} paymentCode={} expected={} received={}",
+                    provider, payment.getPaymentCode(), payment.getAmount(), ipnAmount);
+            updateLog(webhookLog, WebhookLogStatus.FAILED, "Amount mismatch in IPN");
+            throw new AppException(ErrorCode.PAYMENT_CALLBACK_INVALID,
+                    "IPN amount does not match stored payment amount");
+        }
 
         // Guard: already PAID → idempotent return
         if (payment.getStatus() == PaymentRecordStatus.PAID) {

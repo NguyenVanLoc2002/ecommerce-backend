@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -102,6 +103,32 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
         log.info("Refund initiated: refundCode={} paymentCode={} amount={} requestedBy={}",
                 refund.getRefundCode(), payment.getPaymentCode(), request.amount(), refund.getRequestedBy());
 
+        return refundMapper.toResponse(refund);
+    }
+
+    @Override
+    @Transactional
+    public RefundResponse completeRefund(String refundCode, String providerRefundId) {
+        PaymentRefund refund = refundRepository.findByRefundCode(refundCode)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_REFUND_NOT_FOUND));
+
+        // Idempotent: already completed
+        if (refund.getStatus() == RefundStatus.COMPLETED) {
+            log.warn("Refund already COMPLETED, returning existing: refundCode={}", refundCode);
+            return refundMapper.toResponse(refund);
+        }
+
+        if (refund.getStatus() != RefundStatus.PENDING) {
+            throw new AppException(ErrorCode.PAYMENT_REFUND_INVALID_STATUS,
+                    "Refund can only be completed from PENDING status, current: " + refund.getStatus());
+        }
+
+        refund.setStatus(RefundStatus.COMPLETED);
+        refund.setProviderRefundId(providerRefundId);
+        refund.setRefundedAt(LocalDateTime.now());
+        refund = refundRepository.save(refund);
+
+        log.info("Refund completed: refundCode={} providerRefundId={}", refundCode, providerRefundId);
         return refundMapper.toResponse(refund);
     }
 

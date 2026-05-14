@@ -1,5 +1,10 @@
 package com.locnguyen.ecommerce.domains.payment.provider;
 
+import com.locnguyen.ecommerce.domains.order.entity.Order;
+import com.locnguyen.ecommerce.domains.payment.entity.Payment;
+
+import java.math.BigDecimal;
+
 /**
  * Strategy interface for payment gateway integrations.
  * Implement one bean per gateway (MoMo, ZaloPay, VNPay, etc.).
@@ -41,4 +46,52 @@ public interface PaymentProvider {
      * @return order code string
      */
     String extractOrderCode(String payload);
+
+    /**
+     * Extract the payment amount from the callback payload for server-side amount validation.
+     *
+     * <p>Providers that embed the amount in their IPN payload should override this method.
+     * The returned value is compared to the stored {@link Payment#getAmount()} before any
+     * mutation occurs — a mismatch causes the webhook to be rejected.
+     *
+     * @param payload raw callback payload
+     * @return payment amount as received from the gateway, or {@code null} if not available
+     */
+    default BigDecimal extractAmount(String payload) {
+        return null;
+    }
+
+    /**
+     * Generate the URL the customer should be redirected to for completing payment.
+     *
+     * <p>Prefer {@link #createPayment} when you need additional provider references
+     * (deeplink, qrCodeUrl, providerOrderId). This method is kept for backward
+     * compatibility with providers that only return a single URL.
+     *
+     * @param payment     the payment record (contains paymentCode, amount, expiredAt)
+     * @param order       the order being paid (contains orderCode, totalAmount)
+     * @param returnUrl   URL to redirect the customer back to after payment
+     * @param callbackUrl URL the gateway calls asynchronously after payment
+     * @return payment URL string, or {@code null} if URL generation is not supported
+     */
+    String createPaymentUrl(Payment payment, Order order, String returnUrl, String callbackUrl);
+
+    /**
+     * Create a payment request with the gateway and return the full result.
+     *
+     * <p>The default implementation wraps {@link #createPaymentUrl} for backward
+     * compatibility. Providers that return deeplinks, QR data, or provider-scoped
+     * identifiers (e.g. MoMo) should override this method.
+     *
+     * @param payment     the payment record
+     * @param order       the order being paid
+     * @param returnUrl   URL to redirect the customer back to after payment
+     * @param callbackUrl URL the gateway calls asynchronously after payment
+     * @return result containing paymentUrl and any provider-specific references
+     */
+    default PaymentProviderCreateResult createPayment(Payment payment, Order order,
+                                                      String returnUrl, String callbackUrl) {
+        String url = createPaymentUrl(payment, order, returnUrl, callbackUrl);
+        return PaymentProviderCreateResult.builder().paymentUrl(url).build();
+    }
 }

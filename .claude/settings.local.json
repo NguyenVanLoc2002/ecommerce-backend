@@ -79,7 +79,11 @@
       "PowerShell(netstat *)",
       "PowerShell(Stop-Process *)",
       "Bash(nohup ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev)",
-      "Bash(echo \"PID: $!\")"
+      "Bash(echo \"PID: $!\")",
+      "Bash(grep -v \"^--$\")",
+      "Bash(.\\\\mvnw.cmd -DskipTests compile -q)",
+      "Bash(.\\\\mvnw.cmd -DskipTests compile)",
+      "Bash(.\\\\mvnw.cmd -Dtest=\"MomoSignatureServiceTest,MomoPaymentProviderTest\" test)"
     ]
   }
 }

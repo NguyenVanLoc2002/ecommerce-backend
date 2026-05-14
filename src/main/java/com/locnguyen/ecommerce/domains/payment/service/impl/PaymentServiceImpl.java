@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.payment.service.impl;
 
+import com.locnguyen.ecommerce.common.config.AppProperties;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
@@ -20,6 +21,9 @@ import com.locnguyen.ecommerce.domains.payment.entity.PaymentTransaction;
 import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import com.locnguyen.ecommerce.domains.payment.enums.TransactionStatus;
 import com.locnguyen.ecommerce.domains.payment.mapper.PaymentMapper;
+import com.locnguyen.ecommerce.domains.payment.provider.PaymentProvider;
+import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderCreateResult;
+import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderRegistry;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentRepository;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentTransactionRepository;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
@@ -45,6 +49,8 @@ public class PaymentServiceImpl implements PaymentService {
     private final OrderRepository orderRepository;
     private final PaymentMapper paymentMapper;
     private final IdempotencyService idempotencyService;
+    private final PaymentProviderRegistry providerRegistry;
+    private final AppProperties appProperties;
 
     // ─── COD payment ────────────────────────────────────────────────────────
 
@@ -242,7 +248,50 @@ public class PaymentServiceImpl implements PaymentService {
 
         idempotencyService.markComplete(
                 idem.getId(), "PAYMENT", resultPayment.getId().toString(), 201);
-        return paymentMapper.toResponse(resultPayment);
+
+        PaymentResponse response = paymentMapper.toResponse(resultPayment);
+        PaymentProviderCreateResult providerResult = resolveProviderResult(
+                resultPayment, order, request.getProvider(), request.getReturnUrl());
+
+        if (providerResult != null) {
+            if (providerResult.getProviderOrderId() != null) {
+                resultPayment.setProviderOrderId(providerResult.getProviderOrderId());
+                resultPayment.setProviderRequestId(providerResult.getProviderRequestId());
+                paymentRepository.save(resultPayment);
+            }
+            PaymentResponse.PaymentResponseBuilder builder = response.toBuilder();
+            if (providerResult.getPaymentUrl() != null) {
+                builder.paymentUrl(providerResult.getPaymentUrl());
+            }
+            if (providerResult.getDeeplink() != null) {
+                builder.deeplink(providerResult.getDeeplink());
+            }
+            if (providerResult.getQrCodeUrl() != null) {
+                builder.qrCodeUrl(providerResult.getQrCodeUrl());
+            }
+            response = builder.build();
+        }
+        return response;
+    }
+
+    private PaymentProviderCreateResult resolveProviderResult(Payment payment, Order order,
+                                                              String providerName, String returnUrl) {
+        if (providerName == null) return null;
+        return providerRegistry.find(providerName)
+                .map(provider -> {
+                    String callbackUrl = appProperties.getPayment().getBaseCallbackUrl();
+                    String resolvedReturnUrl = (returnUrl != null && !returnUrl.isBlank())
+                            ? returnUrl
+                            : appProperties.getPayment().getDefaultReturnUrl();
+                    try {
+                        return provider.createPayment(payment, order, resolvedReturnUrl, callbackUrl);
+                    } catch (Exception e) {
+                        log.warn("Failed to create payment with provider: provider={} orderCode={} — {}",
+                                providerName, order.getOrderCode(), e.getMessage());
+                        return null;
+                    }
+                })
+                .orElse(null);
     }
 
     /**

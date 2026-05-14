@@ -83,13 +83,18 @@ public class SecurityConfig {
             // IMPORTANT: HMAC/signature verification inside processCallback is the
             // only guard against spoofed callbacks until it is fully implemented.
             "/api/v1/payments/callback",
+            // Payment webhook — provider-initiated server-to-server calls; no bearer token.
+            // Security relies on HMAC/signature verification inside the handler.
+            "/api/v1/webhooks/payment/**",
     };
 
-    /** Public GET-only endpoints for product browsing. */
+    /** Public GET-only endpoints for product browsing and dev tooling. */
     private static final String[] PUBLIC_GET = {
             "/api/v1/products/**",
             "/api/v1/categories/**",
             "/api/v1/brands/**",
+            // Mock payment completion — dev/test only, enabled via app.payment.mock.enabled
+            "/api/v1/payments/mock/**",
     };
 
     /** Developer tooling and open actuator endpoints. */

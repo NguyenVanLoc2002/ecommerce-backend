@@ -16,6 +16,7 @@ public class AppProperties {
     private Otp otp = new Otp();
     private ResetToken resetToken = new ResetToken();
     private Idempotency idempotency = new Idempotency();
+    private Payment payment = new Payment();
 
     @Getter
     @Setter
@@ -92,5 +93,22 @@ public class AppProperties {
         private long ttlHours = 24L;
         /** Processing records older than this (minutes) are treated as stale and allow retry. */
         private long staleProcessingMinutes = 5L;
+    }
+
+    @Getter
+    @Setter
+    public static class Payment {
+        /**
+         * Base URL the application is reachable at — used to build the webhook callback
+         * URL passed to each payment gateway (e.g., {@code https://api.example.com}).
+         * Must NOT end with a slash.
+         */
+        private String baseCallbackUrl = "http://localhost:8080/api/v1/payments";
+        /**
+         * Default URL to redirect the customer to after payment (success or failure page).
+         * Can be overridden per-request via {@code returnUrl} in {@link
+         * com.locnguyen.ecommerce.domains.payment.dto.InitPaymentRequest}.
+         */
+        private String defaultReturnUrl = "http://localhost:3000/payment/result";
     }
 }
