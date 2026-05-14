@@ -35,7 +35,7 @@ Layered modular monolith: `Controller → Service → Repository` per domain.
 | `inventory` | Full: warehouse, inventory, reservation, stock movement, optimistic lock (V20), scheduler |
 | `cart` | Full: cart creation, add/update/remove item |
 | `order` | Full: create (from cart + idempotency), cancel, status machine, admin management |
-| `payment` | Full: COD + online initiate, callback, webhook (with signature gate), refund (initiate), `PaymentProvider` abstraction, `PaymentProviderRegistry`, V8/V22/V23/V24 migrations |
+| `payment` | Full: COD + online initiate (with paymentUrl/deeplink/qrCodeUrl), callback, webhook (with signature gate), refund (initiate), `PaymentProvider` abstraction, `PaymentProviderRegistry`, `MockPaymentProvider`, `MomoPaymentProvider` (create-payment; IPN in Session 2), V8/V22/V23/V24/V25 migrations |
 | `idempotency` | Full: `IdempotencyKey` entity, service with PROCESSING/COMPLETED/FAILED states |
 | `promotion` | Full: voucher, promotion rule, usage tracking |
 | `shipment` | Full: create, status machine (PENDING→PICKING→IN_TRANSIT→OUT_FOR_DELIVERY→DELIVERED/FAILED→RETURNED), events, optimistic lock (V19) |
@@ -85,18 +85,14 @@ Reindex endpoint: `POST /api/v1/admin/products/search/reindex`.
 - MariaDB FULLTEXT product search + reindex API
 
 ### Partially Implemented
-- **Mock payment provider**: `PaymentProvider` interface exists, `PaymentProviderRegistry` autowires all beans — but **no concrete implementation** (no `MockPaymentProvider`, no `MomoProvider`, etc.). The webhook endpoint accepts a `provider` path param but resolves it against an empty registry.
 - **Refund completion**: `initiateRefund()` sets `RefundStatus.PENDING` and records a transaction — but there is no `completeRefund()` or provider-side refund callback handler. The `COMPLETED` status of `PaymentRefund` is never set by the service.
-- **Online payment URL generation**: `initiateOnlinePayment()` creates a `Payment` record and records a transaction, but returns **no payment URL** to redirect the customer to. The `PaymentResponse` DTO likely has no `paymentUrl` field. Without a real or mock provider generating a URL, the online payment flow is incomplete end-to-end.
 - **Carrier / Shipment provider abstraction**: `Shipment.carrier` is a plain `VARCHAR` (e.g., "GHTK"). There is no `Carrier` entity, no `CarrierProvider` interface, no carrier config management. Admin manually fills in `carrier` + `trackingNumber` strings today.
 - **Real email sending**: `LoggingEmailSender` logs to console; no SMTP/SES/SendGrid integration.
 - **Customer domain**: entity and repository present, but no controller, service, or mapper — customer profile management appears to be missing.
 - **Invoice domain**: package `domains/invoice` exists but was not found in the file tree scan — needs verification.
 
 ### Missing (not implemented)
-- **Mock payment provider** (`MockPaymentProvider implements PaymentProvider`) for sandbox testing
-- **Payment URL generation** in `initiateOnlinePayment()` — needs provider to produce redirect URL
-- **MoMo payment integration** (Phase 4)
+- **MoMo IPN webhook handler** (Session 2) — `MomoPaymentProvider.verifySignature()` is implemented; `PaymentWebhookServiceImpl` must call it before state mutation
 - **ZaloPay payment integration** (Phase 4)
 - **PayPal payment integration** (Phase 4) — note: original roadmap mentions PayPal but Vietnamese e-commerce context makes MoMo/ZaloPay/VNPay more relevant; confirm with stakeholder
 - **Carrier infrastructure** (`Carrier` entity, `CarrierConfig`, `CarrierProvider` interface)
@@ -112,8 +108,7 @@ Reindex endpoint: `POST /api/v1/admin/products/search/reindex`.
 | Area | Risk | Severity |
 |------|------|----------|
 | Payment callback HMAC | `processCallback()` has `TODO(phase-2)` — signature verification not yet implemented. Spoofed callbacks can mark orders as paid. | **CRITICAL (pre-prod)** |
-| `PaymentProviderRegistry` empty | Registry resolves to `Optional.empty()` for all providers. Webhook handler returns `null` for all real providers. | HIGH |
-| No payment URL | `initiateOnlinePayment()` creates a DB record but customer gets no URL — online payment flow is dead end. | HIGH |
+| MoMo IPN signature not wired | `MomoPaymentProvider.verifySignature()` is implemented but `PaymentWebhookServiceImpl` does not call it — webhooks are not yet verified. | HIGH (Session 2) |
 | Refund never completes | `PaymentRefund.status` stays `PENDING` forever; no pathway to `COMPLETED`. | MEDIUM |
 | Customer domain missing | No customer profile API, order history, or address management for customers identified. | MEDIUM |
 | Sensitive config in dev | `app.jwt.secret` and DB password in `application-dev.properties` (not committed to prod). Dev only, but should use env vars. | LOW (dev) |
@@ -130,8 +125,8 @@ Reindex endpoint: `POST /api/v1/admin/products/search/reindex`.
 - Do not create shipment against a carrier provider before `CarrierProvider` abstraction is built.
 - Do not log provider API keys, HMAC secrets, raw callback payloads (body logged in `PaymentTransaction.payload` — use caution), or OTP codes.
 - Keep API contract and docs in sync with every controller change.
-- Never edit existing Flyway migrations V1–V24.
-- Next migration must be V25.
+- Never edit existing Flyway migrations V1–V25.
+- Next migration must be V26.
 
 ---
 

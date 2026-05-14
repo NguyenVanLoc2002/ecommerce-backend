@@ -295,7 +295,18 @@ Each payment gateway (VNPay, MoMo, ZaloPay, etc.) signs its callbacks with an HM
 // AppException(ErrorCode.PAYMENT_CALLBACK_INVALID) before the order is touched.
 ```
 
-### 10.3 Implementation guidance
+### 10.3 MoMo IPN signature infrastructure (Session 1 complete)
+
+`MomoPaymentProvider` and `MomoSignatureService` are implemented and wired into the `PaymentProvider` strategy. `MomoSignatureService.verifyIpnSignature()` computes the HMAC-SHA256 over the required IPN fields (accessKey, amount, extraData, message, orderId, orderInfo, orderType, partnerCode, payType, requestId, responseTime, resultCode, transId) and compares it to the received signature.
+
+**Remaining gap**: The existing `PaymentWebhookServiceImpl.processWebhook()` does not yet call `provider.verifySignature()` before mutating order/payment state. This is Session 2 work (IPN state machine).
+
+**MoMo local testing requirement**: the IPN URL must be reachable by MoMo's servers. For local dev:
+1. Start a public tunnel: `cloudflared tunnel --url http://localhost:8080`
+2. Set `APP_PAYMENT_MOMO_IPN_URL=https://<tunnel-domain>/api/v1/payments/webhooks/MOMO`
+3. Set `APP_PAYMENT_MOMO_ENABLED=true` with TEST credentials
+
+### 10.4 Implementation guidance (remaining gateways)
 
 1. Create a `PaymentGatewaySignatureVerifier` interface with a `verify(provider, payload, signature)` method.
 2. Implement one class per gateway (e.g., `VnPaySignatureVerifier`, `MoMoSignatureVerifier`).
@@ -303,6 +314,6 @@ Each payment gateway (VNPay, MoMo, ZaloPay, etc.) signs its callbacks with an HM
 4. Call before any read of `order` or `payment` state.
 5. Failing verification must throw `AppException(ErrorCode.PAYMENT_CALLBACK_INVALID)` — never log raw payload or secrets.
 
-### 10.4 Risk level
+### 10.5 Risk level
 
-**HIGH** — Until HMAC is implemented, any attacker who discovers the callback URL can confirm payments without actually paying. Do not expose this endpoint to the public internet on a production environment without completing HMAC verification.
+**HIGH** — Until `processWebhook()` calls `verifySignature()` for each provider, any attacker who discovers the webhook URL can confirm payments without actually paying. Do not expose this endpoint to the public internet on a production environment without completing HMAC verification in Session 2.

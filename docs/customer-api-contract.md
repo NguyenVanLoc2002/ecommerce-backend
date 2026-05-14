@@ -561,6 +561,9 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - `PaymentResponse`
   - `id`, `orderId`, `orderCode`, `paymentCode`
   - `method`, `status`, `amount`, `paidAt`, `createdAt`
+  - `paymentUrl` — web redirect URL for the payment gateway (null for COD, null after payment settled)
+  - `deeplink` — mobile app deeplink (MoMo only; null for providers that don't support it)
+  - `qrCodeUrl` — raw QR code data string to encode as a QR image (MoMo only; null for others)
   - `transactions`
 - `TransactionResponse`
   - `id`, `transactionCode`, `status`, `amount`
@@ -587,12 +590,17 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `201 Created`
 - Response:
   - `ApiResponse<PaymentResponse>`
+  - `paymentUrl` is populated for all online providers
+  - `deeplink` and `qrCodeUrl` are populated when using the MoMo provider
 - Current service behavior:
   - order must belong to the current customer
   - order payment method must be `ONLINE`
   - existing `PENDING` or `INITIATED` payment returns existing record
   - existing `FAILED` payment is retried
   - terminal processed states are rejected
+- Supported providers:
+  - `MOMO` — active when `app.payment.momo.enabled=true`; amount must be 1,000–50,000,000 VND
+  - `MOCK` — dev/test only; active when `app.payment.mock.enabled=true`
 
 ### POST `/api/v1/payments/callback`
 

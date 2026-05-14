@@ -62,6 +62,14 @@ public class Payment extends BaseEntity {
     @Column(name = "expired_at")
     private LocalDateTime expiredAt;
 
+    /** Provider-assigned order identifier stored at initiate time for IPN callback mapping. */
+    @Column(name = "provider_order_id", length = 100)
+    private String providerOrderId;
+
+    /** Provider-assigned request identifier stored for audit and debugging purposes. */
+    @Column(name = "provider_request_id", length = 100)
+    private String providerRequestId;
+
     @OneToMany(mappedBy = "payment", cascade = CascadeType.ALL, orphanRemoval = false)
     @ToString.Exclude
     private List<PaymentTransaction> transactions = new ArrayList<>();
