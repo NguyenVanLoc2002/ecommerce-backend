@@ -5,6 +5,7 @@ import com.locnguyen.ecommerce.domains.customer.entity.Customer;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.payment.dto.InitPaymentRequest;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentCallbackRequest;
+import com.locnguyen.ecommerce.domains.payment.dto.PaymentCaptureRequest;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentFilter;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentResponse;
 import com.locnguyen.ecommerce.domains.payment.dto.TransactionResponse;
@@ -21,6 +22,8 @@ public interface PaymentService {
 
     PaymentResponse initiateOnlinePayment(UUID orderId, Customer customer,
                                           InitPaymentRequest request, String idempotencyKey);
+
+    PaymentResponse captureOnlinePayment(UUID orderId, Customer customer, PaymentCaptureRequest request);
 
     PaymentResponse processCallback(PaymentCallbackRequest request);
 

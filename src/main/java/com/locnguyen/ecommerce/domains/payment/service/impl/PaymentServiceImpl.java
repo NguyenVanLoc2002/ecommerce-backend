@@ -22,6 +22,7 @@ import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import com.locnguyen.ecommerce.domains.payment.enums.TransactionStatus;
 import com.locnguyen.ecommerce.domains.payment.mapper.PaymentMapper;
 import com.locnguyen.ecommerce.domains.payment.provider.PaymentProvider;
+import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderCaptureResult;
 import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderCreateResult;
 import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderRegistry;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentRepository;
@@ -172,6 +173,107 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
+    // ─── Capture online payment ───────────────────────────────────────────────
+
+    /**
+     * Captures an authorized online payment after the customer returns from the provider.
+     *
+     * <p>Called when the frontend receives the provider's return redirect (e.g., PayPal
+     * {@code ?token=<paypalOrderId>}) and submits the token to the backend.
+     *
+     * <p>Idempotency guarantees:
+     * <ul>
+     *   <li>Payment already PAID → returns the existing record silently.</li>
+     *   <li>Pessimistic write lock prevents concurrent captures from double-processing.</li>
+     *   <li>Provider token is verified against the stored {@code providerOrderId} to prevent
+     *       substitution attacks.</li>
+     * </ul>
+     */
+    @Transactional
+    public PaymentResponse captureOnlinePayment(UUID orderId, Customer customer,
+                                                PaymentCaptureRequest request) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (!order.getCustomer().getId().equals(customer.getId())) {
+            throw new AppException(ErrorCode.ORDER_NOT_FOUND);
+        }
+
+        if (order.getPaymentMethod() != PaymentMethod.ONLINE) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Order payment method is not ONLINE");
+        }
+
+        // Acquire row-level lock to serialize concurrent capture attempts
+        Payment payment = paymentRepository.findByOrderIdWithLock(order.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        // Idempotent: already PAID
+        if (payment.getStatus() == PaymentRecordStatus.PAID) {
+            log.info("Capture skipped — payment already PAID: code={}", payment.getPaymentCode());
+            return paymentMapper.toResponse(payment);
+        }
+
+        if (payment.getStatus() != PaymentRecordStatus.INITIATED
+                && payment.getStatus() != PaymentRecordStatus.PENDING) {
+            throw new AppException(ErrorCode.PAYMENT_ALREADY_PROCESSED,
+                    "Payment in status " + payment.getStatus() + " cannot be captured");
+        }
+
+        // Verify the token matches what was stored during initiation to prevent substitution
+        String providerToken = request.getProviderToken();
+        if (payment.getProviderOrderId() == null
+                || !payment.getProviderOrderId().equals(providerToken)) {
+            log.warn("Capture token mismatch: orderId={} storedProviderOrderId={} requestToken={}",
+                    orderId, payment.getProviderOrderId(), providerToken);
+            throw new AppException(ErrorCode.PAYMENT_CALLBACK_INVALID,
+                    "Provider token does not match payment record");
+        }
+
+        String providerName = request.getProvider().toUpperCase();
+        PaymentProvider provider = providerRegistry.find(providerName)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_PROVIDER_NOT_SUPPORTED,
+                        "Provider not registered: " + providerName));
+
+        PaymentProviderCaptureResult captureResult = provider.capturePayment(payment, providerToken)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_FAILED,
+                        "Provider " + providerName + " does not support capture"));
+
+        boolean success = captureResult.isSuccess();
+
+        if (success) {
+            payment.setStatus(PaymentRecordStatus.PAID);
+            payment.setPaidAt(LocalDateTime.now());
+            order.setPaymentStatus(PaymentStatus.PAID);
+            order.setPaidAt(LocalDateTime.now());
+        } else {
+            payment.setStatus(PaymentRecordStatus.FAILED);
+            order.setPaymentStatus(PaymentStatus.FAILED);
+        }
+
+        payment = paymentRepository.save(payment);
+        orderRepository.save(order);
+
+        PaymentTransaction txn = new PaymentTransaction();
+        txn.setPayment(payment);
+        txn.setTransactionCode(CodeGenerator.generatePaymentTransactionCode());
+        txn.setStatus(success ? TransactionStatus.SUCCESS : TransactionStatus.FAILED);
+        txn.setAmount(payment.getAmount());
+        txn.setMethod(PaymentMethod.ONLINE);
+        txn.setProvider(providerName);
+        txn.setProviderTxnId(captureResult.getProviderTxnId());
+        txn.setReferenceType("CAPTURE");
+        txn.setReferenceId(order.getOrderCode());
+        txn.setNote(success
+                ? "Payment captured successfully"
+                : "Payment capture failed: " + captureResult.getStatus());
+        transactionRepository.save(txn);
+
+        log.info("Payment capture processed: orderId={} orderCode={} paymentCode={} success={}",
+                orderId, order.getOrderCode(), payment.getPaymentCode(), success);
+
+        return paymentMapper.toResponse(payment);
+    }
+
     private PaymentResponse executeInitiateOnlinePayment(UUID orderId, Customer customer,
                                                          InitPaymentRequest request,
                                                          IdempotencyKey idem) {
@@ -246,10 +348,10 @@ public class PaymentServiceImpl implements PaymentService {
             resultPayment = payment;
         }
 
-        idempotencyService.markComplete(
-                idem.getId(), "PAYMENT", resultPayment.getId().toString(), 201);
-
         PaymentResponse response = paymentMapper.toResponse(resultPayment);
+
+        // Resolve provider URL BEFORE marking idempotency complete so that a provider
+        // failure marks the key as FAILED and allows the client to retry.
         PaymentProviderCreateResult providerResult = resolveProviderResult(
                 resultPayment, order, request.getProvider(), request.getReturnUrl());
 
@@ -271,6 +373,10 @@ public class PaymentServiceImpl implements PaymentService {
             }
             response = builder.build();
         }
+
+        idempotencyService.markComplete(
+                idem.getId(), "PAYMENT", resultPayment.getId().toString(), 201);
+
         return response;
     }
 
@@ -285,10 +391,13 @@ public class PaymentServiceImpl implements PaymentService {
                             : appProperties.getPayment().getDefaultReturnUrl();
                     try {
                         return provider.createPayment(payment, order, resolvedReturnUrl, callbackUrl);
+                    } catch (AppException e) {
+                        throw e;
                     } catch (Exception e) {
-                        log.warn("Failed to create payment with provider: provider={} orderCode={} — {}",
-                                providerName, order.getOrderCode(), e.getMessage());
-                        return null;
+                        log.error("Unexpected error creating payment with provider: provider={} orderCode={} — {}",
+                                providerName, order.getOrderCode(), e.getMessage(), e);
+                        throw new AppException(ErrorCode.PAYMENT_FAILED,
+                                "Provider " + providerName + " encountered an unexpected error");
                     }
                 })
                 .orElse(null);

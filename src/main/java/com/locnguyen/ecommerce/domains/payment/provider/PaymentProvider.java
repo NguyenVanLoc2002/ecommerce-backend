@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 /**
  * Strategy interface for payment gateway integrations.
@@ -59,6 +60,23 @@ public interface PaymentProvider {
      */
     default BigDecimal extractAmount(String payload) {
         return null;
+    }
+
+    /**
+     * Capture an authorized payment.
+     *
+     * <p>Used by provider flows where payment authorization and capture are separate steps
+     * (e.g., PayPal Orders API: create-order → customer approves → capture).
+     *
+     * <p>The default implementation returns {@link Optional#empty()} — providers that
+     * combine authorization and capture in a single step should not override this.
+     *
+     * @param payment      the payment record with {@code providerOrderId} already set
+     * @param providerToken the provider-assigned order token returned at initiation
+     * @return capture result, or {@link Optional#empty()} if capture is not supported
+     */
+    default Optional<PaymentProviderCaptureResult> capturePayment(Payment payment, String providerToken) {
+        return Optional.empty();
     }
 
     /**

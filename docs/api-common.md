@@ -411,6 +411,7 @@ The current `ErrorCode` enum defines these domain codes.
 - `PAYMENT_REFUND_INVALID_STATUS`
 - `PAYMENT_WEBHOOK_SIGNATURE_INVALID` — HMAC or partnerCode verification failed; IPN rejected without state mutation
 - `PAYMENT_PROVIDER_NOT_SUPPORTED`
+- `PAYMENT_CURRENCY_UNSUPPORTED` — order currency is not compatible with the requested payment provider (e.g. VND order to PayPal USD without test conversion enabled)
 
 ### 7.10 Promotion and voucher
 

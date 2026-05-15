@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.infrastructure.payment.momo;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import lombok.Getter;
@@ -56,6 +57,22 @@ public class MomoPaymentProperties {
 
     @Min(value = 30_000, message = "app.payment.momo.read-timeout-ms must be >= 30000 ms")
     private int readTimeoutMs = 30_000;
+
+    /**
+     * Trims whitespace from all string properties after binding.
+     * Prevents HMAC signature mismatches caused by trailing \r\n from Windows .env files.
+     */
+    @PostConstruct
+    public void trimAll() {
+        if (partnerCode != null) partnerCode = partnerCode.trim();
+        if (accessKey != null) accessKey = accessKey.trim();
+        if (secretKey != null) secretKey = secretKey.trim();
+        if (createUrl != null) createUrl = createUrl.trim();
+        if (redirectUrl != null) redirectUrl = redirectUrl.trim();
+        if (ipnUrl != null) ipnUrl = ipnUrl.trim();
+        if (requestType != null) requestType = requestType.trim();
+        if (lang != null) lang = lang.trim();
+    }
 
     /**
      * Validates that all required credentials are present when the provider is enabled.

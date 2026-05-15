@@ -218,12 +218,21 @@ public class MomoPaymentProvider implements PaymentProvider {
         String requestId = buildRequestId(payment.getPaymentCode());
         String orderInfo = "Thanh toan don hang " + order.getOrderCode();
 
+        // Explicit MoMo IPN URL from properties takes priority over the generic base-callback-url.
+        // .trim() guards against trailing \r\n from Windows .env files — these corrupt the HMAC signature.
+        String rawIpnUrl = properties.getIpnUrl();
+        String effectiveIpnUrl = (rawIpnUrl != null && !rawIpnUrl.isBlank())
+                ? rawIpnUrl.trim()
+                : callbackUrl;
+
+        String effectiveRedirectUrl = returnUrl != null ? returnUrl.trim() : properties.getRedirectUrl().trim();
+
         MomoCreatePaymentRequest requestBody = MomoCreatePaymentRequest.builder()
                 .partnerCode(properties.getPartnerCode())
                 .accessKey(properties.getAccessKey())
                 .requestType(properties.getRequestType())
-                .ipnUrl(callbackUrl != null ? callbackUrl : properties.getIpnUrl())
-                .redirectUrl(returnUrl != null ? returnUrl : properties.getRedirectUrl())
+                .ipnUrl(effectiveIpnUrl)
+                .redirectUrl(effectiveRedirectUrl)
                 .orderId(providerOrderId)
                 .amount(amount)
                 .orderInfo(orderInfo)
@@ -250,8 +259,8 @@ public class MomoPaymentProvider implements PaymentProvider {
                 .signature(signature)
                 .build();
 
-        log.info("Calling MoMo create-payment API: providerOrderId={} requestId={} amount={}",
-                providerOrderId, requestId, amount);
+        log.info("Calling MoMo create-payment API: providerOrderId={} requestId={} amount={} ipnUrl={} redirectUrl={}",
+                providerOrderId, requestId, amount, effectiveIpnUrl, effectiveRedirectUrl);
 
         MomoCreatePaymentResponse momoResponse = callMomoCreateApi(requestBody, order.getOrderCode());
 

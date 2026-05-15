@@ -552,6 +552,9 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - `InitPaymentRequest`
   - `provider`: optional
   - `returnUrl`: optional
+- `PaymentCaptureRequest`
+  - `provider`: required — provider name (e.g., `PAYPAL`), case-insensitive
+  - `providerToken`: required — provider-assigned order token from the redirect URL (max 200 chars)
 - `PaymentCallbackRequest`
   - `orderCode`: required
   - `status`: required string
@@ -600,7 +603,31 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - terminal processed states are rejected
 - Supported providers:
   - `MOMO` — active when `app.payment.momo.enabled=true`; amount must be 1,000–50,000,000 VND
+  - `PAYPAL` — active when `app.payment.paypal.enabled=true`; uses PayPal Orders API v2 sandbox. Returns PayPal approval URL as `paymentUrl`. Orders are VND; enable `app.payment.paypal.test-conversion-enabled=true` for sandbox VND→USD conversion. After initiation the frontend redirects to PayPal; upon return, call the capture endpoint below with the `?token=` param.
   - `MOCK` — dev/test only; active when `app.payment.mock.enabled=true`
+- PayPal frontend routes:
+  - Approval return: configured via `app.payment.paypal.return-url` (default `http://localhost:5173/payment/paypal/return`)
+  - Cancellation: configured via `app.payment.paypal.cancel-url` (default `http://localhost:5173/payment/paypal/cancel`)
+
+### POST `/api/v1/payments/order/{orderId}/capture`
+
+- Access: authenticated customer flow
+- Description: capture an authorized online payment after the customer returns from the provider. For PayPal, this must be called with the `token` query parameter from the PayPal redirect URL.
+- Request body:
+  - `PaymentCaptureRequest`
+  - `provider`: e.g. `PAYPAL`
+  - `providerToken`: the provider order ID (for PayPal, the `?token=` value from the redirect URL)
+- Response:
+  - `ApiResponse<PaymentResponse>`
+- Current service behavior:
+  - order must belong to the current customer
+  - order payment method must be `ONLINE`
+  - payment already `PAID` → returns existing record (idempotent)
+  - payment status must be `INITIATED` or `PENDING` to be capturable
+  - `providerToken` is verified against the stored `providerOrderId` to prevent substitution attacks
+  - on `COMPLETED` capture → payment `PAID`, order `paymentStatus = PAID`
+  - on failed capture → payment `FAILED`, order `paymentStatus = FAILED`
+  - pessimistic row lock prevents duplicate concurrent captures
 
 ### POST `/api/v1/payments/callback`
 
@@ -616,6 +643,24 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - duplicate `providerTxnId` → returns existing result, no side effect
   - stale callback cannot move a PAID/REFUNDED payment backward
 - Security limitation: HMAC signature verification is not yet implemented. See `docs/security.md §10`.
+
+### POST `/api/v1/webhooks/payment/PAYPAL`
+
+- Access: **public** — called server-to-server by PayPal. No auth token required.
+- Description: PayPal webhook notification receiver. Verifies the signature using PayPal's Webhooks API v1 before processing. Idempotent on duplicate `providerTxnId`. Returns `HTTP 200` as required by PayPal.
+- Required headers (all passed by PayPal):
+  - `PAYPAL-AUTH-ALGO`, `PAYPAL-CERT-URL`, `PAYPAL-TRANSMISSION-ID`, `PAYPAL-TRANSMISSION-SIG`, `PAYPAL-TRANSMISSION-TIME`
+- Supported event types:
+  - `PAYMENT.CAPTURE.COMPLETED` → marks payment PAID (if not already)
+  - `PAYMENT.CAPTURE.DENIED` / `PAYMENT.CAPTURE.DECLINED` → marks payment FAILED
+  - Other events (e.g., `CHECKOUT.ORDER.APPROVED`) → logged and ignored
+- Security: signature verified via PayPal's `/v1/notifications/verify-webhook-signature` API; invalid signatures are rejected before any DB mutation.
+
+### POST `/api/v1/webhooks/payment/{provider}`
+
+- Access: **public** — called server-to-server by non-PayPal gateways (MoMo, VNPay, etc.).
+- Description: generic gateway IPN/webhook receiver. Signature is verified internally via the registered provider. Returns `HTTP 204 No Content` as required by MoMo IPN spec.
+- Required header: `X-Signature: <signature-value>`
 
 ---
 

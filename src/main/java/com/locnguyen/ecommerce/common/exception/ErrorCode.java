@@ -137,6 +137,8 @@ public enum ErrorCode {
             "Webhook signature verification failed"),
     PAYMENT_PROVIDER_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "PAYMENT_PROVIDER_NOT_SUPPORTED",
             "Payment provider is not supported"),
+    PAYMENT_CURRENCY_UNSUPPORTED(HttpStatus.UNPROCESSABLE_ENTITY, "PAYMENT_CURRENCY_UNSUPPORTED",
+            "Order currency is not supported by this payment provider"),
 
     // ─── Promotion / Voucher ────────────────────────────────────────────────
     VOUCHER_NOT_FOUND(HttpStatus.NOT_FOUND, "VOUCHER_NOT_FOUND", "Voucher not found"),

@@ -35,7 +35,7 @@ Layered modular monolith: `Controller → Service → Repository` per domain.
 | `inventory` | Full: warehouse, inventory, reservation, stock movement, optimistic lock (V20), scheduler |
 | `cart` | Full: cart creation, add/update/remove item |
 | `order` | Full: create (from cart + idempotency), cancel, status machine, admin management |
-| `payment` | Full: COD + online initiate (with paymentUrl/deeplink/qrCodeUrl), callback, webhook (with full HMAC signature gate + amount validation + partnerCode guard + idempotency), refund (initiate), `PaymentProvider` abstraction, `PaymentProviderRegistry`, `MockPaymentProvider`, `MomoPaymentProvider` (create-payment + IPN/webhook fully implemented), V8/V22/V23/V24/V25 migrations |
+| `payment` | Full: COD + online initiate (with paymentUrl/deeplink/qrCodeUrl), callback, webhook (with full HMAC signature gate + amount validation + partnerCode guard + idempotency), refund (initiate), `PaymentProvider` abstraction, `PaymentProviderRegistry`, `MockPaymentProvider`, `MomoPaymentProvider` (create-payment + IPN/webhook fully implemented), `PaypalPaymentProvider` (Session 1: create-order + approval URL; Session 2: capture endpoint + webhook verification via PayPal Webhooks API v1 + isSuccess/extractOrderCode/extractProviderTxnId fully implemented), V8/V22/V23/V24/V25 migrations |
 | `idempotency` | Full: `IdempotencyKey` entity, service with PROCESSING/COMPLETED/FAILED states |
 | `promotion` | Full: voucher, promotion rule, usage tracking |
 | `shipment` | Full: create, status machine (PENDING→PICKING→IN_TRANSIT→OUT_FOR_DELIVERY→DELIVERED/FAILED→RETURNED), events, optimistic lock (V19) |
@@ -94,7 +94,7 @@ Reindex endpoint: `POST /api/v1/admin/products/search/reindex`.
 ### Missing (not implemented)
 - **MoMo IPN webhook handler** (Session 2) — `MomoPaymentProvider.verifySignature()` is implemented; `PaymentWebhookServiceImpl` must call it before state mutation
 - **ZaloPay payment integration** (Phase 4)
-- **PayPal payment integration** (Phase 4) — note: original roadmap mentions PayPal but Vietnamese e-commerce context makes MoMo/ZaloPay/VNPay more relevant; confirm with stakeholder
+- **PayPal currency model** — orders are VND; PayPal requires USD. Test-only VND→USD conversion enabled via `app.payment.paypal.test-conversion-enabled=true`. A real currency conversion service is required before production go-live.
 - **Carrier infrastructure** (`Carrier` entity, `CarrierConfig`, `CarrierProvider` interface)
 - **Ahamove integration** (Phase 6)
 - **GHN integration** (Phase 6, if needed)

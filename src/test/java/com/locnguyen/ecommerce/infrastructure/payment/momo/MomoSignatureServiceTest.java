@@ -242,27 +242,18 @@ class MomoSignatureServiceTest {
         }
 
         @Test
-        void signIpnRequest_matchesRawStringOverload() {
-            // Both overloads must produce the same digest for the same input
+        void verifyIpnSignature_returnsTrueForCorrectSignature() {
             MomoIpnRequest ipn = buildIpn();
-            String fromDto = signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, ipn);
-            String fromRaw = signatureService.verifyIpnSignature(
-                    ACCESS_KEY, SECRET_KEY,
-                    String.valueOf(ipn.getAmount()),
-                    ipn.getExtraData(),
-                    ipn.getMessage(),
-                    ipn.getOrderId(),
-                    ipn.getOrderInfo(),
-                    ipn.getOrderType(),
-                    ipn.getPartnerCode(),
-                    ipn.getPayType(),
-                    ipn.getRequestId(),
-                    String.valueOf(ipn.getResponseTime()),
-                    String.valueOf(ipn.getResultCode()),
-                    String.valueOf(ipn.getTransId()),
-                    fromDto  // pass the computed digest as receivedSignature → should return true
-            ) ? fromDto : "MISMATCH";
-            assertThat(fromRaw).isEqualTo(fromDto);
+            String computed = signatureService.signIpnRequest(ACCESS_KEY, SECRET_KEY, ipn);
+            ipn.setSignature(computed);
+            assertThat(signatureService.verifyIpnSignature(ACCESS_KEY, SECRET_KEY, ipn)).isTrue();
+        }
+
+        @Test
+        void verifyIpnSignature_returnsFalseForWrongSignature() {
+            MomoIpnRequest ipn = buildIpn();
+            ipn.setSignature("0000000000000000000000000000000000000000000000000000000000000000");
+            assertThat(signatureService.verifyIpnSignature(ACCESS_KEY, SECRET_KEY, ipn)).isFalse();
         }
     }
 

@@ -41,65 +41,16 @@ public class MomoSignatureService {
     }
 
     /**
-     * Verifies an IPN (webhook) callback from MoMo.
+     * Computes the HMAC-SHA256 signature for an IPN callback.
      *
-     * <p>IPN raw signature fields (alphabetical, MoMo spec):
+     * <p>MoMo signs IPN callbacks using a different field set than create-payment requests.
+     * Fields are in strict alphabetical order per MoMo spec:
      * <pre>
      *   accessKey=$accessKey&amp;amount=$amount&amp;extraData=$extraData&amp;message=$message
      *   &amp;orderId=$orderId&amp;orderInfo=$orderInfo&amp;orderType=$orderType
      *   &amp;partnerCode=$partnerCode&amp;payType=$payType&amp;requestId=$requestId
      *   &amp;responseTime=$responseTime&amp;resultCode=$resultCode&amp;transId=$transId
      * </pre>
-     *
-     * @param accessKey      MoMo access key from properties
-     * @param secretKey      MoMo secret key — never log this value
-     * @param amount         from IPN JSON
-     * @param extraData      from IPN JSON
-     * @param message        from IPN JSON
-     * @param orderId        from IPN JSON
-     * @param orderInfo      from IPN JSON
-     * @param orderType      from IPN JSON
-     * @param partnerCode    from IPN JSON
-     * @param payType        from IPN JSON
-     * @param requestId      from IPN JSON
-     * @param responseTime   from IPN JSON
-     * @param resultCode     from IPN JSON
-     * @param transId        from IPN JSON
-     * @param receivedSignature signature field from the IPN JSON payload
-     * @return {@code true} if the computed signature matches
-     */
-    public boolean verifyIpnSignature(
-            String accessKey, String secretKey,
-            String amount, String extraData, String message,
-            String orderId, String orderInfo, String orderType,
-            String partnerCode, String payType, String requestId,
-            String responseTime, String resultCode, String transId,
-            String receivedSignature) {
-
-        String rawSignature = "accessKey=" + nullToEmpty(accessKey)
-                + "&amount=" + nullToEmpty(amount)
-                + "&extraData=" + nullToEmpty(extraData)
-                + "&message=" + nullToEmpty(message)
-                + "&orderId=" + nullToEmpty(orderId)
-                + "&orderInfo=" + nullToEmpty(orderInfo)
-                + "&orderType=" + nullToEmpty(orderType)
-                + "&partnerCode=" + nullToEmpty(partnerCode)
-                + "&payType=" + nullToEmpty(payType)
-                + "&requestId=" + nullToEmpty(requestId)
-                + "&responseTime=" + nullToEmpty(responseTime)
-                + "&resultCode=" + nullToEmpty(resultCode)
-                + "&transId=" + nullToEmpty(transId);
-
-        String computed = hmacSha256(rawSignature, secretKey);
-        return computed.equals(receivedSignature);
-    }
-
-    /**
-     * Computes the HMAC-SHA256 signature for an IPN request.
-     *
-     * <p>Uses the same alphabetical raw-string format as the MoMo spec.
-     * Numeric fields are rendered as their integer string form (e.g. {@code "50000"}).
-     * Null numeric fields default to {@code "0"}; null String fields default to {@code ""}.
      *
      * @param accessKey  our MoMo access key — never log this value
      * @param secretKey  our MoMo secret key — never log this value

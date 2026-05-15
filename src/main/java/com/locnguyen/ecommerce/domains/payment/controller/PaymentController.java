@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.domains.idempotency.service.IdempotencyService;
 import com.locnguyen.ecommerce.domains.payment.dto.InitPaymentRequest;
+import com.locnguyen.ecommerce.domains.payment.dto.PaymentCaptureRequest;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentResponse;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import com.locnguyen.ecommerce.domains.user.service.UserService;
@@ -34,6 +35,21 @@ public class PaymentController {
     public ApiResponse<PaymentResponse> getMyPayment(@PathVariable UUID orderId) {
         return ApiResponse.success(
                 paymentService.getPaymentForCustomer(orderId, userService.getCurrentCustomer()));
+    }
+
+    @Operation(
+            summary = "Capture online payment after provider approval",
+            description = "Called by the frontend when returning from a payment provider " +
+                    "(e.g., PayPal). Captures the authorized payment and marks the order as paid. " +
+                    "Idempotent: returns existing PAID record if already captured."
+    )
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/order/{orderId}/capture")
+    public ApiResponse<PaymentResponse> captureOnlinePayment(
+            @PathVariable UUID orderId,
+            @Valid @RequestBody PaymentCaptureRequest request) {
+        return ApiResponse.success(
+                paymentService.captureOnlinePayment(orderId, userService.getCurrentCustomer(), request));
     }
 
     @Operation(

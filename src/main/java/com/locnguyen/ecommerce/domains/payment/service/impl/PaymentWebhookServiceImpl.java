@@ -129,6 +129,15 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
             }
         }
 
+        // Null orderCode: provider cannot extract an order reference from this event type
+        // (e.g., PayPal CHECKOUT.ORDER.APPROVED before capture). Log and skip.
+        if (orderCode == null) {
+            log.info("Webhook has no extractable orderCode: provider={} providerTxnId={} — ignoring",
+                    provider, providerTxnId);
+            updateLog(webhookLog, WebhookLogStatus.IGNORED, "No orderCode extractable from payload");
+            return null;
+        }
+
         // Find order and acquire a row-level lock on payment to prevent race conditions
         var order = orderRepository.findByOrderCode(orderCode)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_CALLBACK_INVALID,
