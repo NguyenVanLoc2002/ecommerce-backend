@@ -15,6 +15,9 @@ public class CreateOrderRequest {
     @Schema(example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
     private UUID shippingAddressId;
 
+    @Schema(description = "Selected carrier ID for shipping fee calculation and shipment preference")
+    private UUID carrierId;
+
     @Schema(example = "COD", description = "Payment method: COD or ONLINE", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     private PaymentMethod paymentMethod;
 

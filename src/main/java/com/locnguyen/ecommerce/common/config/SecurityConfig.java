@@ -86,6 +86,8 @@ public class SecurityConfig {
             // Payment webhook — provider-initiated server-to-server calls; no bearer token.
             // Security relies on HMAC/signature verification inside the handler.
             "/api/v1/webhooks/payment/**",
+            // Carrier webhook — provider-initiated server-to-server calls; no bearer token.
+            "/api/v1/shipments/webhook/ahamove",
     };
 
     /** Public GET-only endpoints for product browsing and dev tooling. */

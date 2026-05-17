@@ -6,27 +6,37 @@ import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.common.utils.CodeGenerator;
 import com.locnguyen.ecommerce.common.utils.RequestHashUtils;
 import com.locnguyen.ecommerce.common.utils.SecurityUtils;
-import com.locnguyen.ecommerce.domains.idempotency.entity.IdempotencyKey;
-import com.locnguyen.ecommerce.domains.idempotency.enums.IdempotencyActionType;
-import com.locnguyen.ecommerce.domains.idempotency.enums.IdempotencyStatus;
-import com.locnguyen.ecommerce.domains.idempotency.service.IdempotencyService;
 import com.locnguyen.ecommerce.domains.address.entity.Address;
 import com.locnguyen.ecommerce.domains.address.repository.AddressRepository;
+import com.locnguyen.ecommerce.domains.admin.dto.AdminOrderListItemResponse;
+import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
+import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
+import com.locnguyen.ecommerce.domains.carrier.dto.CheckoutCarrierQuoteResponse;
+import com.locnguyen.ecommerce.domains.carrier.service.CarrierCheckoutService;
 import com.locnguyen.ecommerce.domains.cart.entity.Cart;
 import com.locnguyen.ecommerce.domains.cart.entity.CartItem;
 import com.locnguyen.ecommerce.domains.cart.enums.CartStatus;
 import com.locnguyen.ecommerce.domains.cart.repository.CartItemRepository;
 import com.locnguyen.ecommerce.domains.cart.repository.CartRepository;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
+import com.locnguyen.ecommerce.domains.idempotency.entity.IdempotencyKey;
+import com.locnguyen.ecommerce.domains.idempotency.enums.IdempotencyActionType;
+import com.locnguyen.ecommerce.domains.idempotency.enums.IdempotencyStatus;
+import com.locnguyen.ecommerce.domains.idempotency.service.IdempotencyService;
 import com.locnguyen.ecommerce.domains.inventory.dto.ReserveStockRequest;
 import com.locnguyen.ecommerce.domains.inventory.entity.Inventory;
 import com.locnguyen.ecommerce.domains.inventory.repository.InventoryRepository;
 import com.locnguyen.ecommerce.domains.inventory.service.InventoryService;
-import com.locnguyen.ecommerce.domains.admin.dto.AdminOrderListItemResponse;
-import com.locnguyen.ecommerce.domains.order.dto.*;
+import com.locnguyen.ecommerce.domains.notification.enums.NotificationType;
+import com.locnguyen.ecommerce.domains.notification.service.NotificationService;
+import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
+import com.locnguyen.ecommerce.domains.order.dto.OrderAdminFilter;
+import com.locnguyen.ecommerce.domains.order.dto.OrderFilter;
+import com.locnguyen.ecommerce.domains.order.dto.OrderListItemResponse;
+import com.locnguyen.ecommerce.domains.order.dto.OrderPreviewResponse;
+import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.entity.OrderItem;
-import com.locnguyen.ecommerce.domains.order.dto.OrderAdminFilter;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
@@ -34,10 +44,6 @@ import com.locnguyen.ecommerce.domains.order.mapper.OrderMapper;
 import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
-import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
-import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
-import com.locnguyen.ecommerce.domains.notification.enums.NotificationType;
-import com.locnguyen.ecommerce.domains.notification.service.NotificationService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import lombok.RequiredArgsConstructor;
@@ -51,9 +57,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
-import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -71,44 +77,30 @@ public class OrderServiceImpl implements OrderService {
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
     private final IdempotencyService idempotencyService;
+    private final CarrierCheckoutService carrierCheckoutService;
 
-    // ─── Create order from cart ─────────────────────────────────────────────
+    @Override
+    @Transactional(readOnly = true)
+    public OrderPreviewResponse previewOrder(Customer customer, CreateOrderRequest request) {
+        CheckoutDraft draft = loadCheckoutDraft(customer, request.getShippingAddressId(), false);
+        Order order = buildDraftOrder(customer, draft.address(), draft.cartItems(), request, CodeGenerator.generateOrderCode());
+        CheckoutCarrierQuoteResponse quote = applyShippingSelection(order, request.getCarrierId());
+        return buildPreviewResponse(order, quote);
+    }
 
-    /**
-     * Create a new order from the customer's active cart.
-     *
-     * <p>Steps:
-     * <ol>
-     *   <li>Validate cart has items</li>
-     *   <li>Validate shipping address ownership</li>
-     *   <li>Snapshot product data from cart items</li>
-     *   <li>Calculate pricing (subTotal, discount, shippingFee, totalAmount)</li>
-     *   <li>Persist order + order items</li>
-     *   <li>Reserve inventory for each item</li>
-     *   <li>Mark cart as CHECKED_OUT</li>
-     * </ol>
-     *
-     * <p>Everything runs in a single transaction — if any step fails,
-     * the entire operation rolls back.
-     */
+    @Override
     @Transactional
     public OrderResponse createOrder(Customer customer, CreateOrderRequest request, String idempotencyKey) {
-        // ── Idempotency gate ───────────────────────────────────────────────────
-        // findOrCreateProcessing runs in REQUIRES_NEW — the PROCESSING record is
-        // committed immediately, making it visible to concurrent requests before
-        // the cart lock below is acquired.
         String requestHash = RequestHashUtils.hash(request, customer.getId());
         IdempotencyKey idem = idempotencyService.findOrCreateProcessing(
                 customer.getId(), IdempotencyActionType.CHECKOUT, idempotencyKey, requestHash);
 
         if (idem.getStatus() == IdempotencyStatus.COMPLETED) {
-            // Safe replay: return the order that was already created
             UUID existingOrderId = UUID.fromString(idem.getResourceId());
             return buildOrderResponse(orderRepository.findById(existingOrderId)
                     .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND)));
         }
 
-        // ── Checkout execution ────────────────────────────────────────────────
         try {
             return executeCheckout(customer, request, idem);
         } catch (AppException e) {
@@ -120,115 +112,33 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private OrderResponse executeCheckout(Customer customer, CreateOrderRequest request,
-                                          IdempotencyKey idem) {
-        // 1. Load active cart with a row-level lock to prevent double-checkout.
-        // Two concurrent createOrder calls for the same customer will serialize here:
-        // the second waits until the first commits, then fails CART_NOT_FOUND because
-        // the cart is already CHECKED_OUT.
-        Cart cart = cartRepository.findByCustomerIdAndStatusWithLock(customer.getId(), CartStatus.ACTIVE)
-                .orElseThrow(() -> new AppException(ErrorCode.CART_NOT_FOUND));
-
-        List<CartItem> cartItems = cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId());
-        if (cartItems.isEmpty()) {
-            throw new AppException(ErrorCode.ORDER_EMPTY);
-        }
-
-        // 2. Validate and snapshot shipping address
-        Address address = addressRepository.findByIdAndDeletedFalse(request.getShippingAddressId())
-                .orElseThrow(() -> new AppException(ErrorCode.ADDRESS_NOT_FOUND));
-        if (!address.getCustomer().getId().equals(customer.getId())) {
-            throw new AppException(ErrorCode.ADDRESS_NOT_FOUND);
-        }
-
-        // 3. Build order
+    private OrderResponse executeCheckout(Customer customer, CreateOrderRequest request, IdempotencyKey idem) {
+        CheckoutDraft draft = loadCheckoutDraft(customer, request.getShippingAddressId(), true);
         String orderCode = CodeGenerator.generateOrderCode();
         PaymentMethod paymentMethod = request.getPaymentMethod() != null
                 ? request.getPaymentMethod()
                 : PaymentMethod.COD;
 
-        Order order = new Order();
-        order.setCustomer(customer);
-        order.setOrderCode(orderCode);
-        // ONLINE orders move directly to AWAITING_PAYMENT — inventory is reserved
-        // and we are now waiting for the customer to complete payment.
-        // COD orders start at PENDING — admin confirms on delivery.
-        order.setStatus(paymentMethod == PaymentMethod.ONLINE
-                ? OrderStatus.AWAITING_PAYMENT
-                : OrderStatus.PENDING);
-        order.setPaymentMethod(paymentMethod);
-        order.setPaymentStatus(PaymentStatus.PENDING);
-        order.setCustomerNote(request.getCustomerNote());
-        order.setVoucherCode(request.getVoucherCode());
+        Order order = buildDraftOrder(customer, draft.address(), draft.cartItems(), request, orderCode);
+        applyShippingSelection(order, request.getCarrierId());
 
-        // Snapshot shipping address
-        order.setReceiverName(address.getReceiverName());
-        order.setReceiverPhone(address.getPhoneNumber());
-        order.setShippingStreet(address.getStreetAddress());
-        order.setShippingWard(address.getWard());
-        order.setShippingDistrict(address.getDistrict());
-        order.setShippingCity(address.getCity());
-        order.setShippingPostalCode(address.getPostalCode());
-
-        // 4. Build order items and calculate subTotal
-        BigDecimal subTotal = BigDecimal.ZERO;
-
-        for (CartItem ci : cartItems) {
-            ProductVariant variant = ci.getVariant();
-            BigDecimal effectivePrice = variant.getSalePrice() != null
-                    ? variant.getSalePrice()
-                    : variant.getBasePrice();
-            BigDecimal lineTotal = effectivePrice.multiply(BigDecimal.valueOf(ci.getQuantity()));
-
-            OrderItem item = new OrderItem();
-            item.setOrder(order);
-            item.setVariant(variant);
-            item.setProductName(variant.getProduct().getName());
-            item.setVariantName(variant.getVariantName());
-            item.setSku(variant.getSku());
-            item.setUnitPrice(variant.getBasePrice());
-            item.setSalePrice(variant.getSalePrice());
-            item.setQuantity(ci.getQuantity());
-            item.setLineTotal(lineTotal);
-
-            order.getItems().add(item);
-            subTotal = subTotal.add(lineTotal);
-        }
-
-        // 5. Calculate totals
-        // Voucher discount is a prepare hook — will be properly calculated
-        // when the promotion module is implemented. For now, discount = 0.
-        BigDecimal discountAmount = BigDecimal.ZERO;
-        // TODO: calculate based on rules
-        BigDecimal shippingFee = BigDecimal.ZERO;
-
-        order.setSubTotal(subTotal);
-        order.setDiscountAmount(discountAmount);
-        order.setShippingFee(shippingFee);
-        order.setTotalAmount(subTotal.subtract(discountAmount).add(shippingFee));
-
-        // 6. Persist order (cascades to order items)
         order = orderRepository.save(order);
 
-        // 7. Reserve inventory for each item — batch-load to avoid N+1 per cart item
-        List<UUID> variantIds = cartItems.stream()
+        List<UUID> variantIds = draft.cartItems().stream()
                 .map(ci -> ci.getVariant().getId())
                 .toList();
 
         List<Inventory> allInventories = inventoryRepository.findByVariantIdIn(variantIds);
-
-        // Group inventories by variant ID for O(1) lookup per item
         Map<UUID, List<Inventory>> inventoriesByVariant = allInventories.stream()
                 .collect(Collectors.groupingBy(inv -> inv.getVariant().getId()));
 
-        for (CartItem ci : cartItems) {
+        for (CartItem ci : draft.cartItems()) {
             List<Inventory> inventories = inventoriesByVariant.get(ci.getVariant().getId());
             if (inventories == null || inventories.isEmpty()) {
                 throw new AppException(ErrorCode.INVENTORY_NOT_FOUND,
                         "No inventory record found for variant " + ci.getVariant().getId());
             }
 
-            // Pick the warehouse with the most available stock
             Inventory bestInventory = inventories.stream()
                     .max((a, b) -> Integer.compare(
                             a.getOnHand() - a.getReserved(),
@@ -241,37 +151,29 @@ public class OrderServiceImpl implements OrderService {
             reserveRequest.setQuantity(ci.getQuantity());
             reserveRequest.setReferenceType("ORDER");
             reserveRequest.setReferenceId(orderCode);
-            // Reservation expires in 24 hours (auto-release if order not confirmed)
             reserveRequest.setExpiresAt(LocalDateTime.now().plusHours(24));
 
             inventoryService.reserveStock(reserveRequest);
         }
 
-        // 8. Mark cart as checked out
-        cart.setStatus(CartStatus.CHECKED_OUT);
-        cartRepository.save(cart);
+        draft.cart().setStatus(CartStatus.CHECKED_OUT);
+        cartRepository.save(draft.cart());
 
-        // 9. Create payment record
-        // COD: payment record created immediately (customer pays on delivery).
-        // ONLINE: payment record is created later when customer calls initiatePayment.
         if (paymentMethod == PaymentMethod.COD) {
             paymentService.createCodPayment(order);
         }
 
         log.info("Order created: code={} customerId={} items={} total={} payment={} by={}",
-                orderCode, customer.getId(), cartItems.size(), order.getTotalAmount(),
+                orderCode, customer.getId(), draft.cartItems().size(), order.getTotalAmount(),
                 paymentMethod, SecurityUtils.getCurrentUsernameOrSystem());
         auditLogService.log(AuditAction.ORDER_CREATED, "ORDER", orderCode,
-                "items=" + cartItems.size() + " total=" + order.getTotalAmount());
+                "items=" + draft.cartItems().size() + " total=" + order.getTotalAmount());
 
-        // Mark idempotency as completed — stored in the same transaction as the order
         idempotencyService.markComplete(idem.getId(), "ORDER", order.getId().toString(), 201);
-
         return buildOrderResponse(order);
     }
 
-    // ─── Read operations ─────────────────────────────────────────────────────
-
+    @Override
     @Transactional(readOnly = true)
     public PagedResponse<OrderListItemResponse> getMyOrders(Customer customer, OrderFilter filter, Pageable pageable) {
         Page<Order> page = orderRepository.filter(customer.getId(), filter.getStatus(), pageable);
@@ -281,6 +183,7 @@ public class OrderServiceImpl implements OrderService {
         return PagedResponse.of(items, page);
     }
 
+    @Override
     @Transactional(readOnly = true)
     public OrderResponse getOrderById(UUID orderId, Customer customer) {
         Order order = findOrThrow(orderId);
@@ -290,6 +193,7 @@ public class OrderServiceImpl implements OrderService {
         return buildOrderResponse(order);
     }
 
+    @Override
     @Transactional(readOnly = true)
     public OrderResponse getOrderByCode(String orderCode) {
         Order order = orderRepository.findByOrderCode(orderCode)
@@ -297,12 +201,7 @@ public class OrderServiceImpl implements OrderService {
         return buildOrderResponse(order);
     }
 
-    // ─── Admin read operations ───────────────────────────────────────────────
-
-    /**
-     * List all orders with optional filters — admin / staff view.
-     * Eagerly fetches customer + user in a single query to avoid N+1.
-     */
+    @Override
     @Transactional(readOnly = true)
     public PagedResponse<AdminOrderListItemResponse> getAllOrders(OrderAdminFilter filter, Pageable pageable) {
         Page<Order> page = orderRepository.adminFilter(
@@ -310,29 +209,18 @@ public class OrderServiceImpl implements OrderService {
         return PagedResponse.of(page.map(this::buildAdminListItemResponse));
     }
 
-    /** Get any order by ID without ownership check — admin use only. */
+    @Override
     @Transactional(readOnly = true)
     public OrderResponse getOrderByIdAdmin(UUID orderId) {
         return buildOrderResponse(findOrThrow(orderId));
     }
 
-    // ─── State machine transitions ──────────────────────────────────────────
-
-    /**
-     * Confirm order — PENDING → CONFIRMED or AWAITING_PAYMENT → CONFIRMED.
-     *
-     * <p>Per order-lifecycle.md:
-     * <ul>
-     *   <li>COD: always allowed</li>
-     *   <li>Online: requires payment_status = PAID</li>
-     * </ul>
-     */
+    @Override
     @Transactional
     public OrderResponse confirmOrder(UUID orderId) {
         Order order = findOrThrow(orderId);
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
 
-        // Allow confirmation from either PENDING or AWAITING_PAYMENT
         OrderStatus current = order.getStatus();
         OrderStatus target = OrderStatus.CONFIRMED;
 
@@ -341,7 +229,6 @@ public class OrderServiceImpl implements OrderService {
                     "Cannot transition from " + current + " to " + target);
         }
 
-        // Payment check for online payment
         if (order.getPaymentMethod() == PaymentMethod.ONLINE
                 && order.getPaymentStatus() != PaymentStatus.PAID) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID,
@@ -366,24 +253,14 @@ public class OrderServiceImpl implements OrderService {
         return buildOrderResponse(order);
     }
 
-    /**
-     * Cancel order (admin/staff) — no ownership check.
-     *
-     * <p>Cancellable from PENDING, AWAITING_PAYMENT, CONFIRMED.
-     * CONFIRMED orders can still be cancelled (before shipment).
-     */
+    @Override
     @Transactional
     public OrderResponse cancelOrder(UUID orderId) {
         Order order = findOrThrow(orderId);
         return doCancelOrder(order);
     }
 
-    /**
-     * Cancel a customer's own order — enforces ownership and restricts cancellable statuses.
-     *
-     * <p>Customers may only cancel from PENDING or AWAITING_PAYMENT.
-     * CONFIRMED orders require admin intervention.
-     */
+    @Override
     @Transactional
     public OrderResponse cancelMyOrder(UUID orderId, Customer customer) {
         Order order = findOrThrow(orderId);
@@ -392,7 +269,6 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(ErrorCode.ORDER_NOT_FOUND);
         }
 
-        // Customers may not cancel after admin has confirmed the order
         if (order.getStatus() == OrderStatus.CONFIRMED
                 || !order.getStatus().canTransitionTo(OrderStatus.CANCELLED)) {
             throw new AppException(ErrorCode.ORDER_CANNOT_CANCEL,
@@ -414,7 +290,6 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(target);
         order = orderRepository.save(order);
 
-        // Release all reserved stock for this order
         inventoryService.releaseStock("ORDER", order.getOrderCode());
 
         log.info("Order cancelled: code={} by={}", order.getOrderCode(), actor);
@@ -432,12 +307,7 @@ public class OrderServiceImpl implements OrderService {
         return buildOrderResponse(order);
     }
 
-    /**
-     * Complete order — DELIVERED → COMPLETED.
-     *
-     * <p>Commits reserved stock (decreases both on_hand and reserved).
-     * This represents the physical goods leaving the warehouse.
-     */
+    @Override
     @Transactional
     public OrderResponse completeOrder(UUID orderId) {
         Order order = findOrThrow(orderId);
@@ -453,7 +323,6 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(target);
         order = orderRepository.save(order);
 
-        // Commit stock — decrease both on_hand and reserved
         inventoryService.completeOrder("ORDER", order.getOrderCode());
 
         log.info("Order completed: code={} by={}", order.getOrderCode(), actor);
@@ -471,10 +340,7 @@ public class OrderServiceImpl implements OrderService {
         return buildOrderResponse(order);
     }
 
-    /**
-     * Mark order as PROCESSING — CONFIRMED → PROCESSING.
-     * Represents staff starting to pick/pack the order.
-     */
+    @Override
     @Transactional
     public OrderResponse processOrder(UUID orderId) {
         Order order = findOrThrow(orderId);
@@ -487,10 +353,7 @@ public class OrderServiceImpl implements OrderService {
         return buildOrderResponse(order);
     }
 
-    /**
-     * Mark order as DELIVERED — SHIPPED → DELIVERED.
-     * Represents confirmed delivery to the customer.
-     */
+    @Override
     @Transactional
     public OrderResponse deliverOrder(UUID orderId) {
         Order order = findOrThrow(orderId);
@@ -513,19 +376,129 @@ public class OrderServiceImpl implements OrderService {
         return buildOrderResponse(order);
     }
 
-    // ─── Internal helpers ────────────────────────────────────────────────────
-
     private Order findOrThrow(UUID id) {
         return orderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
     }
 
+    private CheckoutDraft loadCheckoutDraft(Customer customer, UUID addressId, boolean lockCart) {
+        Cart cart = lockCart
+                ? cartRepository.findByCustomerIdAndStatusWithLock(customer.getId(), CartStatus.ACTIVE)
+                    .orElseThrow(() -> new AppException(ErrorCode.CART_NOT_FOUND))
+                : cartRepository.findByCustomerIdAndStatus(customer.getId(), CartStatus.ACTIVE)
+                    .orElseThrow(() -> new AppException(ErrorCode.CART_NOT_FOUND));
+
+        List<CartItem> cartItems = cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId());
+        if (cartItems.isEmpty()) {
+            throw new AppException(ErrorCode.ORDER_EMPTY);
+        }
+
+        Address address = addressRepository.findByIdAndDeletedFalse(addressId)
+                .orElseThrow(() -> new AppException(ErrorCode.ADDRESS_NOT_FOUND));
+        if (!address.getCustomer().getId().equals(customer.getId())) {
+            throw new AppException(ErrorCode.ADDRESS_NOT_FOUND);
+        }
+
+        return new CheckoutDraft(cart, cartItems, address);
+    }
+
+    private Order buildDraftOrder(Customer customer, Address address, List<CartItem> cartItems,
+                                  CreateOrderRequest request, String orderCode) {
+        PaymentMethod paymentMethod = request.getPaymentMethod() != null
+                ? request.getPaymentMethod()
+                : PaymentMethod.COD;
+
+        Order order = new Order();
+        order.setCustomer(customer);
+        order.setOrderCode(orderCode);
+        order.setStatus(paymentMethod == PaymentMethod.ONLINE
+                ? OrderStatus.AWAITING_PAYMENT
+                : OrderStatus.PENDING);
+        order.setPaymentMethod(paymentMethod);
+        order.setPaymentStatus(PaymentStatus.PENDING);
+        order.setCustomerNote(request.getCustomerNote());
+        order.setVoucherCode(request.getVoucherCode());
+
+        order.setReceiverName(address.getReceiverName());
+        order.setReceiverPhone(address.getPhoneNumber());
+        order.setShippingStreet(address.getStreetAddress());
+        order.setShippingWard(address.getWard());
+        order.setShippingDistrict(address.getDistrict());
+        order.setShippingCity(address.getCity());
+        order.setShippingPostalCode(address.getPostalCode());
+
+        BigDecimal subTotal = BigDecimal.ZERO;
+        for (CartItem ci : cartItems) {
+            ProductVariant variant = ci.getVariant();
+            BigDecimal effectivePrice = resolveEffectivePrice(variant);
+            BigDecimal lineTotal = effectivePrice.multiply(BigDecimal.valueOf(ci.getQuantity()));
+
+            OrderItem item = new OrderItem();
+            item.setOrder(order);
+            item.setVariant(variant);
+            item.setProductName(variant.getProduct().getName());
+            item.setVariantName(variant.getVariantName());
+            item.setSku(variant.getSku());
+            item.setUnitPrice(variant.getBasePrice());
+            item.setSalePrice(variant.getSalePrice());
+            item.setQuantity(ci.getQuantity());
+            item.setLineTotal(lineTotal);
+
+            order.getItems().add(item);
+            subTotal = subTotal.add(lineTotal);
+        }
+
+        BigDecimal discountAmount = BigDecimal.ZERO;
+        order.setSubTotal(subTotal);
+        order.setDiscountAmount(discountAmount);
+        order.setShippingFee(BigDecimal.ZERO);
+        order.setTotalAmount(subTotal.subtract(discountAmount));
+        return order;
+    }
+
+    private CheckoutCarrierQuoteResponse applyShippingSelection(Order order, UUID carrierId) {
+        if (carrierId == null) {
+            order.setCarrierId(null);
+            order.setCarrierCode(null);
+            order.setCarrierName(null);
+            order.setCarrierProviderType(null);
+            order.setShippingFee(BigDecimal.ZERO);
+            order.setTotalAmount(order.getSubTotal().subtract(order.getDiscountAmount()));
+            return null;
+        }
+
+        CheckoutCarrierQuoteResponse quote = carrierCheckoutService.quote(carrierId, order);
+        order.setCarrierId(quote.getCarrierId());
+        order.setCarrierCode(quote.getCarrierCode());
+        order.setCarrierName(quote.getCarrierName());
+        order.setCarrierProviderType(quote.getCarrierProviderType());
+        order.setShippingFee(quote.getShippingFee() != null ? quote.getShippingFee() : BigDecimal.ZERO);
+        order.setTotalAmount(order.getSubTotal()
+                .subtract(order.getDiscountAmount())
+                .add(order.getShippingFee()));
+        return quote;
+    }
+
+    private OrderPreviewResponse buildPreviewResponse(Order order, CheckoutCarrierQuoteResponse quote) {
+        return OrderPreviewResponse.builder()
+                .carrierId(order.getCarrierId())
+                .carrierCode(order.getCarrierCode())
+                .carrierName(order.getCarrierName())
+                .carrierProviderType(order.getCarrierProviderType())
+                .shippingServiceName(quote != null ? quote.getServiceName() : null)
+                .paymentMethod(order.getPaymentMethod())
+                .subTotal(order.getSubTotal())
+                .discountAmount(order.getDiscountAmount())
+                .shippingFee(order.getShippingFee())
+                .totalAmount(order.getTotalAmount())
+                .voucherCode(order.getVoucherCode())
+                .customerNote(order.getCustomerNote())
+                .build();
+    }
+
     private OrderResponse buildOrderResponse(Order order) {
         List<OrderItem> items = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId());
-
-        OrderResponse response = orderMapper.toResponse(order);
-        // Override items with properly loaded list (avoid lazy loading issues)
-        OrderResponse.OrderResponseBuilder builder = OrderResponse.builder()
+        return OrderResponse.builder()
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
                 .customerId(order.getCustomer().getId())
@@ -539,6 +512,10 @@ public class OrderServiceImpl implements OrderService {
                 .shippingDistrict(order.getShippingDistrict())
                 .shippingCity(order.getShippingCity())
                 .shippingPostalCode(order.getShippingPostalCode())
+                .carrierId(order.getCarrierId())
+                .carrierCode(order.getCarrierCode())
+                .carrierName(order.getCarrierName())
+                .carrierProviderType(order.getCarrierProviderType())
                 .subTotal(order.getSubTotal())
                 .discountAmount(order.getDiscountAmount())
                 .shippingFee(order.getShippingFee())
@@ -546,9 +523,8 @@ public class OrderServiceImpl implements OrderService {
                 .voucherCode(order.getVoucherCode())
                 .customerNote(order.getCustomerNote())
                 .items(orderMapper.toItemResponses(items))
-                .createdAt(order.getCreatedAt());
-
-        return builder.build();
+                .createdAt(order.getCreatedAt())
+                .build();
     }
 
     private OrderListItemResponse buildListItemResponse(Order order) {
@@ -581,7 +557,6 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    /** Validates and applies an order status transition. */
     private void applyTransition(Order order, OrderStatus target, ErrorCode errorCode) {
         if (!order.getStatus().canTransitionTo(target)) {
             throw new AppException(errorCode,
@@ -590,4 +565,13 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(target);
     }
 
+    private BigDecimal resolveEffectivePrice(ProductVariant variant) {
+        return variant.getSalePrice() != null ? variant.getSalePrice() : variant.getBasePrice();
+    }
+
+    private record CheckoutDraft(
+            Cart cart,
+            List<CartItem> cartItems,
+            Address address
+    ) {}
 }

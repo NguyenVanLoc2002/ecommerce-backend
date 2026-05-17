@@ -250,6 +250,17 @@ app.cors.allowed-origins=http://localhost:3000,http://localhost:5173,http://loca
 app.jwt.secret=your_dev_secret_key
 app.jwt.access-token-expiration=3600000
 app.jwt.refresh-token-expiration=604800000
+
+# CARRIER
+app.carrier.mock-enabled=true
+app.carrier.config-encryption-key=${APP_CARRIER_CONFIG_ENCRYPTION_KEY:}
+app.carrier.webhook-public-base-url=${APP_CARRIER_WEBHOOK_PUBLIC_BASE_URL:}
+app.carrier.ahamove.enabled=${APP_CARRIER_AHAMOVE_ENABLED:false}
+app.carrier.ahamove.base-url=${APP_CARRIER_AHAMOVE_BASE_URL:https://partner-apistg.ahamove.com}
+app.carrier.ahamove.api-key=${APP_CARRIER_AHAMOVE_API_KEY:}
+app.carrier.ahamove.phone=${APP_CARRIER_AHAMOVE_PHONE:84338710667}
+app.carrier.ahamove.brand-name=${APP_CARRIER_AHAMOVE_BRAND_NAME:Locen Studio}
+app.carrier.ahamove.webhook-token=${APP_CARRIER_AHAMOVE_WEBHOOK_TOKEN:}
 ```
 
 **application-prod.properties**
@@ -280,7 +291,42 @@ app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS}
 app.jwt.secret=${JWT_SECRET}
 app.jwt.access-token-expiration=${JWT_ACCESS_EXPIRY:3600000}
 app.jwt.refresh-token-expiration=${JWT_REFRESH_EXPIRY:604800000}
+
+# CARRIER
+app.carrier.mock-enabled=${APP_CARRIER_MOCK_ENABLED:false}
+app.carrier.config-encryption-key=${APP_CARRIER_CONFIG_ENCRYPTION_KEY:}
+app.carrier.webhook-public-base-url=${APP_CARRIER_WEBHOOK_PUBLIC_BASE_URL:}
+app.carrier.ahamove.enabled=${APP_CARRIER_AHAMOVE_ENABLED:false}
+app.carrier.ahamove.base-url=${APP_CARRIER_AHAMOVE_BASE_URL:https://partner-apistg.ahamove.com}
+app.carrier.ahamove.api-key=${APP_CARRIER_AHAMOVE_API_KEY:}
+app.carrier.ahamove.phone=${APP_CARRIER_AHAMOVE_PHONE:84338710667}
+app.carrier.ahamove.brand-name=${APP_CARRIER_AHAMOVE_BRAND_NAME:Locen Studio}
+app.carrier.ahamove.webhook-token=${APP_CARRIER_AHAMOVE_WEBHOOK_TOKEN:}
 ```
+
+### AhaMove carrier config
+
+- Base staging host: `https://partner-apistg.ahamove.com`
+- Partner portal: `https://partnerstg.ahamove.com/v2/records`
+- Account phone: `84338710667`
+- Brand/store name: `Locen Studio`
+- Production admin/backend pattern:
+  - use typed AhaMove integration APIs under `/api/v1/admin/carriers/{id}/integration/ahamove`
+  - treat `PUT /api/v1/admin/carriers/{id}/config` and raw `configJson` as legacy/backward-compatible only
+- Sensitive values:
+  - never hard-code or commit real `apiKey`
+  - store secrets in encrypted carrier config or environment variables only
+- Required backend deployment property for webhook setup UI:
+  - `app.carrier.webhook-public-base-url`
+- Typed AhaMove integration fields required for a usable pickup flow:
+  - `phone`
+  - `pickupAddress`
+  - `pickupPhone`
+  - recommended: `pickupShortAddress`, `pickupName`, `defaultServiceCode`
+- Legacy compatibility:
+  - the backend still mirrors typed AhaMove fields into `configJson` so the existing provider runtime keeps working during the transition
+- Webhook receiver:
+  - `POST /api/v1/shipments/webhook/ahamove`
 
 ---
 

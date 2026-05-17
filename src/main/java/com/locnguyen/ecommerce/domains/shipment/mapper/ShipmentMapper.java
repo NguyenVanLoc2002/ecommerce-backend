@@ -11,20 +11,25 @@ import java.util.List;
 @Mapper(componentModel = "spring")
 public interface ShipmentMapper {
 
-    /**
-     * Full response including tracking event timeline.
-     * Use for single-item GET endpoints.
-     */
     default ShipmentResponse toResponse(Shipment shipment) {
-        if (shipment == null) return null;
+        if (shipment == null) {
+            return null;
+        }
 
         return ShipmentResponse.builder()
                 .id(shipment.getId())
                 .orderId(shipment.getOrder().getId())
                 .orderCode(shipment.getOrder().getOrderCode())
                 .shipmentCode(shipment.getShipmentCode())
+                .carrierId(shipment.getCarrierEntity() != null ? shipment.getCarrierEntity().getId() : null)
+                .carrierCode(shipment.getCarrierEntity() != null ? shipment.getCarrierEntity().getCode() : null)
+                .carrierProviderType(shipment.getCarrierEntity() != null
+                        ? shipment.getCarrierEntity().getProviderType() : null)
                 .carrier(shipment.getCarrier())
+                .carrierShipmentId(shipment.getCarrierShipmentId())
                 .trackingNumber(shipment.getTrackingNumber())
+                .providerStatus(shipment.getProviderStatus())
+                .providerTrackingUrl(shipment.getProviderTrackingUrl())
                 .status(shipment.getStatus())
                 .estimatedDeliveryDate(shipment.getEstimatedDeliveryDate())
                 .deliveredAt(shipment.getDeliveredAt())
@@ -36,20 +41,25 @@ public interface ShipmentMapper {
                 .build();
     }
 
-    /**
-     * Lightweight response without tracking events.
-     * Use for paginated list views.
-     */
     default ShipmentResponse toListItemResponse(Shipment shipment) {
-        if (shipment == null) return null;
+        if (shipment == null) {
+            return null;
+        }
 
         return ShipmentResponse.builder()
                 .id(shipment.getId())
                 .orderId(shipment.getOrder().getId())
                 .orderCode(shipment.getOrder().getOrderCode())
                 .shipmentCode(shipment.getShipmentCode())
+                .carrierId(shipment.getCarrierEntity() != null ? shipment.getCarrierEntity().getId() : null)
+                .carrierCode(shipment.getCarrierEntity() != null ? shipment.getCarrierEntity().getCode() : null)
+                .carrierProviderType(shipment.getCarrierEntity() != null
+                        ? shipment.getCarrierEntity().getProviderType() : null)
                 .carrier(shipment.getCarrier())
+                .carrierShipmentId(shipment.getCarrierShipmentId())
                 .trackingNumber(shipment.getTrackingNumber())
+                .providerStatus(shipment.getProviderStatus())
+                .providerTrackingUrl(shipment.getProviderTrackingUrl())
                 .status(shipment.getStatus())
                 .estimatedDeliveryDate(shipment.getEstimatedDeliveryDate())
                 .deliveredAt(shipment.getDeliveredAt())
@@ -59,7 +69,9 @@ public interface ShipmentMapper {
     }
 
     default ShipmentEventResponse toEventResponse(ShipmentEvent event) {
-        if (event == null) return null;
+        if (event == null) {
+            return null;
+        }
 
         return ShipmentEventResponse.builder()
                 .id(event.getId())

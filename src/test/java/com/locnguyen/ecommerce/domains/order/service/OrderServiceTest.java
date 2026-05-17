@@ -5,6 +5,9 @@ import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.domains.address.entity.Address;
 import com.locnguyen.ecommerce.domains.address.repository.AddressRepository;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
+import com.locnguyen.ecommerce.domains.carrier.dto.CheckoutCarrierQuoteResponse;
+import com.locnguyen.ecommerce.domains.carrier.enums.CarrierProviderType;
+import com.locnguyen.ecommerce.domains.carrier.service.CarrierCheckoutService;
 import com.locnguyen.ecommerce.domains.cart.entity.Cart;
 import com.locnguyen.ecommerce.domains.cart.entity.CartItem;
 import com.locnguyen.ecommerce.domains.cart.enums.CartStatus;
@@ -16,6 +19,7 @@ import com.locnguyen.ecommerce.domains.inventory.entity.Warehouse;
 import com.locnguyen.ecommerce.domains.inventory.repository.InventoryRepository;
 import com.locnguyen.ecommerce.domains.inventory.service.InventoryService;
 import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
+import com.locnguyen.ecommerce.domains.order.dto.OrderPreviewResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.entity.OrderItem;
@@ -83,6 +87,7 @@ class OrderServiceTest {
     @Mock AuditLogService auditLogService;
     @Mock NotificationService notificationService;
     @Mock IdempotencyService idempotencyService;
+    @Mock CarrierCheckoutService carrierCheckoutService;
 
     @InjectMocks OrderServiceImpl orderService;
 
@@ -171,9 +176,14 @@ class OrderServiceTest {
     }
 
     private CreateOrderRequest createRequest(UUID addressId, String paymentMethod) {
+        return createRequest(addressId, paymentMethod, null);
+    }
+
+    private CreateOrderRequest createRequest(UUID addressId, String paymentMethod, UUID carrierId) {
         CreateOrderRequest req = new CreateOrderRequest();
         req.setShippingAddressId(addressId);
         req.setPaymentMethod(paymentMethod == null ? null : PaymentMethod.valueOf(paymentMethod));
+        req.setCarrierId(carrierId);
         return req;
     }
 
@@ -361,6 +371,40 @@ class OrderServiceTest {
         }
 
         @Test
+        void selected_carrier_applies_shipping_fee_and_snapshot_fields() {
+            Customer cust = customer(uuid(1));
+            Cart cart = activeCart(uuid(5), cust);
+            ProductVariant v = variant(uuid(1), new BigDecimal("100000"), null);
+            CartItem ci = cartItem(cart, v, 1);
+            Address addr = address(uuid(10), cust);
+            Inventory inv = inventory(uuid(20), v, 10, 0);
+            UUID carrierId = uuid(77);
+
+            stubSuccessfulCreateOrder(cust, cart, List.of(ci), addr, List.of(inv));
+            when(carrierCheckoutService.quote(eq(carrierId), any(Order.class)))
+                    .thenReturn(CheckoutCarrierQuoteResponse.builder()
+                            .carrierId(carrierId)
+                            .carrierCode("AHAMOVE")
+                            .carrierName("AhaMove")
+                            .carrierProviderType(CarrierProviderType.AHAMOVE)
+                            .shippingFee(new BigDecimal("25000"))
+                            .currency("VND")
+                            .serviceName("BIKE")
+                            .build());
+
+            orderService.createOrder(cust, createRequest(uuid(10), "COD", carrierId), "idem-key");
+
+            ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+            verify(orderRepository).save(captor.capture());
+            assertThat(captor.getValue().getCarrierId()).isEqualTo(carrierId);
+            assertThat(captor.getValue().getCarrierCode()).isEqualTo("AHAMOVE");
+            assertThat(captor.getValue().getCarrierName()).isEqualTo("AhaMove");
+            assertThat(captor.getValue().getCarrierProviderType()).isEqualTo(CarrierProviderType.AHAMOVE);
+            assertThat(captor.getValue().getShippingFee()).isEqualByComparingTo("25000");
+            assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("125000");
+        }
+
+        @Test
         void cart_is_marked_CHECKED_OUT_after_order_creation() {
             Customer cust = customer(uuid(1));
             Cart cart = activeCart(uuid(5), cust);
@@ -493,6 +537,8 @@ class OrderServiceTest {
                                                 Address addr, List<Inventory> inventories) {
             when(cartRepository.findByCustomerIdAndStatusWithLock(cust.getId(), CartStatus.ACTIVE))
                     .thenReturn(Optional.of(cart));
+            when(cartRepository.findByCustomerIdAndStatus(cust.getId(), CartStatus.ACTIVE))
+                    .thenReturn(Optional.of(cart));
             when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId()))
                     .thenReturn(items);
             when(addressRepository.findByIdAndDeletedFalse(addr.getId())).thenReturn(Optional.of(addr));
@@ -502,6 +548,45 @@ class OrderServiceTest {
             when(inventoryRepository.findByVariantIdIn(variantIds)).thenReturn(inventories);
             when(orderItemRepository.findByOrderIdOrderByCreatedAtAsc(any(UUID.class)))
                     .thenReturn(List.of());
+        }
+    }
+
+    @Nested
+    class PreviewOrder {
+
+        @Test
+        void previewOrder_returns_server_calculated_shipping_and_total() {
+            Customer cust = customer(uuid(1));
+            Cart cart = activeCart(uuid(5), cust);
+            ProductVariant v = variant(uuid(1), new BigDecimal("150000"), null);
+            CartItem ci = cartItem(cart, v, 2);
+            Address addr = address(uuid(10), cust);
+            UUID carrierId = uuid(88);
+
+            when(cartRepository.findByCustomerIdAndStatus(cust.getId(), CartStatus.ACTIVE))
+                    .thenReturn(Optional.of(cart));
+            when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId()))
+                    .thenReturn(List.of(ci));
+            when(addressRepository.findByIdAndDeletedFalse(addr.getId())).thenReturn(Optional.of(addr));
+            when(carrierCheckoutService.quote(eq(carrierId), any(Order.class)))
+                    .thenReturn(CheckoutCarrierQuoteResponse.builder()
+                            .carrierId(carrierId)
+                            .carrierCode("MOCK")
+                            .carrierName("Mock Express")
+                            .carrierProviderType(CarrierProviderType.MOCK)
+                            .shippingFee(new BigDecimal("30000"))
+                            .currency("VND")
+                            .serviceName("Mock same-day")
+                            .build());
+
+            OrderPreviewResponse response = orderService.previewOrder(
+                    cust, createRequest(uuid(10), "ONLINE", carrierId));
+
+            assertThat(response.getCarrierId()).isEqualTo(carrierId);
+            assertThat(response.getCarrierCode()).isEqualTo("MOCK");
+            assertThat(response.getShippingFee()).isEqualByComparingTo("30000");
+            assertThat(response.getTotalAmount()).isEqualByComparingTo("330000");
+            assertThat(response.getShippingServiceName()).isEqualTo("Mock same-day");
         }
     }
 

@@ -7,6 +7,7 @@ import com.locnguyen.ecommerce.domains.idempotency.service.IdempotencyService;
 import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
 import com.locnguyen.ecommerce.domains.order.dto.OrderFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderListItemResponse;
+import com.locnguyen.ecommerce.domains.order.dto.OrderPreviewResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
 import com.locnguyen.ecommerce.domains.user.service.UserService;
@@ -47,6 +48,12 @@ public class OrderController {
         String key = idempotencyService.validateKey(rawKey);
         return ApiResponse.created(
                 orderService.createOrder(userService.getCurrentCustomer(), request, key));
+    }
+
+    @Operation(summary = "Preview checkout totals including shipping fee quote")
+    @PostMapping("/preview")
+    public ApiResponse<OrderPreviewResponse> previewOrder(@Valid @RequestBody CreateOrderRequest request) {
+        return ApiResponse.success(orderService.previewOrder(userService.getCurrentCustomer(), request));
     }
 
     @Operation(summary = "List my orders (paginated, filterable by status)")

@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.order.entity;
 
 import com.locnguyen.ecommerce.common.auditing.BaseEntity;
+import com.locnguyen.ecommerce.domains.carrier.enums.CarrierProviderType;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
@@ -15,6 +16,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Order entity — immutable after creation (no soft delete).
@@ -67,6 +69,19 @@ public class Order extends BaseEntity {
 
     @Column(name = "shipping_postal_code", length = 20)
     private String shippingPostalCode;
+
+    @Column(name = "carrier_id")
+    private UUID carrierId;
+
+    @Column(name = "carrier_code", length = 50)
+    private String carrierCode;
+
+    @Column(name = "carrier_name", length = 200)
+    private String carrierName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "carrier_provider_type", length = 100)
+    private CarrierProviderType carrierProviderType;
 
     // ─── Pricing ────────────────────────────────────────────────────────────
 

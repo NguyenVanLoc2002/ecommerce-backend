@@ -472,8 +472,12 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 
 ### Order DTOs
 
+- `CheckoutCarrierOptionResponse`
+  - `id`, `code`, `name`, `providerType`
+  - `logoUrl`, `description`
 - `CreateOrderRequest`
   - `shippingAddressId`: required
+  - `carrierId`: optional selected carrier ID for server-side shipping quote and shipment preference
   - `paymentMethod`: optional
   - `customerNote`: optional, max 500
   - `voucherCode`: optional
@@ -487,13 +491,53 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `status`, `paymentMethod`, `paymentStatus`
   - `receiverName`, `receiverPhone`
   - `shippingStreet`, `shippingWard`, `shippingDistrict`, `shippingCity`, `shippingPostalCode`
+  - `carrierId`, `carrierCode`, `carrierName`, `carrierProviderType`
   - `subTotal`, `discountAmount`, `shippingFee`, `totalAmount`
   - `voucherCode`, `customerNote`
   - `items`
   - `createdAt`
+- `OrderPreviewResponse`
+  - `carrierId`, `carrierCode`, `carrierName`, `carrierProviderType`
+  - `shippingServiceName`
+  - `paymentMethod`
+  - `subTotal`, `discountAmount`, `shippingFee`, `totalAmount`
+  - `voucherCode`, `customerNote`
 - `OrderItemResponse`
   - `id`, `variantId`, `productName`, `variantName`, `sku`
   - `unitPrice`, `salePrice`, `quantity`, `lineTotal`
+
+### GET `/api/v1/carriers/checkout-options`
+
+- Access: authenticated customer flow
+- Description: list active carriers currently available for customer checkout
+- Response:
+  - `ApiResponse<List<CheckoutCarrierOptionResponse>>`
+- Current service behavior:
+  - returns only carriers with `status = ACTIVE`
+  - excludes provider types that do not have a registered provider bean
+  - for real providers such as `AHAMOVE`, excludes carriers whose config is missing or disabled
+  - response does not include secrets or fee quotes
+
+### POST `/api/v1/orders/preview`
+
+- Access: authenticated customer flow
+- Description: preview checkout totals using the current active cart, selected shipping address, and optional selected carrier
+- Request body:
+  - `CreateOrderRequest`
+- Response:
+  - `ApiResponse<OrderPreviewResponse>`
+- Current service behavior:
+  - uses the customer's active cart and validates address ownership
+  - defaults `paymentMethod` to `COD` when omitted
+  - when `carrierId` is omitted:
+    - `shippingFee = 0`
+    - `totalAmount = subTotal - discountAmount`
+  - when `carrierId` is provided:
+    - resolves the carrier through `CarrierCheckoutService`
+    - calculates shipping fee server-side via the provider abstraction
+    - applies the quote to `shippingFee` and `totalAmount`
+    - returns a carrier snapshot plus optional `shippingServiceName`
+  - `voucherCode` is stored in the preview response, but discount calculation is currently not applied in service logic
 
 ### POST `/api/v1/orders`
 
@@ -510,8 +554,11 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `paymentMethod` defaults to `COD` when omitted
   - `COD` orders start at `PENDING`
   - `ONLINE` orders start at `AWAITING_PAYMENT`
+  - when `carrierId` is provided, the backend recalculates shipping fee server-side during checkout and persists the selected carrier snapshot on the order
+  - when `carrierId` is omitted, the order is still created with `shippingFee = 0`
   - stock is reserved during order creation
   - `voucherCode` is stored on the order, but discount calculation is currently not applied in service logic
+  - the persisted order snapshot includes `carrierId`, `carrierCode`, `carrierName`, and `carrierProviderType` when a carrier was selected
 
 ### GET `/api/v1/orders`
 
@@ -698,7 +745,9 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 
 - `ShipmentResponse`
   - `id`, `orderId`, `orderCode`, `shipmentCode`
-  - `carrier`, `trackingNumber`, `status`
+  - `carrierId`, `carrierCode`, `carrierProviderType`
+  - `carrier`, `carrierShipmentId`, `trackingNumber`
+  - `providerStatus`, `providerTrackingUrl`, `status`
   - `estimatedDeliveryDate`, `deliveredAt`
   - `shippingFee`, `note`
   - `events`
@@ -712,6 +761,16 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - Description: get shipment for an owned order
 - Response:
   - `ApiResponse<ShipmentResponse>`
+
+### POST `/api/v1/shipments/webhook/ahamove`
+
+- Access: public server-to-server endpoint
+- Description: AhaMove shipment status callback receiver. Verifies the configured shared webhook token before any shipment mutation, ignores duplicate events idempotently, and stores sanitized webhook logs for valid requests.
+- Current HTTP status:
+  - `204 No Content`
+- Security:
+  - accepts one of `X-Webhook-Token`, `apikey`, or `Authorization: Bearer <token>`
+  - invalid token/signature is rejected with `CARRIER_WEBHOOK_SIGNATURE_INVALID`
 
 ---
 

@@ -1,19 +1,22 @@
 package com.locnguyen.ecommerce.domains.shipment.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.UUID;
 
 @Getter
 @Setter
 @Schema(description = "Request to update shipment details. Null fields are ignored.")
 public class UpdateShipmentRequest {
+
+    private UUID carrierId;
 
     @Size(max = 100)
     private String carrier;

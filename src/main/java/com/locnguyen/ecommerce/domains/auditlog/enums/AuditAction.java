@@ -44,6 +44,10 @@ public enum AuditAction {
     BRAND_CREATED,
     BRAND_UPDATED,
     BRAND_DELETED,
+    CARRIER_CREATED,
+    CARRIER_UPDATED,
+    CARRIER_CONFIG_UPDATED,
+    CARRIER_STATUS_CHANGED,
 
     // ─── Order ───────────────────────────────────────────────────────────────
     ORDER_CREATED,

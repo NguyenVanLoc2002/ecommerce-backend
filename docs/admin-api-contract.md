@@ -511,6 +511,220 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
 
 ---
 
+## 4.b Carrier
+
+Carrier catalog and per-store carrier configuration used by shipment creation.
+
+### DTOs
+
+- `CarrierFilter`
+  - `keyword`
+  - `providerType`
+  - `status`
+  - `enabled`
+- `CarrierResponse`
+  - `id`, `code`, `name`, `providerType`, `status`
+  - `logoUrl`, `description`
+  - `configEnabled`, `baseUrl`
+  - `hasApiKey`, `hasSecretKey`, `hasWebhookSecret`
+  - `configJson`: legacy compatibility field; admin UI should treat this as read-only debug data for provider-specific config that has not been migrated yet
+  - `connectionStatus`, `lastHealthCheckAt`, `lastHealthCheckError`
+  - `createdAt`, `updatedAt`
+- `CreateCarrierRequest`
+  - `code`: required, max 50
+  - `name`: required, max 200
+  - `providerType`: required enum, currently supports `MANUAL`, `MOCK`, `AHAMOVE`, `GHN`, `GHTK`
+  - `status`: optional, defaults to `ACTIVE`
+  - `logoUrl`, `description`: optional, max 500
+- `UpdateCarrierRequest`
+  - partial update version of:
+  - `code`, `name`, `providerType`, `status`, `logoUrl`, `description`
+- `UpdateCarrierConfigRequest`
+  - `apiKey`, `secretKey`, `webhookSecret`: optional plain-text inputs; server encrypts before persistence
+  - `baseUrl`: optional, max 500
+  - `enabled`: optional boolean
+  - `configJson`: optional JSON string, must be valid JSON when provided
+  - legacy compatibility only for `AHAMOVE`
+  - the backend now mirrors typed AhaMove fields into this JSON for backward compatibility with existing provider code
+- `UpdateAhamoveIntegrationRequest`
+  - `apiKey`, `secretKey`, `webhookSecret`: optional plain-text secret inputs; encrypted before persistence
+  - `baseUrl`: optional, max 500
+  - `enabled`: optional boolean
+  - `phone`: optional, max 50, provider account phone used to mint AhaMove bearer tokens
+  - `brandName`: optional, max 200
+  - `pickupAddress`: optional, max 500
+  - `pickupShortAddress`: optional, max 255
+  - `pickupName`: optional, max 200
+  - `pickupPhone`: optional, max 50
+  - `pickupLat`: optional decimal, range `[-90, 90]`
+  - `pickupLng`: optional decimal, range `[-180, 180]`
+  - `defaultServiceCode`: optional, max 100, staging default usually `BIKE`
+  - `defaultPaymentMethod`: optional, max 50, typically `CASH`
+- `AhamoveIntegrationResponse`
+  - `carrierId`, `carrierCode`, `carrierName`
+  - `enabled`, `baseUrl`
+  - `hasApiKey`, `hasSecretKey`, `hasWebhookSecret`
+  - `phone`, `brandName`
+  - `pickupAddress`, `pickupShortAddress`, `pickupName`, `pickupPhone`
+  - `pickupLat`, `pickupLng`
+  - `defaultServiceCode`, `defaultPaymentMethod`
+  - `connectionStatus`, `lastHealthCheckAt`, `lastHealthCheckError`
+  - `maskedWebhookToken`
+- `TestAhamoveConnectionRequest`
+  - optional connection overrides used only for the current test:
+  - `apiKey`, `baseUrl`, `phone`
+- `AhamoveConnectionTestResponse`
+  - `success`
+  - `status`: `NOT_CONFIGURED`, `CONNECTED`, `FAILED`
+  - `message`
+  - `resolvedBaseUrl`, `resolvedPhone`
+- `AhamoveWebhookTokenResponse`
+  - `token`: raw token returned exactly once when generated
+  - `maskedToken`
+  - `generatedAt`
+- `AhamoveWebhookSetupResponse`
+  - `webhookUrl`
+  - `authHeader`
+  - `authScheme`
+  - `hasWebhookToken`
+  - `maskedWebhookToken`
+  - `instructions`
+- `ToggleCarrierRequest`
+  - `active`: required boolean
+
+### GET `/api/v1/admin/carriers`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: list carriers
+- Filters:
+  - `keyword`, `providerType`, `status`, `enabled`
+- Pagination:
+  - `page`, `size`, `sort`
+  - default: `size=20`, `sort=createdAt,asc`
+- Response:
+  - `ApiResponse<PagedResponse<CarrierResponse>>`
+
+### GET `/api/v1/admin/carriers/{id}`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: get one carrier and its config flags
+- Response:
+  - `ApiResponse<CarrierResponse>`
+
+### POST `/api/v1/admin/carriers`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: create a carrier catalog entry
+- Request body:
+  - `CreateCarrierRequest`
+- Current HTTP status:
+  - `201 Created`
+- Response:
+  - `ApiResponse<CarrierResponse>`
+
+### PATCH `/api/v1/admin/carriers/{id}`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: partial update carrier metadata
+- Request body:
+  - `UpdateCarrierRequest`
+- Response:
+  - `ApiResponse<CarrierResponse>`
+
+### PUT `/api/v1/admin/carriers/{id}/config`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: save or update generic per-store carrier config
+- Production note:
+  - this endpoint remains supported for backward compatibility
+  - production admin UI should use provider-specific typed integration endpoints when available
+- Sensitive-field handling:
+  - raw secrets are accepted only in the request body
+  - secrets are encrypted before persistence
+  - responses never return raw `apiKey`, `secretKey`, or `webhookSecret`
+  - responses expose only boolean flags: `hasApiKey`, `hasSecretKey`, `hasWebhookSecret`
+- Validation:
+  - `configJson` must be valid JSON when present
+- Response:
+  - `ApiResponse<CarrierResponse>`
+
+### GET `/api/v1/admin/carriers/{id}/integration/ahamove`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: get typed production-facing AhaMove integration settings for one carrier
+- Response:
+  - `ApiResponse<AhamoveIntegrationResponse>`
+
+### PUT `/api/v1/admin/carriers/{id}/integration/ahamove`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: save structured AhaMove integration settings without forcing admin users to hand-write `configJson`
+- Behavior:
+  - secrets are encrypted before persistence
+  - typed pickup/service/account fields are persisted in dedicated columns
+  - the backend also mirrors typed AhaMove values into legacy `configJson` for provider backward compatibility
+  - when `enabled=true`, the backend validates that the effective config is complete enough for runtime use
+- AhaMove staging notes:
+  - base URL default: `https://partner-apistg.ahamove.com`
+  - partner portal: `https://partnerstg.ahamove.com/v2/records`
+  - store/account phone: `84338710667`
+  - brand/store name: `Locen Studio`
+  - never store real API keys in docs or source; use encrypted carrier config or env placeholders only
+- Response:
+  - `ApiResponse<AhamoveIntegrationResponse>`
+
+### POST `/api/v1/admin/carriers/{id}/integration/ahamove/test-connection`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: validate that the current or overridden AhaMove credentials can mint a provider access token
+- Request body:
+  - `TestAhamoveConnectionRequest`
+- Behavior:
+  - safe transient test only; does not create a shipment
+  - if a persisted carrier config exists, the backend updates `connectionStatus`, `lastHealthCheckAt`, and `lastHealthCheckError`
+- Response:
+  - `ApiResponse<AhamoveConnectionTestResponse>`
+
+### POST `/api/v1/admin/carriers/{id}/integration/ahamove/webhook-token`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: rotate and persist a new webhook token for AhaMove callbacks
+- Behavior:
+  - returns the raw token exactly once in the response
+  - subsequent read APIs return only a masked value
+- Response:
+  - `ApiResponse<AhamoveWebhookTokenResponse>`
+
+### GET `/api/v1/admin/carriers/{id}/integration/ahamove/webhook-setup`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: return the public webhook URL and header/token setup instructions for the AhaMove partner portal
+- Runtime prerequisite:
+  - `app.carrier.webhook-public-base-url` must be configured on the backend deployment
+- Response:
+  - `ApiResponse<AhamoveWebhookSetupResponse>`
+
+### PATCH `/api/v1/admin/carriers/{id}/toggle`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: enable or disable a carrier catalog entry by switching `status` between `ACTIVE` and `INACTIVE`
+- Request body:
+  - `ToggleCarrierRequest`
+- Response:
+  - `ApiResponse<CarrierResponse>`
+
+### Carrier error codes
+
+- `CARRIER_NOT_FOUND`
+- `CARRIER_CONFIG_MISSING`
+- `CARRIER_CONFIG_DISABLED`
+- `CARRIER_REQUEST_FAILED`
+- `CARRIER_WEBHOOK_SIGNATURE_INVALID`
+- `CARRIER_PROVIDER_STATUS_UNKNOWN`
+- `CARRIER_PROVIDER_NOT_SUPPORTED`
+
+---
+
 ## 5. Inventory
 
 ### DTOs
@@ -728,6 +942,7 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
   - `status`, `paymentMethod`, `paymentStatus`
   - `receiverName`, `receiverPhone`
   - `shippingStreet`, `shippingWard`, `shippingDistrict`, `shippingCity`, `shippingPostalCode`
+  - `carrierId`, `carrierCode`, `carrierName`, `carrierProviderType`
   - `subTotal`, `discountAmount`, `shippingFee`, `totalAmount`
   - `voucherCode`, `customerNote`
   - `items`
@@ -755,6 +970,9 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
 - Description: get order by ID
 - Response:
   - `ApiResponse<OrderResponse>`
+- Order/carrier note:
+  - when the customer selected a checkout carrier, the order response includes a persisted carrier snapshot
+  - shipment creation may reuse this snapshot if the admin shipment request omits both `carrierId` and `carrier`
 
 ### GET `/api/v1/admin/orders/code/{orderCode}`
 
@@ -888,13 +1106,16 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
 - `ShipmentFilter`
   - `orderId`
   - `orderCode`
+  - `carrierId`
   - `carrier`
   - `status`
   - `dateFrom`
   - `dateTo`
 - `ShipmentResponse`
   - `id`, `orderId`, `orderCode`, `shipmentCode`
-  - `carrier`, `trackingNumber`, `status`
+  - `carrierId`, `carrierCode`, `carrierProviderType`
+  - `carrier`, `carrierShipmentId`, `trackingNumber`
+  - `providerStatus`, `providerTrackingUrl`, `status`
   - `estimatedDeliveryDate`, `deliveredAt`
   - `shippingFee`, `note`
   - `events`
@@ -903,24 +1124,39 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
   - `id`, `status`, `location`, `description`, `eventTime`
 - `CreateShipmentRequest`
   - `orderId`: required
-  - `carrier`: required, max 100
+  - `carrierId`: optional
+  - `carrier`: optional, max 100
+  - resolution order:
+    - explicit `carrierId` from request
+    - otherwise `carrierId` already stored on the order from customer checkout
+    - otherwise explicit free-text `carrier` from request
+    - otherwise free-text `carrierName` already stored on the order
+  - validation fails only when neither the request nor the order provides a carrier selection
+  - when an effective `carrierId` is available, the backend resolves the configured carrier provider and may generate `trackingNumber` / `carrierShipmentId`
+  - when only free-text `carrier` is available, manual shipment mode is used
   - `trackingNumber`: optional, max 200
   - `estimatedDeliveryDate`: optional
   - `shippingFee`: optional, decimal >= 0
   - `note`: optional, max 500
 - `UpdateShipmentRequest`
   - partial update version of:
-  - `carrier`, `trackingNumber`, `estimatedDeliveryDate`, `shippingFee`, `note`
+  - `carrierId`, `carrier`, `trackingNumber`, `estimatedDeliveryDate`, `shippingFee`, `note`
 - `UpdateShipmentStatusRequest`
   - `status`: required
   - `location`: optional, max 255
   - `description`: required, max 500
   - `eventTime`: optional
+- `CancelProviderShipmentRequest`
+  - `reason`: required, max 500
 
 ### POST `/api/v1/admin/shipments`
 
 - Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
 - Description: create shipment for an order
+- Backward compatibility:
+  - legacy manual flow using free-text `carrier` remains supported
+  - provider-backed flow is enabled by passing `carrierId`
+  - if the order already stores a selected carrier from customer checkout, admin may omit both `carrierId` and `carrier` and let the service reuse the order snapshot
 - Request body:
   - `CreateShipmentRequest`
 - Current HTTP status:
@@ -947,7 +1183,7 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
 - Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
 - Description: list shipments
 - Filters:
-  - `orderId`, `orderCode`, `carrier`, `status`, `dateFrom`, `dateTo`
+  - `orderId`, `orderCode`, `carrierId`, `carrier`, `status`, `dateFrom`, `dateTo`
 - Pagination:
   - `page`, `size`, `sort`
   - default: `size=20`, `sort=createdAt,asc`
@@ -973,6 +1209,47 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
   - `UpdateShipmentStatusRequest`
 - Response:
   - `ApiResponse<ShipmentResponse>`
+
+### POST `/api/v1/admin/shipments/{id}/provider/sync`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: fetch the latest shipment/order state from the configured carrier provider and update the internal shipment timeline idempotently
+- Response:
+  - `ApiResponse<ShipmentResponse>`
+
+### POST `/api/v1/admin/shipments/{id}/provider/cancel`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: cancel the provider shipment/order when the carrier still allows cancellation; records a shipment event and stores the provider status returned by the carrier flow
+- Request body:
+  - `CancelProviderShipmentRequest`
+- Response:
+  - `ApiResponse<ShipmentResponse>`
+
+### AhaMove shipment integration notes
+
+- The current real-provider integration is `AHAMOVE`
+- Shipment create flow uses:
+  - `POST /v3/accounts/token`
+  - `POST /v3/orders`
+- Shipment tracking sync uses:
+  - `GET /v3/orders/{order_id}`
+  - `GET /v3/orders/{order_id}/shared-link`
+- Cancellation uses:
+  - `DELETE /v3/orders/{order_id}`
+  - fallback `DELETE /v3/orders/tracks` when only tracking number is available
+- Public webhook endpoint:
+  - `POST /api/v1/shipments/webhook/ahamove`
+- Internal status mapping:
+  - `IDLE`, `ASSIGNING` -> `PENDING`
+  - `ACCEPTED` -> `PICKING`
+  - `IN_PROCESS` -> `IN_TRANSIT`
+  - `COMPLETING` -> `OUT_FOR_DELIVERY`
+  - `COMPLETED` -> `DELIVERED`
+  - `CANCELLED`, path failure -> `FAILED`
+  - `IN_RETURN`, `RETURNED` -> `RETURNED`
+- Known integration limitation:
+  - the current order domain does not persist a dedicated pickup/store address, so AhaMove pickup data must be provided in carrier `configJson`
 
 ---
 

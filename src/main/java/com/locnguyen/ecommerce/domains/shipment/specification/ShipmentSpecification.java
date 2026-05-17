@@ -29,6 +29,10 @@ public class ShipmentSpecification {
                 ));
             }
 
+            if (filter.getCarrierId() != null) {
+                predicates.add(cb.equal(root.get("carrierEntity").get("id"), filter.getCarrierId()));
+            }
+
             if (filter.getCarrier() != null && !filter.getCarrier().isBlank()) {
                 predicates.add(cb.like(
                         cb.upper(root.get("carrier")),

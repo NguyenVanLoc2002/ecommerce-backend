@@ -75,4 +75,18 @@ public class AdminShipmentController {
             @Valid @RequestBody UpdateShipmentStatusRequest request) {
         return ApiResponse.success(shipmentService.updateStatus(id, request));
     }
+
+    @Operation(summary = "Sync shipment tracking from the carrier provider")
+    @PostMapping("/{id}/provider/sync")
+    public ApiResponse<ShipmentResponse> syncProviderTracking(@PathVariable UUID id) {
+        return ApiResponse.success(shipmentService.syncProviderTracking(id));
+    }
+
+    @Operation(summary = "Cancel the provider shipment/order")
+    @PostMapping("/{id}/provider/cancel")
+    public ApiResponse<ShipmentResponse> cancelProviderShipment(
+            @PathVariable UUID id,
+            @Valid @RequestBody CancelProviderShipmentRequest request) {
+        return ApiResponse.success(shipmentService.cancelProviderShipment(id, request));
+    }
 }

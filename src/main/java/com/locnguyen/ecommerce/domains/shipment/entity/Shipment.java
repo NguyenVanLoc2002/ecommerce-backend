@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.shipment.entity;
 
 import com.locnguyen.ecommerce.common.auditing.BaseEntity;
+import com.locnguyen.ecommerce.domains.carrier.entity.Carrier;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import jakarta.persistence.*;
@@ -15,13 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Shipment for an order — one shipment per order (MVP).
- *
- * <p>Tracks carrier details, the customer-facing tracking number, and the
- * overall delivery status. Status changes are also recorded as immutable
- * {@link ShipmentEvent} entries for a full tracking timeline.
- *
- * <p>Extends {@link BaseEntity} (permanent record — no soft delete).
+ * Shipment for an order, currently one shipment per order.
  */
 @Entity
 @Table(name = "shipments")
@@ -37,13 +32,24 @@ public class Shipment extends BaseEntity {
     @Column(name = "shipment_code", length = 50, nullable = false, unique = true)
     private String shipmentCode;
 
-    /** Logistics carrier name, e.g. GHTK, GHN, VNPOST, J&T. */
     @Column(name = "carrier", length = 100, nullable = false)
     private String carrier;
 
-    /** Carrier's own tracking number — shown to the customer. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "carrier_id")
+    private Carrier carrierEntity;
+
+    @Column(name = "carrier_shipment_id", length = 200)
+    private String carrierShipmentId;
+
     @Column(name = "tracking_number", length = 200)
     private String trackingNumber;
+
+    @Column(name = "provider_status", length = 100)
+    private String providerStatus;
+
+    @Column(name = "provider_tracking_url", length = 500)
+    private String providerTrackingUrl;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50, nullable = false)
@@ -61,14 +67,10 @@ public class Shipment extends BaseEntity {
     @Column(name = "note", length = 500)
     private String note;
 
-    // orphanRemoval = false — ShipmentEvent entries are an immutable audit trail;
-    // removing an event from the collection must NOT delete the row from the database.
     @OneToMany(mappedBy = "shipment", cascade = CascadeType.ALL, orphanRemoval = false,
-               fetch = FetchType.LAZY)
+            fetch = FetchType.LAZY)
     @OrderBy("eventTime ASC")
     private List<ShipmentEvent> events = new ArrayList<>();
-
-    // ─── Optimistic locking ─────────────────────────────────────────────────
 
     @Version
     @Column(name = "version", nullable = false)

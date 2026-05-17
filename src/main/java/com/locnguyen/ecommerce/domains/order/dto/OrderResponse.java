@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.order.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.carrier.enums.CarrierProviderType;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
@@ -34,6 +35,12 @@ public class OrderResponse {
     private final String shippingDistrict;
     private final String shippingCity;
     private final String shippingPostalCode;
+
+    // Selected checkout carrier snapshot
+    private final UUID carrierId;
+    private final String carrierCode;
+    private final String carrierName;
+    private final CarrierProviderType carrierProviderType;
 
     // Pricing
     private final BigDecimal subTotal;
