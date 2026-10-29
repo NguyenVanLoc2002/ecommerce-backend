@@ -7,7 +7,7 @@ import lombok.Data;
 @Schema(description = "Initiate online payment request")
 public class InitPaymentRequest {
 
-    @Schema(example = "cod", description = "Payment provider identifier (for future gateway integration)")
+    @Schema(example = "PAYPAL", description = "Selected online payment provider identifier")
     private String provider;
 
     @Schema(example = "https://example.com/payment/callback", description = "Return URL after payment (for future redirect)")

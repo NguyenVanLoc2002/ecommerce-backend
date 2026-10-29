@@ -948,7 +948,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `items`
   - `createdAt`
 - `OrderItemResponse`
-  - `id`, `variantId`, `productName`, `variantName`, `sku`
+  - `id`, `variantId`, `productName`, `variantName`, `sku`, `productImageUrl`
   - `unitPrice`, `salePrice`, `quantity`, `lineTotal`
 
 ### GET `/api/v1/admin/orders`

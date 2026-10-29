@@ -222,6 +222,9 @@ public class CarrierServiceTest {
             assertThat(response.getConnectionStatus()).isEqualTo(CarrierConnectionStatus.CONNECTED);
             assertThat(response.getHasApiKey()).isTrue();
             assertThat(response.getHasWebhookSecret()).isTrue();
+            assertThat(response.getQuoteReady()).isFalse();
+            assertThat(response.getMissingQuoteFields()).contains("pickupPhone", "pickupLat", "pickupLng",
+                    "defaultServiceCode");
             assertThat(response.getMaskedWebhookToken()).endsWith("1234");
             assertThat(response.getMaskedWebhookToken()).doesNotContain("webhook-secret");
         }
@@ -244,6 +247,8 @@ public class CarrierServiceTest {
             request.setPickupShortAddress("Quan 1");
             request.setPickupName("Locen Studio");
             request.setPickupPhone("84338710667");
+            request.setPickupLat(new java.math.BigDecimal("10.7765000"));
+            request.setPickupLng(new java.math.BigDecimal("106.7009000"));
             request.setDefaultServiceCode("BIKE");
             request.setDefaultPaymentMethod("CASH");
 
@@ -266,7 +271,7 @@ public class CarrierServiceTest {
             when(objectMapper.writeValueAsString(any())).thenReturn(node.toString());
             when(carrierConfigRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(textCipher.decrypt("enc-webhook")).thenReturn("webhook-token");
-            when(ahamoveConfigResolver.resolveAllowDisabled(any())).thenReturn(new AhamoveResolvedConfig(
+            when(ahamoveConfigResolver.resolveAllowDisabledExplicit(any())).thenReturn(new AhamoveResolvedConfig(
                     "https://partner-apistg.ahamove.com",
                     "api-key",
                     "84338710667",
@@ -276,8 +281,8 @@ public class CarrierServiceTest {
                     "Quan 1",
                     "Locen Studio",
                     "84338710667",
-                    null,
-                    null,
+                    new java.math.BigDecimal("10.7765000"),
+                    new java.math.BigDecimal("106.7009000"),
                     "BIKE",
                     "CASH",
                     java.util.List.of()
@@ -291,9 +296,36 @@ public class CarrierServiceTest {
             assertThat(saved.getProviderAccountPhone()).isEqualTo("84338710667");
             assertThat(saved.getProviderBrandName()).isEqualTo("Locen Studio");
             assertThat(saved.getPickupAddress()).isEqualTo("123 Nguyen Hue");
+            assertThat(saved.getPickupLat()).isEqualByComparingTo("10.7765000");
+            assertThat(saved.getPickupLng()).isEqualByComparingTo("106.7009000");
             assertThat(saved.getDefaultServiceCode()).isEqualTo("BIKE");
             assertThat(saved.getConfigJson()).contains("\"pickupAddress\":\"123 Nguyen Hue\"");
             assertThat(response.getDefaultPaymentMethod()).isEqualTo("CASH");
+            assertThat(response.getQuoteReady()).isTrue();
+        }
+
+        @Test
+        void updateAhamoveIntegration_enabledWithoutPickupCoordinates_throwsValidationError() {
+            UUID carrierId = uuid(111);
+            Carrier carrier = carrier(carrierId, CarrierStatus.ACTIVE, CarrierProviderType.AHAMOVE);
+            CarrierConfig config = new CarrierConfig();
+            config.setCarrier(carrier);
+            config.setApiKeyEnc("enc-api");
+
+            UpdateAhamoveIntegrationRequest request = new UpdateAhamoveIntegrationRequest();
+            request.setEnabled(true);
+            request.setPhone("84338710667");
+            request.setPickupAddress("123 Nguyen Hue");
+            request.setPickupPhone("84338710667");
+            request.setDefaultServiceCode("BIKE");
+
+            when(carrierRepository.findById(carrierId)).thenReturn(Optional.of(carrier));
+            when(carrierConfigRepository.findByCarrierId(carrierId)).thenReturn(Optional.of(config));
+
+            assertThatThrownBy(() -> carrierService.updateAhamoveIntegration(carrierId, request))
+                    .isInstanceOf(AppException.class)
+                    .extracting(ex -> ((AppException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.VALIDATION_ERROR);
         }
 
         @Test
@@ -304,7 +336,13 @@ public class CarrierServiceTest {
             config.setCarrier(carrier);
             config.setEnabled(true);
             config.setBaseUrl("https://partner-apistg.ahamove.com");
+            config.setApiKeyEnc("enc-api");
             config.setProviderAccountPhone("84338710667");
+            config.setPickupAddress("123 Nguyen Hue");
+            config.setPickupPhone("84338710667");
+            config.setPickupLat(new java.math.BigDecimal("10.7765000"));
+            config.setPickupLng(new java.math.BigDecimal("106.7009000"));
+            config.setDefaultServiceCode("BIKE");
 
             TestAhamoveConnectionRequest request = new TestAhamoveConnectionRequest();
 
@@ -327,18 +365,71 @@ public class CarrierServiceTest {
 
             when(carrierRepository.findById(carrierId)).thenReturn(Optional.of(carrier));
             when(carrierConfigRepository.findByCarrierId(carrierId)).thenReturn(Optional.of(config));
-            when(ahamoveConfigResolver.resolveAllowDisabled(any())).thenReturn(resolvedConfig);
+            when(ahamoveConfigResolver.resolveAllowDisabledExplicit(any())).thenReturn(resolvedConfig);
             when(carrierConfigRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             AhamoveConnectionTestResponse response = carrierService.testAhamoveConnection(carrierId, request);
 
             assertThat(response.isSuccess()).isTrue();
             assertThat(response.getStatus()).isEqualTo(CarrierConnectionStatus.CONNECTED);
+            assertThat(response.isQuoteReady()).isTrue();
+            assertThat(response.isQuoteVerified()).isFalse();
             verify(ahamoveClient).verifyConnection(resolvedConfig);
             verify(carrierConfigRepository).save(argThat(saved ->
                     saved.getConnectionStatus() == CarrierConnectionStatus.CONNECTED
                             && saved.getLastHealthCheckAt() != null
                             && saved.getLastHealthCheckError() == null));
+        }
+
+        @Test
+        void testAhamoveConnection_missingQuoteFields_marksFailedEvenWhenAuthenticationSucceeds() {
+            UUID carrierId = uuid(121);
+            Carrier carrier = carrier(carrierId, CarrierStatus.ACTIVE, CarrierProviderType.AHAMOVE);
+            CarrierConfig config = new CarrierConfig();
+            config.setCarrier(carrier);
+            config.setEnabled(true);
+            config.setBaseUrl("https://partner-apistg.ahamove.com");
+            config.setApiKeyEnc("enc-api");
+            config.setProviderAccountPhone("84338710667");
+            config.setPickupAddress("123 Nguyen Hue");
+            config.setPickupPhone("84338710667");
+            config.setDefaultServiceCode("BIKE");
+
+            TestAhamoveConnectionRequest request = new TestAhamoveConnectionRequest();
+
+            AhamoveResolvedConfig resolvedConfig = new AhamoveResolvedConfig(
+                    "https://partner-apistg.ahamove.com",
+                    "api-key",
+                    "84338710667",
+                    "Locen Studio",
+                    null,
+                    "123 Nguyen Hue",
+                    null,
+                    "Locen Studio",
+                    "84338710667",
+                    null,
+                    null,
+                    "BIKE",
+                    "CASH",
+                    java.util.List.of()
+            );
+
+            when(carrierRepository.findById(carrierId)).thenReturn(Optional.of(carrier));
+            when(carrierConfigRepository.findByCarrierId(carrierId)).thenReturn(Optional.of(config));
+            when(ahamoveConfigResolver.resolveAllowDisabledExplicit(any())).thenReturn(resolvedConfig);
+            when(carrierConfigRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            AhamoveConnectionTestResponse response = carrierService.testAhamoveConnection(carrierId, request);
+
+            assertThat(response.isSuccess()).isFalse();
+            assertThat(response.getStatus()).isEqualTo(CarrierConnectionStatus.FAILED);
+            assertThat(response.isQuoteReady()).isFalse();
+            assertThat(response.getMissingQuoteFields()).containsExactly("pickupLat", "pickupLng");
+            verify(ahamoveClient).verifyConnection(resolvedConfig);
+            verify(carrierConfigRepository).save(argThat(saved ->
+                    saved.getConnectionStatus() == CarrierConnectionStatus.FAILED
+                            && saved.getLastHealthCheckAt() != null
+                            && saved.getLastHealthCheckError() != null));
         }
 
         @Test

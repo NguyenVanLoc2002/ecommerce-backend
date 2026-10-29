@@ -24,7 +24,11 @@ import com.locnguyen.ecommerce.domains.carrier.specification.CarrierSpecificatio
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveClient;
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveConfigData;
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveConfigResolver;
+import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveMapper;
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveResolvedConfig;
+import com.locnguyen.ecommerce.infrastructure.external.ahamove.dto.AhamoveEstimateOptionResponse;
+import com.locnguyen.ecommerce.domains.order.entity.Order;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -32,8 +36,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -54,6 +60,7 @@ public class CarrierServiceImpl implements CarrierService {
     private final CarrierProperties carrierProperties;
     private final AhamoveClient ahamoveClient;
     private final AhamoveConfigResolver ahamoveConfigResolver;
+    private final AhamoveMapper ahamoveMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -233,35 +240,81 @@ public class CarrierServiceImpl implements CarrierService {
         applyConnectionOverrides(effectiveConfig, request);
         syncAhamoveTypedFieldsFromLegacyJson(effectiveConfig);
 
-        AhamoveResolvedConfig resolvedConfig = ahamoveConfigResolver.resolveAllowDisabled(effectiveConfig);
+        List<String> missingQuoteFields = collectAhamoveQuoteBlockingFields(effectiveConfig);
+        boolean quoteReady = missingQuoteFields.isEmpty();
+        String resolvedBaseUrl = firstNonBlank(effectiveConfig.getBaseUrl());
+        String resolvedPhone = firstNonBlank(effectiveConfig.getProviderAccountPhone());
         try {
+            AhamoveResolvedConfig resolvedConfig = ahamoveConfigResolver.resolveAllowDisabledExplicit(effectiveConfig);
+            resolvedBaseUrl = resolvedConfig.apiBaseUrl();
+            resolvedPhone = resolvedConfig.phone();
             ahamoveClient.verifyConnection(resolvedConfig);
-            if (persistedConfig != null) {
-                persistedConfig.setConnectionStatus(CarrierConnectionStatus.CONNECTED);
-                persistedConfig.setLastHealthCheckAt(LocalDateTime.now());
-                persistedConfig.setLastHealthCheckError(null);
-                carrierConfigRepository.save(persistedConfig);
+            if (!quoteReady && !hasQuoteProbe(request)) {
+                String message = buildQuoteBlockedMessage(
+                        "AhaMove authentication succeeded but live quotes are blocked", missingQuoteFields);
+                updateConnectionHealth(persistedConfig, CarrierConnectionStatus.FAILED, message);
+                return AhamoveConnectionTestResponse.builder()
+                        .success(false)
+                        .status(CarrierConnectionStatus.FAILED)
+                        .message(message)
+                        .resolvedBaseUrl(resolvedBaseUrl)
+                        .resolvedPhone(resolvedPhone)
+                        .quoteReady(false)
+                        .quoteVerified(false)
+                        .missingQuoteFields(missingQuoteFields)
+                        .build();
             }
+
+            boolean quoteVerified = false;
+            if (hasQuoteProbe(request)) {
+                if (!quoteReady) {
+                    String message = buildQuoteBlockedMessage(
+                            "AhaMove quote probe is blocked by missing config fields", missingQuoteFields);
+                    updateConnectionHealth(persistedConfig, CarrierConnectionStatus.FAILED, message);
+                    return AhamoveConnectionTestResponse.builder()
+                            .success(false)
+                            .status(CarrierConnectionStatus.FAILED)
+                            .message(message)
+                            .resolvedBaseUrl(resolvedBaseUrl)
+                            .resolvedPhone(resolvedPhone)
+                            .quoteReady(false)
+                            .quoteVerified(false)
+                            .missingQuoteFields(missingQuoteFields)
+                            .build();
+                }
+                List<AhamoveEstimateOptionResponse> probeOptions = ahamoveClient.estimateFee(
+                        ahamoveMapper.toEstimateRequest(buildProbeOrder(request), resolvedConfig),
+                        resolvedConfig);
+                if (probeOptions.isEmpty()) {
+                    throw new AppException(ErrorCode.CARRIER_REQUEST_FAILED,
+                            "AhaMove quote probe returned no available options");
+                }
+                quoteVerified = true;
+            }
+            updateConnectionHealth(persistedConfig, CarrierConnectionStatus.CONNECTED, null);
             return AhamoveConnectionTestResponse.builder()
                     .success(true)
                     .status(CarrierConnectionStatus.CONNECTED)
-                    .message("AhaMove connection test succeeded")
-                    .resolvedBaseUrl(resolvedConfig.apiBaseUrl())
-                    .resolvedPhone(resolvedConfig.phone())
+                    .message(quoteVerified
+                            ? "AhaMove connection and quote test succeeded"
+                            : "AhaMove authentication succeeded; live quote config is ready")
+                    .resolvedBaseUrl(resolvedBaseUrl)
+                    .resolvedPhone(resolvedPhone)
+                    .quoteReady(quoteReady)
+                    .quoteVerified(quoteVerified)
+                    .missingQuoteFields(missingQuoteFields.isEmpty() ? null : missingQuoteFields)
                     .build();
         } catch (AppException ex) {
-            if (persistedConfig != null) {
-                persistedConfig.setConnectionStatus(CarrierConnectionStatus.FAILED);
-                persistedConfig.setLastHealthCheckAt(LocalDateTime.now());
-                persistedConfig.setLastHealthCheckError(sanitize(ex.getMessage()));
-                carrierConfigRepository.save(persistedConfig);
-            }
+            updateConnectionHealth(persistedConfig, CarrierConnectionStatus.FAILED, sanitize(ex.getMessage()));
             return AhamoveConnectionTestResponse.builder()
                     .success(false)
                     .status(CarrierConnectionStatus.FAILED)
                     .message(sanitize(ex.getMessage()))
-                    .resolvedBaseUrl(effectiveConfig.getBaseUrl())
-                    .resolvedPhone(firstNonBlank(effectiveConfig.getProviderAccountPhone()))
+                    .resolvedBaseUrl(resolvedBaseUrl)
+                    .resolvedPhone(resolvedPhone)
+                    .quoteReady(quoteReady)
+                    .quoteVerified(false)
+                    .missingQuoteFields(missingQuoteFields.isEmpty() ? null : missingQuoteFields)
                     .build();
         }
     }
@@ -395,11 +448,47 @@ public class CarrierServiceImpl implements CarrierService {
         }
     }
 
+    private boolean hasQuoteProbe(TestAhamoveConnectionRequest request) {
+        return request != null
+                && normalizeOptional(request.getProbeReceiverPhone()) != null
+                && normalizeOptional(request.getProbeShippingStreet()) != null
+                && normalizeOptional(request.getProbeShippingDistrict()) != null
+                && normalizeOptional(request.getProbeShippingCity()) != null;
+    }
+
+    private Order buildProbeOrder(TestAhamoveConnectionRequest request) {
+        Order order = new Order();
+        order.setOrderCode("AHAMOVE-QUOTE-PROBE");
+        order.setPaymentMethod(PaymentMethod.ONLINE);
+        order.setReceiverName(firstNonBlank(request.getProbeReceiverName(), "Quote Probe"));
+        order.setReceiverPhone(normalizeRequired(request.getProbeReceiverPhone()));
+        order.setShippingStreet(normalizeRequired(request.getProbeShippingStreet()));
+        order.setShippingWard(normalizeOptional(request.getProbeShippingWard()));
+        order.setShippingDistrict(normalizeRequired(request.getProbeShippingDistrict()));
+        order.setShippingCity(normalizeRequired(request.getProbeShippingCity()));
+        BigDecimal subTotal = request.getProbeSubTotal() != null
+                ? request.getProbeSubTotal()
+                : new BigDecimal("100000");
+        order.setSubTotal(subTotal);
+        order.setDiscountAmount(BigDecimal.ZERO);
+        order.setTotalAmount(subTotal);
+        return order;
+    }
+
     private void validateAhamoveIntegration(CarrierConfig config) {
         if (!config.isEnabled()) {
             return;
         }
-        ahamoveConfigResolver.resolveAllowDisabled(config);
+        validateAhamoveQuoteCriticalFields(config);
+        ahamoveConfigResolver.resolveAllowDisabledExplicit(config);
+    }
+
+    private void validateAhamoveQuoteCriticalFields(CarrierConfig config) {
+        List<String> missingFields = collectAhamoveQuoteBlockingFields(config);
+        if (!missingFields.isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR,
+                    "AhaMove config is missing required fields: " + String.join(", ", missingFields));
+        }
     }
 
     private void ensureConnectionStatusDefault(CarrierConfig config) {
@@ -409,6 +498,7 @@ public class CarrierServiceImpl implements CarrierService {
     }
 
     private AhamoveIntegrationResponse toAhamoveIntegrationResponse(Carrier carrier, CarrierConfig config) {
+        List<String> missingQuoteFields = collectAhamoveQuoteBlockingFields(config);
         String webhookToken = decrypt(config.getWebhookSecretEnc());
         return AhamoveIntegrationResponse.builder()
                 .carrierId(carrier.getId())
@@ -429,6 +519,8 @@ public class CarrierServiceImpl implements CarrierService {
                 .pickupLng(config.getPickupLng())
                 .defaultServiceCode(firstNonBlank(config.getDefaultServiceCode()))
                 .defaultPaymentMethod(firstNonBlank(config.getDefaultPaymentMethod()))
+                .quoteReady(missingQuoteFields.isEmpty())
+                .missingQuoteFields(missingQuoteFields.isEmpty() ? null : missingQuoteFields)
                 .connectionStatus(config.getConnectionStatus())
                 .lastHealthCheckAt(config.getLastHealthCheckAt())
                 .lastHealthCheckError(config.getLastHealthCheckError())
@@ -618,5 +710,48 @@ public class CarrierServiceImpl implements CarrierService {
             normalized = normalized.substring(0, normalized.length() - 1);
         }
         return normalized;
+    }
+
+    private List<String> collectAhamoveQuoteBlockingFields(CarrierConfig config) {
+        List<String> missingFields = new ArrayList<>();
+        if (!hasEncryptedValue(config.getApiKeyEnc())) {
+            missingFields.add("apiKey");
+        }
+        if (normalizeOptional(config.getProviderAccountPhone()) == null) {
+            missingFields.add("phone");
+        }
+        if (normalizeOptional(config.getPickupAddress()) == null) {
+            missingFields.add("pickupAddress");
+        }
+        if (normalizeOptional(config.getPickupPhone()) == null) {
+            missingFields.add("pickupPhone");
+        }
+        if (config.getPickupLat() == null) {
+            missingFields.add("pickupLat");
+        }
+        if (config.getPickupLng() == null) {
+            missingFields.add("pickupLng");
+        }
+        if (normalizeOptional(config.getDefaultServiceCode()) == null) {
+            missingFields.add("defaultServiceCode");
+        }
+        return missingFields;
+    }
+
+    private String buildQuoteBlockedMessage(String prefix, List<String> missingQuoteFields) {
+        return prefix + ": " + String.join(", ", missingQuoteFields);
+    }
+
+    private void updateConnectionHealth(
+            CarrierConfig persistedConfig,
+            CarrierConnectionStatus status,
+            String errorMessage) {
+        if (persistedConfig == null) {
+            return;
+        }
+        persistedConfig.setConnectionStatus(status);
+        persistedConfig.setLastHealthCheckAt(LocalDateTime.now());
+        persistedConfig.setLastHealthCheckError(errorMessage);
+        carrierConfigRepository.save(persistedConfig);
     }
 }

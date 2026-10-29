@@ -18,6 +18,7 @@ import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.payment.dto.*;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
 import com.locnguyen.ecommerce.domains.payment.entity.PaymentTransaction;
+import com.locnguyen.ecommerce.domains.payment.enums.PaymentProviderType;
 import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import com.locnguyen.ecommerce.domains.payment.enums.TransactionStatus;
 import com.locnguyen.ecommerce.domains.payment.mapper.PaymentMapper;
@@ -259,7 +260,7 @@ public class PaymentServiceImpl implements PaymentService {
         txn.setStatus(success ? TransactionStatus.SUCCESS : TransactionStatus.FAILED);
         txn.setAmount(payment.getAmount());
         txn.setMethod(PaymentMethod.ONLINE);
-        txn.setProvider(providerName);
+        txn.setProvider(PaymentProviderType.fromValue(providerName));
         txn.setProviderTxnId(captureResult.getProviderTxnId());
         txn.setReferenceType("CAPTURE");
         txn.setReferenceId(order.getOrderCode());
@@ -480,7 +481,7 @@ public class PaymentServiceImpl implements PaymentService {
         txn.setStatus(success ? TransactionStatus.SUCCESS : TransactionStatus.FAILED);
         txn.setAmount(payment.getAmount());
         txn.setMethod(PaymentMethod.ONLINE);
-        txn.setProvider(request.getProvider());
+        txn.setProvider(PaymentProviderType.fromValue(request.getProvider()));
         txn.setProviderTxnId(request.getProviderTxnId());
         txn.setReferenceType("CALLBACK");
         txn.setReferenceId(request.getOrderCode());
@@ -570,7 +571,7 @@ public class PaymentServiceImpl implements PaymentService {
         txn.setStatus(status);
         txn.setAmount(payment.getAmount());
         txn.setMethod(method);
-        txn.setProvider(provider);
+        txn.setProvider(PaymentProviderType.fromValue(provider));
         txn.setProviderTxnId(providerTxnId);
         txn.setNote(note);
         return transactionRepository.save(txn);

@@ -1,5 +1,7 @@
 package com.locnguyen.ecommerce.infrastructure.external.ahamove;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
@@ -20,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AhamoveMapperTest {
 
     private final AhamoveMapper mapper = new AhamoveMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     void toEstimateRequest_mapsExpectedFields() {
@@ -30,11 +33,38 @@ class AhamoveMapperTest {
         assertThat(request.path()).hasSize(2);
         assertThat(request.path().get(0).getAddress()).isEqualTo("12 Nguyen Hue, District 1, Ho Chi Minh City");
         assertThat(request.path().get(1).getAddress()).contains("221B Baker Street");
+        assertThat(request.path().get(0).getMobile()).isEqualTo("84338710667");
+        assertThat(request.path().get(1).getMobile()).isEqualTo("84909000001");
+        assertThat(request.paymentMethod()).isEqualTo("CASH");
         assertThat(request.groupServices()).hasSize(1);
         assertThat(request.groupServices().get(0).id()).isEqualTo("BIKE");
-        assertThat(request.items()).hasSize(1);
-        assertThat(request.packageDetail()).hasSize(1);
-        assertThat(request.packageDetail().get(0).weight()).isEqualByComparingTo("0.75");
+        assertThat(request.items()).isNull();
+        assertThat(request.packageDetail()).isNull();
+    }
+
+    @Test
+    void toEstimateRequest_omitsNullFieldsWhenSerialized() {
+        AhamoveEstimateRequest request = mapper.toEstimateRequest(buildOrder(), buildConfig());
+
+        JsonNode json = objectMapper.valueToTree(request);
+        JsonNode pickupPoint = json.path("path").get(0);
+        JsonNode dropoffPoint = json.path("path").get(1);
+        JsonNode groupService = json.path("group_services").get(0);
+
+        assertThat(json.path("payment_method").asText()).isEqualTo("CASH");
+        assertThat(json.has("remarks")).isFalse();
+        assertThat(json.has("items")).isFalse();
+        assertThat(json.has("package_detail")).isFalse();
+        assertThat(pickupPoint.has("lat")).isFalse();
+        assertThat(pickupPoint.has("lng")).isFalse();
+        assertThat(pickupPoint.has("status")).isFalse();
+        assertThat(pickupPoint.has("fail_comment")).isFalse();
+        assertThat(dropoffPoint.has("tracking_number")).isFalse();
+        assertThat(dropoffPoint.has("cod")).isFalse();
+        assertThat(dropoffPoint.has("item_value")).isFalse();
+        assertThat(dropoffPoint.has("complete_time")).isFalse();
+        assertThat(dropoffPoint.has("return_time")).isFalse();
+        assertThat(groupService.has("group_requests")).isFalse();
     }
 
     @Test
@@ -48,6 +78,7 @@ class AhamoveMapperTest {
 
         assertThat(request.groupServiceId()).isEqualTo("BIKE");
         assertThat(request.path()).hasSize(2);
+        assertThat(request.path().get(1).getMobile()).isEqualTo("84909000001");
         assertThat(request.path().get(1).getCod()).isEqualByComparingTo("125000");
         assertThat(request.path().get(1).getTrackingNumber()).isEqualTo("SHP0001");
         assertThat(request.remarks()).contains("Fragile");
@@ -79,13 +110,13 @@ class AhamoveMapperTest {
     }
 
     @Test
-    void toCreateOrderRequest_nonCodOrderMapsZeroCod() {
+    void toCreateOrderRequest_nonCodOrderOmitsCod() {
         Order order = buildOrder();
         order.setPaymentMethod(PaymentMethod.ONLINE);
 
         AhamoveCreateOrderRequest request = mapper.toCreateOrderRequest(new Shipment(), order, buildConfig());
 
-        assertThat(request.path().get(1).getCod()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(request.path().get(1).getCod()).isNull();
     }
 
     private Order buildOrder() {

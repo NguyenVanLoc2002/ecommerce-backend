@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.common.auditing.SoftDeleteEntity;
 import com.locnguyen.ecommerce.domains.brand.entity.Brand;
 import com.locnguyen.ecommerce.domains.category.entity.Category;
 import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
+import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -42,7 +43,7 @@ public class Product extends SoftDeleteEntity {
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     @ToString.Exclude
-    private Set<com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant> variants = new HashSet<>();
+    private Set<ProductVariant> variants = new HashSet<>();
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     @ToString.Exclude

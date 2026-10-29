@@ -7,6 +7,7 @@ import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -31,6 +32,8 @@ public class AhamoveIntegrationResponse {
     private final BigDecimal pickupLng;
     private final String defaultServiceCode;
     private final String defaultPaymentMethod;
+    private final Boolean quoteReady;
+    private final List<String> missingQuoteFields;
     private final CarrierConnectionStatus connectionStatus;
     private final LocalDateTime lastHealthCheckAt;
     private final String lastHealthCheckError;

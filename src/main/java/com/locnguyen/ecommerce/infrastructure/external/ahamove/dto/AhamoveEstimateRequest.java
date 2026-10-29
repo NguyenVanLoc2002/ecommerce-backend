@@ -1,10 +1,12 @@
 package com.locnguyen.ecommerce.infrastructure.external.ahamove.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 
 import java.util.List;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 @Builder
 public record AhamoveEstimateRequest(
         @JsonProperty("order_time")
@@ -19,6 +21,7 @@ public record AhamoveEstimateRequest(
         @JsonProperty("package_detail")
         List<AhamovePackageDetail> packageDetail
 ) {
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Builder
     public record AhamoveGroupService(
             @JsonProperty("_id")

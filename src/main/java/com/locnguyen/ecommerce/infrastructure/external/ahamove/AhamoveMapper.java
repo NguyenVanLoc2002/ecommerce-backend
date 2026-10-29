@@ -27,15 +27,12 @@ public class AhamoveMapper {
         validatePickup(config);
         return AhamoveEstimateRequest.builder()
                 .orderTime(0L)
-                .path(buildPath(order, null, config))
+                .path(buildEstimatePath(order, config))
+                .paymentMethod(resolvePaymentMethod(order, config))
                 .groupServices(List.of(AhamoveEstimateRequest.AhamoveGroupService.builder()
                         .id(requireNonBlank(config.groupServiceId(), "AhaMove groupServiceId must be configured"))
                         .groupRequests(buildGroupRequests(config))
                         .build()))
-                .paymentMethod(resolvePaymentMethod(order, config))
-                .remarks(buildRemarks(order, null))
-                .items(buildItems(order))
-                .packageDetail(buildPackageDetails(order))
                 .build();
     }
 
@@ -47,7 +44,7 @@ public class AhamoveMapper {
         validatePickup(config);
         return AhamoveCreateOrderRequest.builder()
                 .orderTime(0L)
-                .path(buildPath(order, shipment, config))
+                .path(buildCreateOrderPath(order, shipment, config))
                 .groupServiceId(requireNonBlank(config.groupServiceId(), "AhaMove groupServiceId must be configured"))
                 .groupRequests(buildGroupRequests(config))
                 .paymentMethod(resolvePaymentMethod(order, config))
@@ -121,33 +118,50 @@ public class AhamoveMapper {
                 .build();
     }
 
-    private List<AhamovePathPoint> buildPath(Order order, Shipment shipment, AhamoveResolvedConfig config) {
+    private List<AhamovePathPoint> buildEstimatePath(Order order, AhamoveResolvedConfig config) {
         List<AhamovePathPoint> path = new ArrayList<>();
-        path.add(AhamovePathPoint.builder()
-                .lat(config.pickupLat())
-                .lng(config.pickupLng())
-                .address(config.pickupAddress())
-                .shortAddress(config.pickupShortAddress())
-                .name(firstNonBlank(config.pickupName(), config.brandName()))
-                .mobile(requireNonBlank(config.pickupPhone(), "AhaMove pickup phone is required"))
-                .remarks(firstNonBlank(config.brandName(), "Store") + " pickup for order " + order.getOrderCode())
-                .build());
+        path.add(buildPickupPoint(order, config));
         path.add(AhamovePathPoint.builder()
                 .address(buildShippingAddress(order))
                 .shortAddress(buildShortAddress(order))
                 .name(requireNonBlank(order.getReceiverName(), "Receiver name is required"))
-                .mobile(requireNonBlank(order.getReceiverPhone(), "Receiver phone is required"))
+                .mobile(normalizePhoneNumber(requireNonBlank(order.getReceiverPhone(), "Receiver phone is required")))
+                .remarks(buildRemarks(order, null))
+                .build());
+        return path;
+    }
+
+    private List<AhamovePathPoint> buildCreateOrderPath(Order order, Shipment shipment, AhamoveResolvedConfig config) {
+        List<AhamovePathPoint> path = new ArrayList<>();
+        path.add(buildPickupPoint(order, config));
+        path.add(AhamovePathPoint.builder()
+                .address(buildShippingAddress(order))
+                .shortAddress(buildShortAddress(order))
+                .name(requireNonBlank(order.getReceiverName(), "Receiver name is required"))
+                .mobile(normalizePhoneNumber(requireNonBlank(order.getReceiverPhone(), "Receiver phone is required")))
                 .cod(resolveCodAmount(order))
-                .itemValue(order.getSubTotal())
-                .trackingNumber(shipment != null ? shipment.getShipmentCode() : order.getOrderCode())
+                .itemValue(resolveItemValue(order))
+                .trackingNumber(shipment != null ? shipment.getShipmentCode() : null)
                 .remarks(buildRemarks(order, shipment))
                 .build());
         return path;
     }
 
+    private AhamovePathPoint buildPickupPoint(Order order, AhamoveResolvedConfig config) {
+        return AhamovePathPoint.builder()
+                .lat(config.pickupLat())
+                .lng(config.pickupLng())
+                .address(config.pickupAddress())
+                .shortAddress(config.pickupShortAddress())
+                .name(firstNonBlank(config.pickupName(), config.brandName()))
+                .mobile(normalizePhoneNumber(requireNonBlank(config.pickupPhone(), "AhaMove pickup phone is required")))
+                .remarks(firstNonBlank(config.brandName(), "Store") + " pickup for order " + order.getOrderCode())
+                .build();
+    }
+
     private List<AhamoveRequestOption> buildGroupRequests(AhamoveResolvedConfig config) {
         if (config.groupRequests() == null || config.groupRequests().isEmpty()) {
-            return List.of();
+            return null;
         }
         return config.groupRequests().stream()
                 .map(option -> AhamoveRequestOption.builder()
@@ -211,13 +225,21 @@ public class AhamoveMapper {
 
     private BigDecimal resolveCodAmount(Order order) {
         if (order.getPaymentMethod() != PaymentMethod.COD) {
-            return BigDecimal.ZERO;
+            return null;
         }
         BigDecimal codAmount = firstNonNull(order.getTotalAmount(), order.getSubTotal());
         if (codAmount == null || codAmount.compareTo(BigDecimal.ZERO) < 0) {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "COD amount must not be negative");
         }
         return codAmount;
+    }
+
+    private BigDecimal resolveItemValue(Order order) {
+        BigDecimal itemValue = order.getSubTotal();
+        if (itemValue == null || itemValue.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        return itemValue;
     }
 
     private String resolvePaymentMethod(Order order, AhamoveResolvedConfig config) {
@@ -270,6 +292,18 @@ public class AhamoveMapper {
         String normalized = firstNonBlank(value);
         if (normalized == null) {
             throw new AppException(ErrorCode.VALIDATION_ERROR, message);
+        }
+        return normalized;
+    }
+
+    private String normalizePhoneNumber(String value) {
+        String normalized = requireNonBlank(value, "Phone number is required")
+                .replaceAll("\\s+", "");
+        if (normalized.startsWith("+84")) {
+            return "84" + normalized.substring(3);
+        }
+        if (normalized.startsWith("0") && normalized.length() > 1) {
+            return "84" + normalized.substring(1);
         }
         return normalized;
     }

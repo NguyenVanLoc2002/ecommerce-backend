@@ -46,6 +46,9 @@ public class OrderItem extends BaseEntity {
     @Column(name = "sku", length = 100, nullable = false)
     private String sku;
 
+    @Column(name = "product_image_url", length = 500)
+    private String productImageUrl;
+
     // ─── Pricing snapshot ───────────────────────────────────────────────────
 
     @Column(name = "unit_price", precision = 18, scale = 2, nullable = false)

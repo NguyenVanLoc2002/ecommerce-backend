@@ -10,6 +10,7 @@ import com.locnguyen.ecommerce.domains.payment.dto.WebhookLogResponse;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
 import com.locnguyen.ecommerce.domains.payment.entity.PaymentTransaction;
 import com.locnguyen.ecommerce.domains.payment.entity.PaymentWebhookLog;
+import com.locnguyen.ecommerce.domains.payment.enums.PaymentProviderType;
 import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import com.locnguyen.ecommerce.domains.payment.enums.TransactionStatus;
 import com.locnguyen.ecommerce.domains.payment.enums.WebhookLogStatus;
@@ -193,7 +194,7 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
         txn.setStatus(success ? TransactionStatus.SUCCESS : TransactionStatus.FAILED);
         txn.setAmount(payment.getAmount());
         txn.setMethod(payment.getMethod());
-        txn.setProvider(provider);
+        txn.setProvider(PaymentProviderType.fromValue(provider));
         txn.setProviderTxnId(providerTxnId);
         txn.setReferenceType("WEBHOOK");
         txn.setReferenceId(orderCode);

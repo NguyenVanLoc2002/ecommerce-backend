@@ -20,14 +20,22 @@ public class AhamoveConfigResolver {
     private final ObjectMapper objectMapper;
 
     public AhamoveResolvedConfig resolve(CarrierConfig config) {
-        return resolve(config, true);
+        return resolve(config, true, true);
     }
 
     public AhamoveResolvedConfig resolveAllowDisabled(CarrierConfig config) {
-        return resolve(config, false);
+        return resolve(config, false, true);
     }
 
-    private AhamoveResolvedConfig resolve(CarrierConfig config, boolean requireEnabled) {
+    public AhamoveResolvedConfig resolveExplicit(CarrierConfig config) {
+        return resolve(config, true, false);
+    }
+
+    public AhamoveResolvedConfig resolveAllowDisabledExplicit(CarrierConfig config) {
+        return resolve(config, false, false);
+    }
+
+    private AhamoveResolvedConfig resolve(CarrierConfig config, boolean requireEnabled, boolean allowPropertyFallback) {
         if (config == null) {
             throw new AppException(ErrorCode.CARRIER_CONFIG_MISSING,
                     "AhaMove carrier config is missing");
@@ -39,19 +47,28 @@ public class AhamoveConfigResolver {
 
         AhamoveConfigData data = parseConfigData(config.getConfigJson());
         String baseUrl = firstNonBlank(config.getBaseUrl(), properties.getBaseUrl());
-        String apiKey = firstNonBlank(decrypt(config.getApiKeyEnc()), properties.getApiKey());
-        String phone = firstNonBlank(config.getProviderAccountPhone(), data.getPhone(), properties.getPhone());
-        String brandName = firstNonBlank(config.getProviderBrandName(), data.getBrandName(), properties.getBrandName());
-        String webhookToken = firstNonBlank(decrypt(config.getWebhookSecretEnc()),
-                data.getWebhookToken(), properties.getWebhookToken());
+        String apiKey = allowPropertyFallback
+                ? firstNonBlank(decrypt(config.getApiKeyEnc()), properties.getApiKey())
+                : firstNonBlank(decrypt(config.getApiKeyEnc()));
+        String phone = allowPropertyFallback
+                ? firstNonBlank(config.getProviderAccountPhone(), data.getPhone(), properties.getPhone())
+                : firstNonBlank(config.getProviderAccountPhone(), data.getPhone());
+        String brandName = allowPropertyFallback
+                ? firstNonBlank(config.getProviderBrandName(), data.getBrandName(), properties.getBrandName())
+                : firstNonBlank(config.getProviderBrandName(), data.getBrandName());
+        String webhookToken = allowPropertyFallback
+                ? firstNonBlank(decrypt(config.getWebhookSecretEnc()), data.getWebhookToken(), properties.getWebhookToken())
+                : firstNonBlank(decrypt(config.getWebhookSecretEnc()), data.getWebhookToken());
         String pickupAddress = firstNonBlank(config.getPickupAddress(), data.getPickupAddress());
         String pickupShortAddress = firstNonBlank(config.getPickupShortAddress(), data.getPickupShortAddress());
         String pickupName = firstNonBlank(config.getPickupName(), data.getPickupName(), brandName);
         String pickupPhone = firstNonBlank(config.getPickupPhone(), data.getPickupPhone(), phone);
-        String groupServiceId = firstNonBlank(config.getDefaultServiceCode(), data.getGroupServiceId(),
-                properties.getGroupServiceId());
-        String paymentMethod = firstNonBlank(config.getDefaultPaymentMethod(), data.getPaymentMethod(),
-                properties.getPaymentMethod());
+        String groupServiceId = allowPropertyFallback
+                ? firstNonBlank(config.getDefaultServiceCode(), data.getGroupServiceId(), properties.getGroupServiceId())
+                : firstNonBlank(config.getDefaultServiceCode(), data.getGroupServiceId());
+        String paymentMethod = allowPropertyFallback
+                ? firstNonBlank(config.getDefaultPaymentMethod(), data.getPaymentMethod(), properties.getPaymentMethod())
+                : firstNonBlank(config.getDefaultPaymentMethod(), data.getPaymentMethod());
         List<AhamoveConfigData.RequestOption> groupRequests = data.getGroupRequests() != null
                 ? data.getGroupRequests()
                 : new ArrayList<>();

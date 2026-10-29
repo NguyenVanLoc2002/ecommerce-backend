@@ -2,6 +2,7 @@ package com.locnguyen.ecommerce.domains.payment.entity;
 
 import com.locnguyen.ecommerce.common.auditing.BaseEntity;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
+import com.locnguyen.ecommerce.domains.payment.enums.PaymentProviderType;
 import com.locnguyen.ecommerce.domains.payment.enums.TransactionStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -48,8 +49,9 @@ public class PaymentTransaction extends BaseEntity {
     @Column(name = "method", length = 50, nullable = false)
     private PaymentMethod method;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "provider", length = 100)
-    private String provider;
+    private PaymentProviderType provider;
 
     @Column(name = "provider_txn_id", length = 200)
     private String providerTxnId;
