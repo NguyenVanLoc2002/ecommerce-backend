@@ -45,6 +45,9 @@ import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
+import com.locnguyen.ecommerce.domains.product.entity.ProductMedia;
+import com.locnguyen.ecommerce.domains.product.enums.MediaType;
+import com.locnguyen.ecommerce.domains.product.repository.ProductMediaRepository;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -78,6 +81,7 @@ public class OrderServiceImpl implements OrderService {
     private final AuditLogService auditLogService;
     private final IdempotencyService idempotencyService;
     private final CarrierCheckoutService carrierCheckoutService;
+    private final ProductMediaRepository productMediaRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -439,6 +443,7 @@ public class OrderServiceImpl implements OrderService {
             item.setProductName(variant.getProduct().getName());
             item.setVariantName(variant.getVariantName());
             item.setSku(variant.getSku());
+            item.setProductImageUrl(resolveOrderItemImageUrl(variant));
             item.setUnitPrice(variant.getBasePrice());
             item.setSalePrice(variant.getSalePrice());
             item.setQuantity(ci.getQuantity());
@@ -454,6 +459,33 @@ public class OrderServiceImpl implements OrderService {
         order.setShippingFee(BigDecimal.ZERO);
         order.setTotalAmount(subTotal.subtract(discountAmount));
         return order;
+    }
+
+    private String resolveOrderItemImageUrl(ProductVariant variant) {
+        UUID productId = variant.getProduct().getId();
+        UUID variantId = variant.getId();
+
+        String variantImage = selectPreferredImage(productMediaRepository
+                .findByProductIdAndVariantIdAndMediaTypeOrderBySortOrderAsc(
+                        productId, variantId, MediaType.IMAGE));
+        if (variantImage != null) {
+            return variantImage;
+        }
+
+        return selectPreferredImage(productMediaRepository
+                .findByProductIdAndVariantIsNullAndMediaTypeOrderBySortOrderAsc(
+                        productId, MediaType.IMAGE));
+    }
+
+    private String selectPreferredImage(List<ProductMedia> media) {
+        return media.stream()
+                .filter(ProductMedia::isPrimary)
+                .map(ProductMedia::getMediaUrl)
+                .findFirst()
+                .orElseGet(() -> media.stream()
+                        .map(ProductMedia::getMediaUrl)
+                        .findFirst()
+                        .orElse(null));
     }
 
     private CheckoutCarrierQuoteResponse applyShippingSelection(Order order, UUID carrierId) {

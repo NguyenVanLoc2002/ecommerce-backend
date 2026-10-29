@@ -2,6 +2,7 @@ package com.locnguyen.ecommerce.domains.product.entity;
 
 import com.locnguyen.ecommerce.common.auditing.BaseEntity;
 import com.locnguyen.ecommerce.domains.product.enums.MediaType;
+import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,7 +25,7 @@ public class ProductMedia extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "variant_id")
-    private com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant variant;
+    private ProductVariant variant;
 
     @Column(name = "media_url", length = 500, nullable = false)
     private String mediaUrl;

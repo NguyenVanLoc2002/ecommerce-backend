@@ -503,7 +503,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `subTotal`, `discountAmount`, `shippingFee`, `totalAmount`
   - `voucherCode`, `customerNote`
 - `OrderItemResponse`
-  - `id`, `variantId`, `productName`, `variantName`, `sku`
+  - `id`, `variantId`, `productName`, `variantName`, `sku`, `productImageUrl`
   - `unitPrice`, `salePrice`, `quantity`, `lineTotal`
 
 ### GET `/api/v1/carriers/checkout-options`

@@ -36,6 +36,9 @@ import com.locnguyen.ecommerce.domains.idempotency.service.IdempotencyService;
 import com.locnguyen.ecommerce.domains.notification.service.NotificationService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import com.locnguyen.ecommerce.domains.product.entity.Product;
+import com.locnguyen.ecommerce.domains.product.entity.ProductMedia;
+import com.locnguyen.ecommerce.domains.product.enums.MediaType;
+import com.locnguyen.ecommerce.domains.product.repository.ProductMediaRepository;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -88,6 +91,7 @@ class OrderServiceTest {
     @Mock NotificationService notificationService;
     @Mock IdempotencyService idempotencyService;
     @Mock CarrierCheckoutService carrierCheckoutService;
+    @Mock ProductMediaRepository productMediaRepository;
 
     @InjectMocks OrderServiceImpl orderService;
 
@@ -124,6 +128,7 @@ class OrderServiceTest {
 
     private ProductVariant variant(UUID id, BigDecimal basePrice, BigDecimal salePrice) {
         Product product = new Product();
+        setId(product, uuid(1000 + id.getLeastSignificantBits()));
         ReflectionTestUtils.setField(product, "name", "Test Product");
 
         ProductVariant v = new ProductVariant();
@@ -143,6 +148,19 @@ class OrderServiceTest {
         ci.setVariant(variant);
         ci.setQuantity(quantity);
         return ci;
+    }
+
+    private ProductMedia media(UUID id, Product product, ProductVariant variant, String mediaUrl,
+                               boolean primary, int sortOrder) {
+        ProductMedia media = new ProductMedia();
+        setId(media, id);
+        media.setProduct(product);
+        media.setVariant(variant);
+        media.setMediaUrl(mediaUrl);
+        media.setMediaType(MediaType.IMAGE);
+        media.setPrimary(primary);
+        media.setSortOrder(sortOrder);
+        return media;
     }
 
     private Inventory inventory(UUID id, ProductVariant variant, int onHand, int reserved) {
@@ -336,6 +354,63 @@ class OrderServiceTest {
             verify(orderRepository).save(captor.capture());
             assertThat(captor.getValue().getStatus()).isEqualTo(OrderStatus.AWAITING_PAYMENT);
             assertThat(captor.getValue().getPaymentMethod()).isEqualTo(PaymentMethod.ONLINE);
+        }
+
+        @Test
+        void order_item_snapshots_primary_variant_image_when_available() {
+            Customer cust = customer(uuid(1));
+            Cart cart = activeCart(uuid(5), cust);
+            ProductVariant v = variant(uuid(1), new BigDecimal("100000"), null);
+            CartItem ci = cartItem(cart, v, 1);
+            Address addr = address(uuid(10), cust);
+            Inventory inv = inventory(uuid(20), v, 10, 0);
+            ProductMedia variantImage = media(uuid(30), v.getProduct(), v,
+                    "https://cdn.example.com/variant-primary.jpg", true, 10);
+            ProductMedia earlierVariantImage = media(uuid(31), v.getProduct(), v,
+                    "https://cdn.example.com/variant-earlier.jpg", false, 0);
+
+            stubSuccessfulCreateOrder(cust, cart, List.of(ci), addr, List.of(inv));
+            when(productMediaRepository.findByProductIdAndVariantIdAndMediaTypeOrderBySortOrderAsc(
+                    v.getProduct().getId(), v.getId(), MediaType.IMAGE))
+                    .thenReturn(List.of(earlierVariantImage, variantImage));
+
+            orderService.createOrder(cust, createRequest(uuid(10), "COD"), "idem-key");
+
+            ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+            verify(orderRepository).save(captor.capture());
+            assertThat(captor.getValue().getItems())
+                    .singleElement()
+                    .extracting(OrderItem::getProductImageUrl)
+                    .isEqualTo("https://cdn.example.com/variant-primary.jpg");
+        }
+
+        @Test
+        void order_item_falls_back_to_product_image_when_variant_has_no_image() {
+            Customer cust = customer(uuid(1));
+            Cart cart = activeCart(uuid(5), cust);
+            ProductVariant v = variant(uuid(1), new BigDecimal("100000"), null);
+            CartItem ci = cartItem(cart, v, 1);
+            Address addr = address(uuid(10), cust);
+            Inventory inv = inventory(uuid(20), v, 10, 0);
+            ProductMedia productImage = media(uuid(30), v.getProduct(), null,
+                    "https://cdn.example.com/product-primary.jpg", true, 0);
+
+            stubSuccessfulCreateOrder(cust, cart, List.of(ci), addr, List.of(inv));
+            when(productMediaRepository.findByProductIdAndVariantIdAndMediaTypeOrderBySortOrderAsc(
+                    v.getProduct().getId(), v.getId(), MediaType.IMAGE))
+                    .thenReturn(List.of());
+            when(productMediaRepository.findByProductIdAndVariantIsNullAndMediaTypeOrderBySortOrderAsc(
+                    v.getProduct().getId(), MediaType.IMAGE))
+                    .thenReturn(List.of(productImage));
+
+            orderService.createOrder(cust, createRequest(uuid(10), "COD"), "idem-key");
+
+            ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+            verify(orderRepository).save(captor.capture());
+            assertThat(captor.getValue().getItems())
+                    .singleElement()
+                    .extracting(OrderItem::getProductImageUrl)
+                    .isEqualTo("https://cdn.example.com/product-primary.jpg");
         }
 
         @Test
