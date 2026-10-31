@@ -40,6 +40,8 @@ import com.locnguyen.ecommerce.domains.product.entity.ProductMedia;
 import com.locnguyen.ecommerce.domains.product.enums.MediaType;
 import com.locnguyen.ecommerce.domains.product.repository.ProductMediaRepository;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
+import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherResponse;
+import com.locnguyen.ecommerce.domains.promotion.service.VoucherService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -92,6 +94,7 @@ class OrderServiceTest {
     @Mock IdempotencyService idempotencyService;
     @Mock CarrierCheckoutService carrierCheckoutService;
     @Mock ProductMediaRepository productMediaRepository;
+    @Mock VoucherService voucherService;
 
     @InjectMocks OrderServiceImpl orderService;
 
@@ -335,6 +338,35 @@ class OrderServiceTest {
             verify(orderRepository).save(captor.capture());
             assertThat(captor.getValue().getStatus()).isEqualTo(OrderStatus.PENDING);
             assertThat(captor.getValue().getPaymentMethod()).isEqualTo(PaymentMethod.COD);
+        }
+
+        @Test
+        void createOrder_persists_validated_voucher_discount_in_order_snapshot() {
+            Customer cust = customer(uuid(1));
+            Cart cart = activeCart(uuid(5), cust);
+            ProductVariant variant = variant(uuid(1), new BigDecimal("150000"), null);
+            CartItem item = cartItem(cart, variant, 2);
+            Address addr = address(uuid(10), cust);
+            Inventory inventory = inventory(uuid(20), variant, 10, 0);
+            CreateOrderRequest request = createRequest(uuid(10), "COD");
+            request.setVoucherCode("SAVE50");
+
+            stubSuccessfulCreateOrder(cust, cart, List.of(item), addr, List.of(inventory));
+            when(voucherService.validateVoucher(eq("SAVE50"), eq(cust), any()))
+                    .thenReturn(ValidateVoucherResponse.builder()
+                            .voucherCode("SAVE50")
+                            .discountAmount(new BigDecimal("50000"))
+                            .build());
+            when(voucherService.applyVoucher(eq("SAVE50"), eq(cust), any(), any(), anyList(), anyList(), anyList()))
+                    .thenReturn(new BigDecimal("50000"));
+
+            orderService.createOrder(cust, request, "idem-key");
+
+            ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+            verify(orderRepository).save(captor.capture());
+            assertThat(captor.getValue().getVoucherCode()).isEqualTo("SAVE50");
+            assertThat(captor.getValue().getDiscountAmount()).isEqualByComparingTo("50000");
+            assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("250000");
         }
 
         @Test
@@ -662,6 +694,32 @@ class OrderServiceTest {
             assertThat(response.getShippingFee()).isEqualByComparingTo("30000");
             assertThat(response.getTotalAmount()).isEqualByComparingTo("330000");
             assertThat(response.getShippingServiceName()).isEqualTo("Mock same-day");
+        }
+
+        @Test
+        void previewOrder_applies_the_validated_voucher_discount_to_total() {
+            Customer cust = customer(uuid(1));
+            Cart cart = activeCart(uuid(5), cust);
+            ProductVariant variant = variant(uuid(1), new BigDecimal("150000"), null);
+            CartItem item = cartItem(cart, variant, 2);
+            Address addr = address(uuid(10), cust);
+            CreateOrderRequest request = createRequest(addr.getId(), "COD");
+            request.setVoucherCode("SAVE50");
+
+            when(cartRepository.findByCustomerIdAndStatus(cust.getId(), CartStatus.ACTIVE)).thenReturn(Optional.of(cart));
+            when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId())).thenReturn(List.of(item));
+            when(addressRepository.findByIdAndDeletedFalse(addr.getId())).thenReturn(Optional.of(addr));
+            when(voucherService.validateVoucher(eq("SAVE50"), eq(cust), any()))
+                    .thenReturn(ValidateVoucherResponse.builder()
+                            .voucherCode("SAVE50")
+                            .discountAmount(new BigDecimal("50000"))
+                            .build());
+
+            OrderPreviewResponse response = orderService.previewOrder(cust, request);
+
+            assertThat(response.getDiscountAmount()).isEqualByComparingTo("50000");
+            assertThat(response.getTotalAmount()).isEqualByComparingTo("250000");
+            assertThat(response.getVoucherCode()).isEqualTo("SAVE50");
         }
     }
 

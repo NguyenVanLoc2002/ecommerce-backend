@@ -633,17 +633,19 @@ class VoucherServiceTest {
         }
 
         @Test
-        void idempotent_returns_zero_when_usage_already_recorded_for_order() {
+        void idempotent_returns_recorded_discount_when_usage_already_recorded_for_order() {
             Voucher v = voucher(promotion(DiscountType.FIXED_AMOUNT, BigDecimal.TEN));
-            when(voucherRepository.findByCodeWithRules("TESTCODE")).thenReturn(Optional.of(v));
-            when(voucherUsageRepository.existsByVoucherIdAndOrderId(uuid(10), uuid(200))).thenReturn(true);
+            VoucherUsage usage = new VoucherUsage();
+            usage.setDiscountAmount(new BigDecimal("50000"));
+            when(voucherRepository.findByCodeWithRulesForUpdate("TESTCODE")).thenReturn(Optional.of(v));
+            when(voucherUsageRepository.findByVoucherIdAndOrderId(uuid(10), uuid(200))).thenReturn(Optional.of(usage));
 
             BigDecimal result = voucherService.applyVoucher(
                     "TESTCODE", customer(uuid(1)), uuid(200), new BigDecimal("500000"), List.of(), List.of(), List.of());
 
-            assertThat(result).isEqualByComparingTo(BigDecimal.ZERO);
-            verify(voucherRepository, never()).incrementUsageCount(any(UUID.class));
-            verify(promotionService, never()).incrementUsageCount(any(UUID.class));
+            assertThat(result).isEqualByComparingTo("50000");
+            verify(voucherRepository, never()).incrementUsageCountIfAvailable(any(UUID.class));
+            verify(promotionService, never()).tryIncrementUsageCount(any(UUID.class));
         }
 
         @Test
@@ -651,9 +653,11 @@ class VoucherServiceTest {
             Promotion promo = promotion(DiscountType.FIXED_AMOUNT, new BigDecimal("50000"));
             Voucher v = voucher(promo);
             Customer cust = customer(uuid(7));
-            when(voucherRepository.findByCodeWithRules("TESTCODE")).thenReturn(Optional.of(v));
-            when(voucherUsageRepository.existsByVoucherIdAndOrderId(uuid(10), uuid(300))).thenReturn(false);
+            when(voucherRepository.findByCodeWithRulesForUpdate("TESTCODE")).thenReturn(Optional.of(v));
+            when(voucherUsageRepository.findByVoucherIdAndOrderId(uuid(10), uuid(300))).thenReturn(Optional.empty());
             when(voucherUsageRepository.countByVoucherIdAndCustomerId(uuid(10), uuid(7))).thenReturn(0L);
+            when(voucherRepository.incrementUsageCountIfAvailable(uuid(10))).thenReturn(1);
+            when(promotionService.tryIncrementUsageCount(uuid(1))).thenReturn(true);
 
             BigDecimal result = voucherService.applyVoucher(
                     "TESTCODE", cust, uuid(300), new BigDecimal("200000"), List.of(), List.of(), List.of());
@@ -666,17 +670,34 @@ class VoucherServiceTest {
                     && u.getDiscountAmount().compareTo(new BigDecimal("50000")) == 0));
 
             // Both counters incremented via atomic @Modifying queries (not read-modify-write)
-            verify(voucherRepository).incrementUsageCount(uuid(10));
-            verify(promotionService).incrementUsageCount(uuid(1));
+            verify(voucherRepository).incrementUsageCountIfAvailable(uuid(10));
+            verify(promotionService).tryIncrementUsageCount(uuid(1));
+        }
+
+        @Test
+        void throws_usage_limit_exceeded_when_atomic_voucher_reservation_loses_race() {
+            Promotion promo = promotion(DiscountType.FIXED_AMOUNT, new BigDecimal("50000"));
+            Voucher voucher = voucher(promo);
+            when(voucherRepository.findByCodeWithRulesForUpdate("TESTCODE")).thenReturn(Optional.of(voucher));
+            when(voucherUsageRepository.findByVoucherIdAndOrderId(uuid(10), uuid(301))).thenReturn(Optional.empty());
+            when(voucherUsageRepository.countByVoucherIdAndCustomerId(uuid(10), uuid(7))).thenReturn(0L);
+            when(voucherRepository.incrementUsageCountIfAvailable(uuid(10))).thenReturn(0);
+
+            assertThatThrownBy(() -> voucherService.applyVoucher(
+                    "TESTCODE", customer(uuid(7)), uuid(301), new BigDecimal("200000"), List.of(), List.of(), List.of()))
+                    .isInstanceOf(AppException.class)
+                    .extracting(e -> ((AppException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.VOUCHER_USAGE_LIMIT_EXCEEDED);
+
+            verify(voucherUsageRepository, never()).save(any(VoucherUsage.class));
+            verify(promotionService, never()).tryIncrementUsageCount(any(UUID.class));
         }
 
         @Test
         void propagates_VOUCHER_INVALID_when_voucher_inactive() {
             Voucher v = voucher(promotion(DiscountType.FIXED_AMOUNT, BigDecimal.TEN));
             v.setActive(false);
-            when(voucherRepository.findByCodeWithRules("TESTCODE")).thenReturn(Optional.of(v));
-            when(voucherUsageRepository.existsByVoucherIdAndOrderId(any(UUID.class), any(UUID.class)))
-                    .thenReturn(false);
+            when(voucherRepository.findByCodeWithRulesForUpdate("TESTCODE")).thenReturn(Optional.of(v));
 
             assertThatThrownBy(() ->
                     voucherService.applyVoucher("TESTCODE", customer(uuid(1)), uuid(400),
@@ -686,8 +707,8 @@ class VoucherServiceTest {
                     .isEqualTo(ErrorCode.VOUCHER_INVALID);
 
             // No counter changes on failed apply
-            verify(voucherRepository, never()).incrementUsageCount(any(UUID.class));
-            verify(promotionService, never()).incrementUsageCount(any(UUID.class));
+            verify(voucherRepository, never()).incrementUsageCountIfAvailable(any(UUID.class));
+            verify(promotionService, never()).tryIncrementUsageCount(any(UUID.class));
         }
 
         @Test
@@ -695,11 +716,12 @@ class VoucherServiceTest {
             Promotion promo = promotion(DiscountType.PERCENTAGE, BigDecimal.valueOf(15));
             Voucher v = voucher(promo);
             Customer cust = customer(uuid(5));
-            when(voucherRepository.findByCodeWithRules("TESTCODE")).thenReturn(Optional.of(v));
-            when(voucherUsageRepository.existsByVoucherIdAndOrderId(any(UUID.class), any(UUID.class)))
-                    .thenReturn(false);
+            when(voucherRepository.findByCodeWithRulesForUpdate("TESTCODE")).thenReturn(Optional.of(v));
+            when(voucherUsageRepository.findByVoucherIdAndOrderId(any(UUID.class), any(UUID.class))).thenReturn(Optional.empty());
             when(voucherUsageRepository.countByVoucherIdAndCustomerId(any(UUID.class), any(UUID.class)))
                     .thenReturn(0L);
+            when(voucherRepository.incrementUsageCountIfAvailable(any(UUID.class))).thenReturn(1);
+            when(promotionService.tryIncrementUsageCount(any(UUID.class))).thenReturn(true);
 
             BigDecimal orderAmount = new BigDecimal("400000");
             BigDecimal applied = voucherService.applyVoucher(

@@ -21,6 +21,14 @@ public interface PromotionRepository extends JpaRepository<Promotion, UUID>,
     @Query("UPDATE Promotion p SET p.usageCount = p.usageCount + 1 WHERE p.id = :id")
     void incrementUsageCount(@Param("id") UUID id);
 
+    @Modifying
+    @Query("""
+            UPDATE Promotion p SET p.usageCount = p.usageCount + 1
+            WHERE p.id = :id
+            AND (p.usageLimit IS NULL OR p.usageCount < p.usageLimit)
+            """)
+    int incrementUsageCountIfAvailable(@Param("id") UUID id);
+
     /**
      * Atomically decrements the promotion usage counter, floored at zero.
      */
