@@ -107,7 +107,7 @@ Reindex endpoint: `POST /api/v1/admin/products/search/reindex`.
 ### Risk Areas
 | Area | Risk | Severity |
 |------|------|----------|
-| Payment callback HMAC | `processCallback()` has `TODO(phase-2)` — signature verification not yet implemented. Spoofed callbacks can mark orders as paid. | **CRITICAL (pre-prod)** |
+| Legacy generic payment callback | ✅ **RESOLVED** — the unused `/api/v1/payments/callback` public whitelist was retired. Provider webhooks verify signatures before mutation. | RESOLVED |
 | MoMo IPN signature not wired | ✅ **RESOLVED** — `PaymentWebhookServiceImpl` calls `provider.verifySignature()` + `provider.extractAmount()` before any mutation. partnerCode, HMAC-SHA256, and amount are all validated. | RESOLVED |
 | Refund never completes | `PaymentRefund.status` stays `PENDING` forever; no pathway to `COMPLETED`. | MEDIUM |
 | Customer domain missing | No customer profile API, order history, or address management for customers identified. | MEDIUM |
