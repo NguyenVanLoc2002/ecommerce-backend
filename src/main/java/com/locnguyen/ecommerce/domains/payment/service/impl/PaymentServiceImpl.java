@@ -405,7 +405,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
-     * Process a callback from an online payment gateway.
+     * Process the dev-only mock payment completion callback.
      *
      * <p>Idempotency guarantees:
      * <ul>
@@ -419,13 +419,6 @@ public class PaymentServiceImpl implements PaymentService {
      */
     @Transactional
     public PaymentResponse processCallback(PaymentCallbackRequest request) {
-        // TODO(phase-2): HMAC/signature verification must be added here before any
-        // business mutation. Each gateway (VNPay, MoMo, etc.) uses a different signing
-        // algorithm and secret key. Wire a PaymentGatewaySignatureVerifier when the
-        // gateway integration is implemented. Failing signature verification must throw
-        // AppException(ErrorCode.PAYMENT_CALLBACK_INVALID) before the order is touched.
-        // See docs/security.md §5 and CLAUDE.md §9 for context.
-
         Order order = orderRepository.findByOrderCode(request.getOrderCode())
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_CALLBACK_INVALID,
                         "Order not found: " + request.getOrderCode()));

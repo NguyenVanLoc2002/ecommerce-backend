@@ -75,7 +75,7 @@ These routes are currently unauthenticated at the filter-chain level:
 - `POST /api/v1/auth/password/forgot`
 - `POST /api/v1/auth/password/forgot/verify`
 - `POST /api/v1/auth/password/reset`
-- `POST /api/v1/payments/callback` — gateway callback, server-to-server, no bearer token
+- `POST /api/v1/webhooks/payment/**` — gateway webhook, server-to-server, signature verified before mutation
 - `GET /api/v1/products/**`
 - `GET /api/v1/categories/**`
 - `GET /api/v1/brands/**`
@@ -96,11 +96,9 @@ These routes are currently unauthenticated at the filter-chain level:
 
 
 
-### 2.6 Payment callback route
+### 2.6 Payment webhook routes
 
-`POST /api/v1/payments/callback` is a public route called server-to-server by the payment gateway. No `Authorization` header is required or expected.
-
-**Security note:** HMAC/signature verification is a TODO inside `PaymentServiceImpl.processCallback`. Until it is implemented, the only protection against spoofed callbacks is application-level state-machine guards (idempotent on duplicate `providerTxnId`, no backward state transitions). See `docs/security.md §10` for details.
+`POST /api/v1/webhooks/payment/{provider}` and the PayPal-specific webhook route are public only for gateway server-to-server delivery. The registered provider verifies its signature before any payment or order mutation. Invalid signatures return `PAYMENT_WEBHOOK_SIGNATURE_INVALID`.
 
 ### 2.7 Idempotency
 

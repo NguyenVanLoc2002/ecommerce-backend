@@ -33,7 +33,7 @@ Shared response, error, auth, enum, and pagination rules are defined in [api-com
 
 ### Important current-code note
 
-`POST /api/v1/payments/callback` is a **public** endpoint called server-to-server by the payment gateway. No `Authorization` header is needed. HMAC signature verification is a pending TODO — see `docs/security.md §10`.
+Customer clients never call gateway webhooks. Gateways use `POST /api/v1/webhooks/payment/{provider}` (or the PayPal-specific route), where the registered provider verifies its signature before payment state changes.
 
 ### Legacy review moderation routes intentionally excluded
 
@@ -675,21 +675,6 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - on `COMPLETED` capture → payment `PAID`, order `paymentStatus = PAID`
   - on failed capture → payment `FAILED`, order `paymentStatus = FAILED`
   - pessimistic row lock prevents duplicate concurrent captures
-
-### POST `/api/v1/payments/callback`
-
-- Access: **public** — called server-to-server by the payment gateway. No auth token required.
-- Description: payment gateway callback endpoint. Idempotent on duplicate `providerTxnId`.
-- Request body:
-  - `PaymentCallbackRequest`
-- Response:
-  - `ApiResponse<PaymentResponse>`
-- Current service behavior:
-  - `status=SUCCESS` marks payment PAID, order.paymentStatus → PAID
-  - any other status is treated as FAILED
-  - duplicate `providerTxnId` → returns existing result, no side effect
-  - stale callback cannot move a PAID/REFUNDED payment backward
-- Security limitation: HMAC signature verification is not yet implemented. See `docs/security.md §10`.
 
 ### POST `/api/v1/webhooks/payment/PAYPAL`
 

@@ -470,8 +470,7 @@ app.payment.paypal.test-conversion-rate-vnd-to-usd=25000
 
 | # | Issue | Location | Impact |
 |---|---|---|---|
-| 1 | `processCallback()` in `PaymentServiceImpl` has no signature verification | `PaymentServiceImpl.java:422` (TODO comment) | The generic `/api/v1/payments/callback` endpoint accepts any payload. Not currently routed to by MoMo/PayPal (they use webhook endpoints), but must be fixed before any provider uses it. |
-| 2 | PayPal amount guard is skipped | `PaypalPaymentProvider.extractAmount()` returns `null` | A tampered webhook could report a lower amount. Mitigated by the fact that capture is already done by the time the webhook arrives, but reconciliation relies purely on `PAYMENT.CAPTURE.COMPLETED` event type. |
+| 1 | PayPal amount guard is skipped | `PaypalPaymentProvider.extractAmount()` returns `null` | A tampered webhook could report a lower amount. Mitigated by the fact that capture is already done by the time the webhook arrives, but reconciliation relies purely on `PAYMENT.CAPTURE.COMPLETED` event type. |
 
 ### MEDIUM — Operational
 
