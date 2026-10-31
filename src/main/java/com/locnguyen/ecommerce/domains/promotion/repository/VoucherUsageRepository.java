@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.UUID;
+import java.util.Optional;
 public interface VoucherUsageRepository extends JpaRepository<VoucherUsage, UUID> {
 
     Page<VoucherUsage> findByVoucherId(UUID voucherId, Pageable pageable);
@@ -17,6 +18,8 @@ public interface VoucherUsageRepository extends JpaRepository<VoucherUsage, UUID
     long countByVoucherIdAndCustomerId(UUID voucherId, UUID customerId);
 
     boolean existsByVoucherIdAndOrderId(UUID voucherId, UUID orderId);
+
+    Optional<VoucherUsage> findByVoucherIdAndOrderId(UUID voucherId, UUID orderId);
 
     @Query("SELECT COUNT(vu) > 0 FROM VoucherUsage vu " +
            "WHERE vu.customer.id = :customerId " +

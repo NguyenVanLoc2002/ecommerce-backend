@@ -537,7 +537,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
     - calculates shipping fee server-side via the provider abstraction
     - applies the quote to `shippingFee` and `totalAmount`
     - returns a carrier snapshot plus optional `shippingServiceName`
-  - `voucherCode` is stored in the preview response, but discount calculation is currently not applied in service logic
+  - when `voucherCode` is provided, the backend validates it against the active cart and returns the calculated discount in `discountAmount`
 
 ### POST `/api/v1/orders`
 
@@ -557,7 +557,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - when `carrierId` is provided, the backend recalculates shipping fee server-side during checkout and persists the selected carrier snapshot on the order
   - when `carrierId` is omitted, the order is still created with `shippingFee = 0`
   - stock is reserved during order creation
-  - `voucherCode` is stored on the order, but discount calculation is currently not applied in service logic
+  - when `voucherCode` is provided, the backend validates and atomically redeems it against the active cart; the order snapshots the validated code and discount
   - the persisted order snapshot includes `carrierId`, `carrierCode`, `carrierName`, and `carrierProviderType` when a carrier was selected
 
 ### GET `/api/v1/orders`

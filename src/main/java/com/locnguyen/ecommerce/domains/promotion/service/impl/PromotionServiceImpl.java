@@ -177,6 +177,13 @@ public class PromotionServiceImpl implements PromotionService {
 
     @Override
     @Transactional
+    public boolean tryIncrementUsageCount(UUID promotionId) {
+        findByIdOrThrow(promotionId);
+        return promotionRepository.incrementUsageCountIfAvailable(promotionId) == 1;
+    }
+
+    @Override
+    @Transactional
     public void decrementUsageCount(UUID promotionId) {
         findByIdOrThrow(promotionId);
         promotionRepository.decrementUsageCount(promotionId);

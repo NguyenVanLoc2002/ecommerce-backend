@@ -31,5 +31,7 @@ public interface PromotionService {
 
     void incrementUsageCount(UUID promotionId);
 
+    boolean tryIncrementUsageCount(UUID promotionId);
+
     void decrementUsageCount(UUID promotionId);
 }
