@@ -636,7 +636,7 @@ These items should be resolved before the first production deployment, regardles
 
 - [ ] `.\mvnw.cmd -DskipTests compile` — build passes
 - [ ] `.\mvnw.cmd verify` — all tests pass
-- [ ] `.\mvnw.cmd spotless:check` — code style clean
+- [x] `.\mvnw.cmd spotless:check` — baseline Java import/whitespace check is configured
 - [ ] No new `TODO` / `FIXME` left uncommitted without tracking issue
 - [ ] API contract docs updated if endpoint shape changed
 - [ ] No sensitive data in logs (API keys, HMAC secrets, OTP, raw tokens)
