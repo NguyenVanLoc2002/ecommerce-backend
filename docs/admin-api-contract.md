@@ -194,6 +194,32 @@ Role summary by module:
 - Response:
   - `ApiResponse<Void>`
 
+### POST `/api/v1/admin/products/{productId}/media`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: attach URL-based media to a product gallery or one of its active variants. This MVP stores an existing `http` or `https` URL; it does not upload, proxy, or delete remote assets.
+- Request:
+  - `mediaUrl`: required HTTP(S) URL, max 500 characters
+  - `mediaType`: optional `IMAGE` (default) or `VIDEO`
+  - `sortOrder`: optional integer, minimum `0` (default `0`)
+  - `primary`: optional boolean (default `false`); only `IMAGE` may be primary
+  - `variantId`: optional UUID; when supplied it must identify an active variant of `{productId}`
+- Primary rule: at most one `IMAGE` is primary for a product across both gallery and variant media. Creating a new primary clears the old primary.
+- Response: `201 ApiResponse<MediaResponse>`
+
+### PATCH `/api/v1/admin/products/{productId}/media/{mediaId}`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: partially update URL, type, sort order, primary flag, or variant assignment. Send `variantId: null` to move media back to the product gallery.
+- Validation and primary rules match the create endpoint. `mediaId` must belong to `{productId}`.
+- Response: `200 ApiResponse<MediaResponse>`
+
+### DELETE `/api/v1/admin/products/{productId}/media/{mediaId}`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: permanently removes the `product_media` metadata row only. The backend does not own or delete the remote URL's asset.
+- Response: `204 ApiResponse<Void>`
+
 ### GET `/api/v1/admin/products/{productId}/variants`
 
 - Access: `ADMIN`, `SUPER_ADMIN`
