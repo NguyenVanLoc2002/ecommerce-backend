@@ -6,6 +6,7 @@ import com.locnguyen.ecommerce.domains.product.dto.ProductDetailResponse;
 import com.locnguyen.ecommerce.domains.product.dto.ProductListItemResponse;
 import com.locnguyen.ecommerce.domains.product.entity.Product;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
+import com.locnguyen.ecommerce.domains.product.enums.MediaType;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
@@ -34,7 +35,12 @@ public interface ProductMapper {
     @org.mapstruct.Named("extractThumbnail")
     default String extractThumbnail(Product product) {
         return product.getMedia().stream()
-                .filter(m -> m.isPrimary())
+                .filter(m -> m.getMediaType() == MediaType.IMAGE)
+                .sorted(java.util.Comparator
+                        .comparing(com.locnguyen.ecommerce.domains.product.entity.ProductMedia::isPrimary)
+                        .reversed()
+                        .thenComparing(com.locnguyen.ecommerce.domains.product.entity.ProductMedia::getSortOrder)
+                        .thenComparing(com.locnguyen.ecommerce.domains.product.entity.ProductMedia::getId))
                 .map(com.locnguyen.ecommerce.domains.product.entity.ProductMedia::getMediaUrl)
                 .findFirst()
                 .orElse(null);

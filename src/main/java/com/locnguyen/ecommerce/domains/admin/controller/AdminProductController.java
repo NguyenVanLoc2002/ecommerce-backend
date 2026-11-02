@@ -6,6 +6,7 @@ import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.product.dto.*;
 import com.locnguyen.ecommerce.domains.product.service.ProductSearchReindexService;
 import com.locnguyen.ecommerce.domains.product.service.ProductSearchReindexService.ReindexResult;
+import com.locnguyen.ecommerce.domains.product.service.ProductMediaService;
 import com.locnguyen.ecommerce.domains.product.service.ProductService;
 import com.locnguyen.ecommerce.domains.productvariant.service.ProductVariantService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,6 +41,7 @@ import java.util.UUID;
 public class AdminProductController {
 
     private final ProductService productService;
+    private final ProductMediaService productMediaService;
     private final ProductVariantService variantService;
     private final ProductSearchReindexService productSearchReindexService;
 
@@ -82,6 +84,30 @@ public class AdminProductController {
     @DeleteMapping("/{id}")
     public ApiResponse<Void> deleteProduct(@PathVariable UUID id) {
         productService.deleteProduct(id);
+        return ApiResponse.noContent();
+    }
+
+    @Operation(summary = "Add URL-based media to a product or variant")
+    @PostMapping("/{productId}/media")
+    public ApiResponse<MediaResponse> createMedia(
+            @PathVariable UUID productId,
+            @Valid @RequestBody CreateProductMediaRequest request) {
+        return ApiResponse.created(productMediaService.createMedia(productId, request));
+    }
+
+    @Operation(summary = "Partially update product media")
+    @PatchMapping("/{productId}/media/{mediaId}")
+    public ApiResponse<MediaResponse> updateMedia(
+            @PathVariable UUID productId,
+            @PathVariable UUID mediaId,
+            @Valid @RequestBody UpdateProductMediaRequest request) {
+        return ApiResponse.success(productMediaService.updateMedia(productId, mediaId, request));
+    }
+
+    @Operation(summary = "Remove product media metadata without deleting the remote asset")
+    @DeleteMapping("/{productId}/media/{mediaId}")
+    public ApiResponse<Void> deleteMedia(@PathVariable UUID productId, @PathVariable UUID mediaId) {
+        productMediaService.deleteMedia(productId, mediaId);
         return ApiResponse.noContent();
     }
 

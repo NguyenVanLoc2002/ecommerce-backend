@@ -56,6 +56,7 @@ public enum ErrorCode {
 
     // ─── Product ────────────────────────────────────────────────────────────
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product not found"),
+    PRODUCT_MEDIA_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_MEDIA_NOT_FOUND", "Product media not found"),
     PRODUCT_INACTIVE(HttpStatus.UNPROCESSABLE_ENTITY, "PRODUCT_INACTIVE",
             "Product is currently inactive"),
 
