@@ -6,12 +6,17 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 import java.util.UUID;
 @Repository
 public interface ProductMediaRepository extends JpaRepository<ProductMedia, UUID> {
 
     List<ProductMedia> findByProductIdOrderBySortOrderAsc(UUID productId);
+
+    Optional<ProductMedia> findByIdAndProductId(UUID id, UUID productId);
+
+    List<ProductMedia> findByProductIdAndPrimaryTrue(UUID productId);
 
     List<ProductMedia> findByProductIdAndVariantIdOrderBySortOrderAsc(UUID productId, UUID variantId);
 

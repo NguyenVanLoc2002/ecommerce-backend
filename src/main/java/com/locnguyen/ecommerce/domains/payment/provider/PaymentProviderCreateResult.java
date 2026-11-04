@@ -3,6 +3,8 @@ package com.locnguyen.ecommerce.domains.payment.provider;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.math.BigDecimal;
+
 /**
  * Value object returned by {@link PaymentProvider#createPayment}.
  *
@@ -36,4 +38,8 @@ public class PaymentProviderCreateResult {
 
     /** Human-readable message from the provider's create-payment response. */
     private final String message;
+
+    private final BigDecimal providerAmount;
+    private final String providerCurrency;
+    private final BigDecimal providerExchangeRate;
 }

@@ -22,7 +22,8 @@ import java.util.UUID;
  * dependency between the promotion and order modules.
  */
 @Entity
-@Table(name = "voucher_usages")
+@Table(name = "voucher_usages", uniqueConstraints = @UniqueConstraint(
+        name = "uk_voucher_usages_voucher_order", columnNames = {"voucher_id", "order_id"}))
 @Getter
 @Setter
 @NoArgsConstructor

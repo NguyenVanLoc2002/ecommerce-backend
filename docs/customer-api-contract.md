@@ -33,7 +33,7 @@ Shared response, error, auth, enum, and pagination rules are defined in [api-com
 
 ### Important current-code note
 
-`POST /api/v1/payments/callback` is a **public** endpoint called server-to-server by the payment gateway. No `Authorization` header is needed. HMAC signature verification is a pending TODO — see `docs/security.md §10`.
+Customer clients never call gateway webhooks. Gateways use `POST /api/v1/webhooks/payment/{provider}` (or the PayPal-specific route), where the registered provider verifies its signature before payment state changes.
 
 ### Legacy review moderation routes intentionally excluded
 
@@ -537,7 +537,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
     - calculates shipping fee server-side via the provider abstraction
     - applies the quote to `shippingFee` and `totalAmount`
     - returns a carrier snapshot plus optional `shippingServiceName`
-  - `voucherCode` is stored in the preview response, but discount calculation is currently not applied in service logic
+  - when `voucherCode` is provided, the backend validates it against the active cart and returns the calculated discount in `discountAmount`
 
 ### POST `/api/v1/orders`
 
@@ -557,7 +557,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - when `carrierId` is provided, the backend recalculates shipping fee server-side during checkout and persists the selected carrier snapshot on the order
   - when `carrierId` is omitted, the order is still created with `shippingFee = 0`
   - stock is reserved during order creation
-  - `voucherCode` is stored on the order, but discount calculation is currently not applied in service logic
+  - when `voucherCode` is provided, the backend validates and atomically redeems it against the active cart; the order snapshots the validated code and discount
   - the persisted order snapshot includes `carrierId`, `carrierCode`, `carrierName`, and `carrierProviderType` when a carrier was selected
 
 ### GET `/api/v1/orders`
@@ -650,7 +650,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - terminal processed states are rejected
 - Supported providers:
   - `MOMO` — active when `app.payment.momo.enabled=true`; amount must be 1,000–50,000,000 VND
-  - `PAYPAL` — active when `app.payment.paypal.enabled=true`; uses PayPal Orders API v2 sandbox. Returns PayPal approval URL as `paymentUrl`. Orders are VND; enable `app.payment.paypal.test-conversion-enabled=true` for sandbox VND→USD conversion. After initiation the frontend redirects to PayPal; upon return, call the capture endpoint below with the `?token=` param.
+  - `PAYPAL` — active when `app.payment.paypal.enabled=true`; uses PayPal Orders API v2 with USD provider orders. Orders and the customer-facing `amount` remain VND. The backend converts using its configured VND-per-USD rate and snapshots the USD amount, currency, and rate for reconciliation. After initiation the frontend redirects to PayPal; upon return, call the capture endpoint below with the `?token=` param.
   - `MOCK` — dev/test only; active when `app.payment.mock.enabled=true`
 - PayPal frontend routes:
   - Approval return: configured via `app.payment.paypal.return-url` (default `http://localhost:5173/payment/paypal/return`)
@@ -675,21 +675,6 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - on `COMPLETED` capture → payment `PAID`, order `paymentStatus = PAID`
   - on failed capture → payment `FAILED`, order `paymentStatus = FAILED`
   - pessimistic row lock prevents duplicate concurrent captures
-
-### POST `/api/v1/payments/callback`
-
-- Access: **public** — called server-to-server by the payment gateway. No auth token required.
-- Description: payment gateway callback endpoint. Idempotent on duplicate `providerTxnId`.
-- Request body:
-  - `PaymentCallbackRequest`
-- Response:
-  - `ApiResponse<PaymentResponse>`
-- Current service behavior:
-  - `status=SUCCESS` marks payment PAID, order.paymentStatus → PAID
-  - any other status is treated as FAILED
-  - duplicate `providerTxnId` → returns existing result, no side effect
-  - stale callback cannot move a PAID/REFUNDED payment backward
-- Security limitation: HMAC signature verification is not yet implemented. See `docs/security.md §10`.
 
 ### POST `/api/v1/webhooks/payment/PAYPAL`
 

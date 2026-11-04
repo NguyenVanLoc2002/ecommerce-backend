@@ -84,11 +84,9 @@ public class PaymentProviderConfigResolver {
                         paymentProperties.getPaypal().getPaymentMethodPreference()),
                 firstNonBlank(config != null ? config.getPaypalShippingPreference() : null,
                         paymentProperties.getPaypal().getShippingPreference()),
-                config != null ? config.isPaypalTestConversionEnabled()
-                        : paymentProperties.getPaypal().isTestConversionEnabled(),
-                config != null && config.getPaypalTestConversionRateVndUsd() != null
-                        ? config.getPaypalTestConversionRateVndUsd()
-                        : paymentProperties.getPaypal().getTestConversionRateVndToUsd(),
+                config != null && config.getPaypalConversionRateVndUsd() != null
+                        ? config.getPaypalConversionRateVndUsd()
+                        : paymentProperties.getPaypal().getConversionRateVndToUsd(),
                 positiveOrDefault(config != null ? config.getConnectTimeoutMs() : null, paymentProperties.getPaypal().getConnectTimeoutMs()),
                 positiveOrDefault(config != null ? config.getReadTimeoutMs() : null, paymentProperties.getPaypal().getReadTimeoutMs())
         );
@@ -123,6 +121,14 @@ public class PaymentProviderConfigResolver {
                 || isBlank(config.cancelUrl())) {
             throw new AppException(ErrorCode.PAYMENT_CONFIG_MISSING,
                     "PayPal payment configuration is missing required fields");
+        }
+        if (!"USD".equalsIgnoreCase(config.currency())) {
+            throw new AppException(ErrorCode.PAYMENT_CURRENCY_UNSUPPORTED,
+                    "PayPal production payments support USD only");
+        }
+        if (config.conversionRateVndToUsd() == null || config.conversionRateVndToUsd().signum() <= 0) {
+            throw new AppException(ErrorCode.PAYMENT_CURRENCY_UNSUPPORTED,
+                    "PayPal VND to USD conversion rate must be configured");
         }
     }
 

@@ -49,6 +49,9 @@ import com.locnguyen.ecommerce.domains.product.entity.ProductMedia;
 import com.locnguyen.ecommerce.domains.product.enums.MediaType;
 import com.locnguyen.ecommerce.domains.product.repository.ProductMediaRepository;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
+import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherRequest;
+import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherResponse;
+import com.locnguyen.ecommerce.domains.promotion.service.VoucherService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -82,12 +85,14 @@ public class OrderServiceImpl implements OrderService {
     private final IdempotencyService idempotencyService;
     private final CarrierCheckoutService carrierCheckoutService;
     private final ProductMediaRepository productMediaRepository;
+    private final VoucherService voucherService;
 
     @Override
     @Transactional(readOnly = true)
     public OrderPreviewResponse previewOrder(Customer customer, CreateOrderRequest request) {
         CheckoutDraft draft = loadCheckoutDraft(customer, request.getShippingAddressId(), false);
         Order order = buildDraftOrder(customer, draft.address(), draft.cartItems(), request, CodeGenerator.generateOrderCode());
+        applyVoucherPreview(order, customer, draft.cartItems(), request.getVoucherCode());
         CheckoutCarrierQuoteResponse quote = applyShippingSelection(order, request.getCarrierId());
         return buildPreviewResponse(order, quote);
     }
@@ -124,9 +129,9 @@ public class OrderServiceImpl implements OrderService {
                 : PaymentMethod.COD;
 
         Order order = buildDraftOrder(customer, draft.address(), draft.cartItems(), request, orderCode);
-        applyShippingSelection(order, request.getCarrierId());
-
         order = orderRepository.save(order);
+        applyVoucherDuringCheckout(order, customer, draft.cartItems(), request.getVoucherCode());
+        applyShippingSelection(order, request.getCarrierId());
 
         List<UUID> variantIds = draft.cartItems().stream()
                 .map(ci -> ci.getVariant().getId())
@@ -511,6 +516,68 @@ public class OrderServiceImpl implements OrderService {
         return quote;
     }
 
+    private void applyVoucherPreview(Order order, Customer customer, List<CartItem> cartItems, String voucherCode) {
+        ValidateVoucherResponse voucher = validateVoucherForCheckout(order, customer, cartItems, voucherCode);
+        if (voucher == null) {
+            return;
+        }
+        order.setVoucherCode(voucher.getVoucherCode());
+        order.setDiscountAmount(voucher.getDiscountAmount());
+        order.setTotalAmount(order.getSubTotal().subtract(voucher.getDiscountAmount()));
+    }
+
+    private void applyVoucherDuringCheckout(Order order, Customer customer, List<CartItem> cartItems, String voucherCode) {
+        ValidateVoucherResponse voucher = validateVoucherForCheckout(order, customer, cartItems, voucherCode);
+        if (voucher == null) {
+            return;
+        }
+
+        CheckoutVoucherContext context = checkoutVoucherContext(order, cartItems);
+        BigDecimal discount = voucherService.applyVoucher(
+                voucherCode,
+                customer,
+                order.getId(),
+                context.orderAmount(),
+                context.productIds(),
+                context.categoryIds(),
+                context.brandIds());
+        order.setVoucherCode(voucher.getVoucherCode());
+        order.setDiscountAmount(discount);
+        order.setTotalAmount(order.getSubTotal().subtract(discount));
+    }
+
+    private ValidateVoucherResponse validateVoucherForCheckout(
+            Order order, Customer customer, List<CartItem> cartItems, String voucherCode) {
+        if (voucherCode == null || voucherCode.isBlank()) {
+            return null;
+        }
+
+        CheckoutVoucherContext context = checkoutVoucherContext(order, cartItems);
+        ValidateVoucherRequest request = new ValidateVoucherRequest();
+        request.setOrderAmount(context.orderAmount());
+        request.setProductIds(context.productIds());
+        request.setCategoryIds(context.categoryIds());
+        request.setBrandIds(context.brandIds());
+        return voucherService.validateVoucher(voucherCode, customer, request);
+    }
+
+    private CheckoutVoucherContext checkoutVoucherContext(Order order, List<CartItem> cartItems) {
+        List<ProductVariant> variants = cartItems.stream().map(CartItem::getVariant).toList();
+        List<UUID> productIds = variants.stream().map(variant -> variant.getProduct().getId()).distinct().toList();
+        List<UUID> categoryIds = variants.stream()
+                .flatMap(variant -> variant.getProduct().getCategories().stream())
+                .map(category -> category.getId())
+                .distinct()
+                .toList();
+        List<UUID> brandIds = variants.stream()
+                .map(variant -> variant.getProduct().getBrand())
+                .filter(java.util.Objects::nonNull)
+                .map(brand -> brand.getId())
+                .distinct()
+                .toList();
+        return new CheckoutVoucherContext(order.getSubTotal(), productIds, categoryIds, brandIds);
+    }
+
     private OrderPreviewResponse buildPreviewResponse(Order order, CheckoutCarrierQuoteResponse quote) {
         return OrderPreviewResponse.builder()
                 .carrierId(order.getCarrierId())
@@ -605,5 +672,12 @@ public class OrderServiceImpl implements OrderService {
             Cart cart,
             List<CartItem> cartItems,
             Address address
+    ) {}
+
+    private record CheckoutVoucherContext(
+            BigDecimal orderAmount,
+            List<UUID> productIds,
+            List<UUID> categoryIds,
+            List<UUID> brandIds
     ) {}
 }

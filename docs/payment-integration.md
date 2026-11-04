@@ -245,9 +245,9 @@ POST /api/v1/payments/order/{orderId}/initiate
          │       │            → caches token until expiresIn - 60s
          │       │
          │       ├─ resolvePaypalAmount(orderAmount):
-         │       │       └─ currency=USD + testConversionEnabled=true
-         │       │            → amount = orderAmount / testConversionRateVndToUsd
-         │       │          (for production: direct passthrough with scale=2)
+         │       │       └─ currency=USD + platform-managed VND-per-USD rate
+         │       │            → amount = orderAmount / conversionRateVndToUsd (HALF_UP, 2 decimals)
+         │       │          → snapshot VND amount, USD amount, currency, and rate for reconciliation
          │       │
          │       ├─ POST /v2/checkout/orders  (Prefer: return=representation)
          │       │    Body: {
@@ -470,8 +470,7 @@ app.payment.paypal.test-conversion-rate-vnd-to-usd=25000
 
 | # | Issue | Location | Impact |
 |---|---|---|---|
-| 1 | `processCallback()` in `PaymentServiceImpl` has no signature verification | `PaymentServiceImpl.java:422` (TODO comment) | The generic `/api/v1/payments/callback` endpoint accepts any payload. Not currently routed to by MoMo/PayPal (they use webhook endpoints), but must be fixed before any provider uses it. |
-| 2 | PayPal amount guard is skipped | `PaypalPaymentProvider.extractAmount()` returns `null` | A tampered webhook could report a lower amount. Mitigated by the fact that capture is already done by the time the webhook arrives, but reconciliation relies purely on `PAYMENT.CAPTURE.COMPLETED` event type. |
+| 1 | PayPal amount guard is skipped | `PaypalPaymentProvider.extractAmount()` returns `null` | A tampered webhook could report a lower amount. Mitigated by the fact that capture is already done by the time the webhook arrives, but reconciliation relies purely on `PAYMENT.CAPTURE.COMPLETED` event type. |
 
 ### MEDIUM — Operational
 
@@ -485,7 +484,6 @@ app.payment.paypal.test-conversion-rate-vnd-to-usd=25000
 
 | # | Issue | Location | Impact |
 |---|---|---|---|
-| 6 | VND→USD conversion is hardcoded test rate | `PaypalPaymentProperties.testConversionRateVndToUsd` | Production requires a real FX service or PayPal must be configured to accept VND directly. |
 | 7 | MoMo `capturePayment()` returns `Optional.empty()` | `MomoPaymentProvider` (not overridden) | MoMo does not use the two-step capture flow. The capture endpoint would fail if called for a MoMo payment, but there is no guard at the controller level to prevent it. |
 
 ---
@@ -497,7 +495,7 @@ app.payment.paypal.test-conversion-rate-vnd-to-usd=25000
 | Flow | Single-step (IPN after redirect) | Two-step (approve → capture) |
 | Confirmation mechanism | IPN webhook (server push) | Capture API call + webhook reconciliation |
 | Signature algorithm | HMAC-SHA256 (body field) | PayPal Webhooks API v1 (5 headers) |
-| Currency | VND only | USD (test conversion for sandbox) |
+| Currency | VND only | USD, converted from canonical VND with a platform-managed snapshot rate |
 | Capture endpoint | Not used | `POST /v2/checkout/orders/{id}/capture` |
 | Auth mechanism | partnerCode + accessKey + secretKey | OAuth 2.0 client_credentials (cached) |
 | Amount validation | `extractAmount()` → amount guard active | `extractAmount()` → returns null, guard skipped |

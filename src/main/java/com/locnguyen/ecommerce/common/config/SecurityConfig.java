@@ -43,7 +43,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * <h2>Endpoint access matrix</h2>
  * <pre>
  *   Public (no token)            → /api/v1/auth/**, GET /api/v1/products/**, swagger, health
- *                                   POST /api/v1/payments/callback (gateway callback)
+ *                                   POST /api/v1/webhooks/payment/** (gateway webhooks; signature verified)
  *   Authenticated (any role)     → /api/v1/cart/**, /api/v1/orders/**, /api/v1/profile/**
  *   ADMIN / SUPER_ADMIN only     → /api/v1/admin/**
  *   STAFF / ADMIN / SUPER_ADMIN  → [handled via @PreAuthorize on individual endpoints]
@@ -78,11 +78,6 @@ public class SecurityConfig {
             "/api/v1/auth/password/forgot",
             "/api/v1/auth/password/forgot/verify",
             "/api/v1/auth/password/reset",
-            // Payment gateway callback — called server-to-server by the provider.
-            // No bearer token is available on the gateway side.
-            // IMPORTANT: HMAC/signature verification inside processCallback is the
-            // only guard against spoofed callbacks until it is fully implemented.
-            "/api/v1/payments/callback",
             // Payment webhook — provider-initiated server-to-server calls; no bearer token.
             // Security relies on HMAC/signature verification inside the handler.
             "/api/v1/webhooks/payment/**",

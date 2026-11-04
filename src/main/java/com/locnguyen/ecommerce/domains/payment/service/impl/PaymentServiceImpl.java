@@ -313,10 +313,6 @@ public class PaymentServiceImpl implements PaymentService {
                     existing.setExpiredAt(LocalDateTime.now().plusHours(24));
                     existing = paymentRepository.save(existing);
 
-                    recordTransaction(existing, TransactionStatus.INITIATED, PaymentMethod.ONLINE,
-                            request.getProvider(), null,
-                            "Online payment re-initiated after failure for order " + order.getOrderCode());
-
                     log.info("Online payment re-initiated after FAILED: code={}",
                             existing.getPaymentCode());
                     resultPayment = existing;
@@ -340,10 +336,6 @@ public class PaymentServiceImpl implements PaymentService {
             order.setPaymentStatus(PaymentStatus.PENDING);
             orderRepository.save(order);
 
-            recordTransaction(payment, TransactionStatus.INITIATED, PaymentMethod.ONLINE,
-                    request.getProvider(), null,
-                    "Online payment initiated for order " + order.getOrderCode());
-
             log.info("Online payment initiated: code={} orderCode={} provider={}",
                     payment.getPaymentCode(), order.getOrderCode(), request.getProvider());
             resultPayment = payment;
@@ -360,8 +352,14 @@ public class PaymentServiceImpl implements PaymentService {
             if (providerResult.getProviderOrderId() != null) {
                 resultPayment.setProviderOrderId(providerResult.getProviderOrderId());
                 resultPayment.setProviderRequestId(providerResult.getProviderRequestId());
-                paymentRepository.save(resultPayment);
             }
+            resultPayment.setProviderAmount(providerResult.getProviderAmount());
+            resultPayment.setProviderCurrency(providerResult.getProviderCurrency());
+            resultPayment.setProviderExchangeRate(providerResult.getProviderExchangeRate());
+            paymentRepository.save(resultPayment);
+            recordTransaction(resultPayment, TransactionStatus.INITIATED, PaymentMethod.ONLINE,
+                    request.getProvider(), null,
+                    "Online payment initiated for order " + order.getOrderCode());
             PaymentResponse.PaymentResponseBuilder builder = response.toBuilder();
             if (providerResult.getPaymentUrl() != null) {
                 builder.paymentUrl(providerResult.getPaymentUrl());
@@ -373,6 +371,10 @@ public class PaymentServiceImpl implements PaymentService {
                 builder.qrCodeUrl(providerResult.getQrCodeUrl());
             }
             response = builder.build();
+        } else {
+            recordTransaction(resultPayment, TransactionStatus.INITIATED, PaymentMethod.ONLINE,
+                    request.getProvider(), null,
+                    "Online payment initiated for order " + order.getOrderCode());
         }
 
         idempotencyService.markComplete(
@@ -405,7 +407,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
-     * Process a callback from an online payment gateway.
+     * Process the dev-only mock payment completion callback.
      *
      * <p>Idempotency guarantees:
      * <ul>
@@ -419,13 +421,6 @@ public class PaymentServiceImpl implements PaymentService {
      */
     @Transactional
     public PaymentResponse processCallback(PaymentCallbackRequest request) {
-        // TODO(phase-2): HMAC/signature verification must be added here before any
-        // business mutation. Each gateway (VNPay, MoMo, etc.) uses a different signing
-        // algorithm and secret key. Wire a PaymentGatewaySignatureVerifier when the
-        // gateway integration is implemented. Failing signature verification must throw
-        // AppException(ErrorCode.PAYMENT_CALLBACK_INVALID) before the order is touched.
-        // See docs/security.md §5 and CLAUDE.md §9 for context.
-
         Order order = orderRepository.findByOrderCode(request.getOrderCode())
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_CALLBACK_INVALID,
                         "Order not found: " + request.getOrderCode()));
@@ -480,6 +475,9 @@ public class PaymentServiceImpl implements PaymentService {
         txn.setTransactionCode(CodeGenerator.generatePaymentTransactionCode());
         txn.setStatus(success ? TransactionStatus.SUCCESS : TransactionStatus.FAILED);
         txn.setAmount(payment.getAmount());
+        txn.setProviderAmount(payment.getProviderAmount());
+        txn.setProviderCurrency(payment.getProviderCurrency());
+        txn.setProviderExchangeRate(payment.getProviderExchangeRate());
         txn.setMethod(PaymentMethod.ONLINE);
         txn.setProvider(PaymentProviderType.fromValue(request.getProvider()));
         txn.setProviderTxnId(request.getProviderTxnId());
@@ -570,6 +568,9 @@ public class PaymentServiceImpl implements PaymentService {
         txn.setTransactionCode(CodeGenerator.generatePaymentTransactionCode());
         txn.setStatus(status);
         txn.setAmount(payment.getAmount());
+        txn.setProviderAmount(payment.getProviderAmount());
+        txn.setProviderCurrency(payment.getProviderCurrency());
+        txn.setProviderExchangeRate(payment.getProviderExchangeRate());
         txn.setMethod(method);
         txn.setProvider(PaymentProviderType.fromValue(provider));
         txn.setProviderTxnId(providerTxnId);

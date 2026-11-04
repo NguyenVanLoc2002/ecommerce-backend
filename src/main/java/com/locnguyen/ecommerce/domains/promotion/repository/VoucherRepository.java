@@ -5,7 +5,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.LockModeType;
 
 import java.util.Optional;
 
@@ -37,6 +39,17 @@ public interface VoucherRepository extends JpaRepository<Voucher, UUID>,
             """)
     Optional<Voucher> findByCodeWithRules(@Param("code") String code);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT v FROM Voucher v
+            JOIN FETCH v.promotion p
+            LEFT JOIN FETCH p.rules
+            WHERE UPPER(v.code) = UPPER(:code)
+            AND v.deleted = false
+            AND p.deleted = false
+            """)
+    Optional<Voucher> findByCodeWithRulesForUpdate(@Param("code") String code);
+
     /**
      * Atomically increments the usage counter without a read-modify-write cycle.
      * Safe under concurrent redemptions because the UPDATE is issued as one DB statement.
@@ -44,6 +57,14 @@ public interface VoucherRepository extends JpaRepository<Voucher, UUID>,
     @Modifying
     @Query("UPDATE Voucher v SET v.usageCount = v.usageCount + 1 WHERE v.id = :id")
     void incrementUsageCount(@Param("id") UUID id);
+
+    @Modifying
+    @Query("""
+            UPDATE Voucher v SET v.usageCount = v.usageCount + 1
+            WHERE v.id = :id
+            AND (v.usageLimit IS NULL OR v.usageCount < v.usageLimit)
+            """)
+    int incrementUsageCountIfAvailable(@Param("id") UUID id);
 
     /**
      * Atomically decrements the usage counter, floored at zero.

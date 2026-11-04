@@ -193,14 +193,16 @@ public class VoucherServiceImpl implements VoucherService {
             return BigDecimal.ZERO;
         }
 
-        // Eager-load promotion + rules to avoid N+1 during doValidate()
-        Voucher voucher = findByCodeWithRulesOrThrow(voucherCode);
+        // Lock one voucher redemption at a time while loading promotion rules.
+        Voucher voucher = voucherRepository.findByCodeWithRulesForUpdate(voucherCode)
+                .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_NOT_FOUND));
 
         // Idempotent: usage already recorded for this order
-        if (voucherUsageRepository.existsByVoucherIdAndOrderId(voucher.getId(), orderId)) {
+        var existingUsage = voucherUsageRepository.findByVoucherIdAndOrderId(voucher.getId(), orderId);
+        if (existingUsage.isPresent()) {
             log.warn("Voucher usage already recorded: voucherId={} orderId={}",
                     voucher.getId(), orderId);
-            return BigDecimal.ZERO;
+            return existingUsage.get().getDiscountAmount();
         }
 
         doValidate(voucher, customer, orderAmount,
@@ -214,11 +216,15 @@ public class VoucherServiceImpl implements VoucherService {
         usage.setCustomer(customer);
         usage.setOrderId(orderId);
         usage.setDiscountAmount(discount);
+        if (voucherRepository.incrementUsageCountIfAvailable(voucher.getId()) != 1) {
+            throw new AppException(ErrorCode.VOUCHER_USAGE_LIMIT_EXCEEDED);
+        }
+        if (!promotionService.tryIncrementUsageCount(voucher.getPromotion().getId())) {
+            throw new AppException(ErrorCode.VOUCHER_USAGE_LIMIT_EXCEEDED);
+        }
         voucherUsageRepository.save(usage);
 
         // Atomically increment counters — no read-modify-write race
-        voucherRepository.incrementUsageCount(voucher.getId());
-        promotionService.incrementUsageCount(voucher.getPromotion().getId());
 
         log.info("Voucher applied: code={} orderId={} discount={}", voucherCode, orderId, discount);
         return discount;

@@ -16,6 +16,7 @@ import com.locnguyen.ecommerce.domains.category.mapper.CategoryMapper;
 import com.locnguyen.ecommerce.domains.category.repository.CategoryRepository;
 import com.locnguyen.ecommerce.domains.product.dto.*;
 import com.locnguyen.ecommerce.domains.product.entity.Product;
+import com.locnguyen.ecommerce.domains.product.entity.ProductMedia;
 import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
 import com.locnguyen.ecommerce.domains.product.mapper.ProductMapper;
 import com.locnguyen.ecommerce.domains.product.mapper.ProductVariantMapper;
@@ -36,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Comparator;
 
 import java.util.UUID;
 @Slf4j
@@ -301,6 +303,9 @@ public class ProductServiceImpl implements ProductService {
                         .map(productVariantMapper::toResponse)
                         .toList())
                 .media(product.getMedia().stream()
+                        .sorted(Comparator
+                                .comparing(ProductMedia::getSortOrder)
+                                .thenComparing(ProductMedia::getId))
                         .map(m -> MediaResponse.builder()
                                 .id(m.getId())
                                 .mediaUrl(m.getMediaUrl())
