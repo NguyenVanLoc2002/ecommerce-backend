@@ -51,9 +51,10 @@ Source of truth:
 
 ### 1.5 Password change / password reset
 
-- No password-change endpoint is implemented in the current source tree.
-- No forgot-password or reset-password endpoint is implemented in the current source tree.
-- `AuthService.revokeAllRefreshSessions(principalType, principalId)` is now the reusable integration point a future password-change/reset flow must call.
+- `POST /api/v1/auth/password/forgot` issues an OTP without disclosing whether the address is registered.
+- `POST /api/v1/auth/password/forgot/verify` returns a one-shot reset token after a valid OTP.
+- `POST /api/v1/auth/password/reset` consumes the reset token and revokes all refresh sessions.
+- `POST /api/v1/account/password/change` verifies the current password and revokes all refresh sessions.
 
 ### 1.6 Customer vs admin auth separation
 
