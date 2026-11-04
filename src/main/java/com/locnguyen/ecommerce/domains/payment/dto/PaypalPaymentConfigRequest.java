@@ -25,10 +25,8 @@ public class PaypalPaymentConfigRequest {
     private String userAction;
     private String paymentMethodPreference;
     private String shippingPreference;
-    private Boolean testConversionEnabled;
-
-    @DecimalMin(value = "0.000001", inclusive = true, message = "testConversionRateVndToUsd must be greater than 0")
-    private BigDecimal testConversionRateVndToUsd;
+    @DecimalMin(value = "0.000001", inclusive = true, message = "conversionRateVndToUsd must be greater than 0")
+    private BigDecimal conversionRateVndToUsd;
 
     @Min(value = 1, message = "connectTimeoutMs must be greater than 0")
     private Integer connectTimeoutMs;

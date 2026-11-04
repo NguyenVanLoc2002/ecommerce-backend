@@ -45,6 +45,15 @@ public class PaymentTransaction extends BaseEntity {
     @Column(name = "amount", precision = 18, scale = 2, nullable = false)
     private BigDecimal amount;
 
+    @Column(name = "provider_amount", precision = 18, scale = 2)
+    private BigDecimal providerAmount;
+
+    @Column(name = "provider_currency", length = 3)
+    private String providerCurrency;
+
+    @Column(name = "provider_exchange_rate", precision = 18, scale = 6)
+    private BigDecimal providerExchangeRate;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "method", length = 50, nullable = false)
     private PaymentMethod method;

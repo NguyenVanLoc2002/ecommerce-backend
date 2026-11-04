@@ -56,6 +56,15 @@ public class Payment extends BaseEntity {
     @Column(name = "amount", precision = 18, scale = 2, nullable = false)
     private BigDecimal amount;
 
+    @Column(name = "provider_amount", precision = 18, scale = 2)
+    private BigDecimal providerAmount;
+
+    @Column(name = "provider_currency", length = 3)
+    private String providerCurrency;
+
+    @Column(name = "provider_exchange_rate", precision = 18, scale = 6)
+    private BigDecimal providerExchangeRate;
+
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 

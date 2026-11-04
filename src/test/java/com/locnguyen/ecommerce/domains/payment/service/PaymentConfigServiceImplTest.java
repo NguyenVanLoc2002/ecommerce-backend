@@ -173,7 +173,6 @@ class PaymentConfigServiceImplTest {
                 "PAY_NOW",
                 "IMMEDIATE_PAYMENT_REQUIRED",
                 "NO_SHIPPING",
-                true,
                 new BigDecimal("25000"),
                 35_000,
                 36_000
@@ -194,8 +193,7 @@ class PaymentConfigServiceImplTest {
         request.setUserAction(" PAY_NOW ");
         request.setPaymentMethodPreference(" IMMEDIATE_PAYMENT_REQUIRED ");
         request.setShippingPreference(" NO_SHIPPING ");
-        request.setTestConversionEnabled(true);
-        request.setTestConversionRateVndToUsd(new BigDecimal("25000"));
+        request.setConversionRateVndToUsd(new BigDecimal("25000"));
         request.setConnectTimeoutMs(35_000);
         request.setReadTimeoutMs(36_000);
 
@@ -220,8 +218,7 @@ class PaymentConfigServiceImplTest {
         assertThat(saved.getPaypalUserAction()).isEqualTo("PAY_NOW");
         assertThat(saved.getPaypalPaymentMethodPreference()).isEqualTo("IMMEDIATE_PAYMENT_REQUIRED");
         assertThat(saved.getPaypalShippingPreference()).isEqualTo("NO_SHIPPING");
-        assertThat(saved.isPaypalTestConversionEnabled()).isTrue();
-        assertThat(saved.getPaypalTestConversionRateVndUsd()).isEqualByComparingTo(new BigDecimal("25000"));
+        assertThat(saved.getPaypalConversionRateVndUsd()).isEqualByComparingTo(new BigDecimal("25000"));
         assertThat(saved.getConnectTimeoutMs()).isEqualTo(35_000);
         assertThat(saved.getReadTimeoutMs()).isEqualTo(36_000);
 

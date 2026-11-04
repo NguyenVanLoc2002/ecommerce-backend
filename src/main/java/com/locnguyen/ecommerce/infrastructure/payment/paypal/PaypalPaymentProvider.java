@@ -75,6 +75,9 @@ public class PaypalPaymentProvider implements PaymentProvider {
                 .providerOrderId(response.getId())
                 .providerRequestId(response.getId())
                 .message(response.getStatus())
+                .providerAmount(paypalAmount)
+                .providerCurrency(config.currency())
+                .providerExchangeRate(config.conversionRateVndToUsd())
                 .build();
     }
 
@@ -202,20 +205,13 @@ public class PaypalPaymentProvider implements PaymentProvider {
     private BigDecimal resolvePaypalAmount(PaypalResolvedPaymentConfig config,
                                            BigDecimal orderAmount, String orderCode) {
         if (!"USD".equalsIgnoreCase(config.currency())) {
-            return orderAmount.setScale(2, RoundingMode.HALF_UP);
-        }
-
-        if (!config.testConversionEnabled()) {
-            log.error("PayPal currency mismatch: orders are VND but PayPal is configured for USD. orderCode={}",
-                    orderCode);
             throw new AppException(ErrorCode.PAYMENT_CURRENCY_UNSUPPORTED,
-                    "Order amount is in VND but PayPal is configured for USD. "
-                            + "Enable test conversion for sandbox testing.");
+                    "PayPal production payments support USD only");
         }
 
-        BigDecimal rate = config.testConversionRateVndToUsd();
+        BigDecimal rate = config.conversionRateVndToUsd();
         if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new AppException(ErrorCode.PAYMENT_FAILED,
+            throw new AppException(ErrorCode.PAYMENT_CURRENCY_UNSUPPORTED,
                     "Invalid testConversionRateVndToUsd â€” must be > 0");
         }
         return orderAmount.divide(rate, 2, RoundingMode.HALF_UP);

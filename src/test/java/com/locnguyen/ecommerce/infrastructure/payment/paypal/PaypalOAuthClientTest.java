@@ -64,7 +64,6 @@ class PaypalOAuthClientTest {
                 "PAY_NOW",
                 "IMMEDIATE_PAYMENT_REQUIRED",
                 "NO_SHIPPING",
-                true,
                 new BigDecimal("25000"),
                 30_000,
                 30_000
@@ -130,7 +129,6 @@ class PaypalOAuthClientTest {
                         "PAY_NOW",
                         "IMMEDIATE_PAYMENT_REQUIRED",
                         "NO_SHIPPING",
-                        true,
                         new BigDecimal("25000"),
                         30_000,
                         30_000

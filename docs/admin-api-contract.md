@@ -1102,8 +1102,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
     - these fields are write-only and are never returned by the API
   - `baseUrl`, `returnUrl`, `cancelUrl`, `webhookId`, `currency`: optional strings
   - `brandName`, `locale`, `userAction`, `paymentMethodPreference`, `shippingPreference`: optional strings
-  - `testConversionEnabled`: optional boolean
-  - `testConversionRateVndToUsd`: optional decimal, must be `> 0` when provided
+  - `conversionRateVndToUsd`: optional decimal, must be `> 0` when provided
   - `connectTimeoutMs`, `readTimeoutMs`: optional integers, must be `> 0` when provided
 - `PaypalPaymentConfigResponse`
   - `provider`
@@ -1114,7 +1113,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
     - raw secret values are never returned
   - `baseUrl`, `returnUrl`, `cancelUrl`, `webhookId`, `currency`
   - `brandName`, `locale`, `userAction`, `paymentMethodPreference`, `shippingPreference`
-  - `testConversionEnabled`, `testConversionRateVndToUsd`
+  - `conversionRateVndToUsd`, `conversionRateSource` (`ADMIN_CONFIG` or `ENVIRONMENT_FALLBACK`)
   - `connectTimeoutMs`, `readTimeoutMs`
 
 ### GET `/api/v1/admin/payments`
@@ -1218,7 +1217,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 - Response:
   - `ApiResponse<PaypalPaymentConfigResponse>`
 - UI note:
-  - `testConversionEnabled` and `testConversionRateVndToUsd` are sandbox/testing aids for VND-to-USD conversion and should be presented as advanced settings
+  - `conversionRateVndToUsd` is the platform-managed number of VND per USD. The backend snapshots it with each initiated PayPal payment; `conversionRateSource` identifies its effective configuration source.
 
 - Customer-flow compatibility note:
   - these endpoints change only the admin configuration surface and the runtime config source

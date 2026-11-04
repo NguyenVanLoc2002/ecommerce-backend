@@ -24,8 +24,8 @@ public class PaypalPaymentConfigResponse {
     private final String userAction;
     private final String paymentMethodPreference;
     private final String shippingPreference;
-    private final boolean testConversionEnabled;
-    private final BigDecimal testConversionRateVndToUsd;
+    private final BigDecimal conversionRateVndToUsd;
+    private final String conversionRateSource;
     private final int connectTimeoutMs;
     private final int readTimeoutMs;
 }

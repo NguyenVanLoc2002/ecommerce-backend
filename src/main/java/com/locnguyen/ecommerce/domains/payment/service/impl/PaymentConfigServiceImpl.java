@@ -134,11 +134,8 @@ public class PaymentConfigServiceImpl implements PaymentConfigService {
         if (request.getShippingPreference() != null) {
             config.setPaypalShippingPreference(normalizeOptional(request.getShippingPreference()));
         }
-        if (request.getTestConversionEnabled() != null) {
-            config.setPaypalTestConversionEnabled(request.getTestConversionEnabled());
-        }
-        if (request.getTestConversionRateVndToUsd() != null) {
-            config.setPaypalTestConversionRateVndUsd(request.getTestConversionRateVndToUsd());
+        if (request.getConversionRateVndToUsd() != null) {
+            config.setPaypalConversionRateVndUsd(request.getConversionRateVndToUsd());
         }
         if (request.getConnectTimeoutMs() != null) {
             config.setConnectTimeoutMs(request.getConnectTimeoutMs());
@@ -203,8 +200,9 @@ public class PaymentConfigServiceImpl implements PaymentConfigService {
                 .userAction(resolved.userAction())
                 .paymentMethodPreference(resolved.paymentMethodPreference())
                 .shippingPreference(resolved.shippingPreference())
-                .testConversionEnabled(resolved.testConversionEnabled())
-                .testConversionRateVndToUsd(resolved.testConversionRateVndToUsd())
+                .conversionRateVndToUsd(resolved.conversionRateVndToUsd())
+                .conversionRateSource(config != null && config.getPaypalConversionRateVndUsd() != null
+                        ? "ADMIN_CONFIG" : "ENVIRONMENT_FALLBACK")
                 .connectTimeoutMs(resolved.connectTimeoutMs())
                 .readTimeoutMs(resolved.readTimeoutMs())
                 .build();
