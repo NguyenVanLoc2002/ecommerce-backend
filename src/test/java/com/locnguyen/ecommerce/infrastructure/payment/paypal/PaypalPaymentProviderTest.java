@@ -54,12 +54,12 @@ class PaypalPaymentProviderTest {
 
     @BeforeEach
     void setUp() {
-        paypalConfig = paypalConfig(true, new BigDecimal("25000"));
+        paypalConfig = paypalConfig(new BigDecimal("25000"));
         when(configResolver.resolvePaypal()).thenReturn(paypalConfig);
         provider = new PaypalPaymentProvider(configResolver, paypalClient, objectMapper);
     }
 
-    private PaypalResolvedPaymentConfig paypalConfig(boolean testConversionEnabled, BigDecimal rate) {
+    private PaypalResolvedPaymentConfig paypalConfig(BigDecimal rate) {
         return new PaypalResolvedPaymentConfig(
                 true,
                 "SANDBOX",
@@ -75,7 +75,6 @@ class PaypalPaymentProviderTest {
                 "PAY_NOW",
                 "IMMEDIATE_PAYMENT_REQUIRED",
                 "NO_SHIPPING",
-                testConversionEnabled,
                 rate,
                 30_000,
                 30_000
@@ -274,8 +273,8 @@ class PaypalPaymentProviderTest {
         }
 
         @Test
-        void throwsPaymentCurrencyUnsupported_whenTestConversionDisabled() {
-            when(configResolver.resolvePaypal()).thenReturn(paypalConfig(false, new BigDecimal("25000")));
+        void throwsPaymentCurrencyUnsupported_whenConversionRateMissing() {
+            when(configResolver.resolvePaypal()).thenReturn(paypalConfig(null));
 
             assertThatThrownBy(() -> provider.createPayment(
                     payment("PAY001", new BigDecimal("500000")),
@@ -290,7 +289,7 @@ class PaypalPaymentProviderTest {
         }
 
         @Test
-        void convertsVndToUsd_whenTestConversionEnabled() {
+        void convertsVndToUsd_andReturnsProviderSnapshot() {
             when(paypalClient.createOrder(any(), eq("ORD001")))
                     .thenAnswer(invocation -> {
                         PaypalCreateOrderRequest request = invocation.getArgument(0);
@@ -299,11 +298,15 @@ class PaypalPaymentProviderTest {
                                 "https://www.sandbox.paypal.com/checkoutnow?token=ABC");
                     });
 
-            provider.createPayment(
+            PaymentProviderCreateResult result = provider.createPayment(
                     payment("PAY001", new BigDecimal("500000")),
                     order("ORD001"),
                     null,
                     null);
+
+            assertThat(result.getProviderAmount()).isEqualByComparingTo("20.00");
+            assertThat(result.getProviderCurrency()).isEqualTo("USD");
+            assertThat(result.getProviderExchangeRate()).isEqualByComparingTo("25000");
         }
 
         @Test

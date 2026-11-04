@@ -92,6 +92,9 @@ public class PaymentConfig extends BaseEntity {
     @Column(name = "paypal_test_conversion_rate_vnd_usd", precision = 18, scale = 6)
     private BigDecimal paypalTestConversionRateVndUsd;
 
+    @Column(name = "paypal_conversion_rate_vnd_usd", precision = 18, scale = 6)
+    private BigDecimal paypalConversionRateVndUsd;
+
     @Column(name = "connect_timeout_ms")
     private Integer connectTimeoutMs;
 

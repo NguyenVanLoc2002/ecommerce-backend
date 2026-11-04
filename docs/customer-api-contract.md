@@ -650,7 +650,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - terminal processed states are rejected
 - Supported providers:
   - `MOMO` — active when `app.payment.momo.enabled=true`; amount must be 1,000–50,000,000 VND
-  - `PAYPAL` — active when `app.payment.paypal.enabled=true`; uses PayPal Orders API v2 sandbox. Returns PayPal approval URL as `paymentUrl`. Orders are VND; enable `app.payment.paypal.test-conversion-enabled=true` for sandbox VND→USD conversion. After initiation the frontend redirects to PayPal; upon return, call the capture endpoint below with the `?token=` param.
+  - `PAYPAL` — active when `app.payment.paypal.enabled=true`; uses PayPal Orders API v2 with USD provider orders. Orders and the customer-facing `amount` remain VND. The backend converts using its configured VND-per-USD rate and snapshots the USD amount, currency, and rate for reconciliation. After initiation the frontend redirects to PayPal; upon return, call the capture endpoint below with the `?token=` param.
   - `MOCK` — dev/test only; active when `app.payment.mock.enabled=true`
 - PayPal frontend routes:
   - Approval return: configured via `app.payment.paypal.return-url` (default `http://localhost:5173/payment/paypal/return`)

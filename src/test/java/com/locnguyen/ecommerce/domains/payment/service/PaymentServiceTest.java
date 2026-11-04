@@ -17,6 +17,8 @@ import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import com.locnguyen.ecommerce.domains.payment.enums.TransactionStatus;
 import com.locnguyen.ecommerce.domains.payment.mapper.PaymentMapper;
 import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderRegistry;
+import com.locnguyen.ecommerce.domains.payment.provider.PaymentProvider;
+import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderCreateResult;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentRepository;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentTransactionRepository;
 import com.locnguyen.ecommerce.domains.payment.service.impl.PaymentServiceImpl;
@@ -140,7 +142,7 @@ class PaymentServiceTest {
                 return p;
             });
             when(transactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            when(paymentMapper.toResponse(any())).thenReturn(mock(PaymentResponse.class));
+            when(paymentMapper.toResponse(any())).thenReturn(PaymentResponse.builder().build());
 
             paymentService.createCodPayment(o);
 
@@ -339,6 +341,43 @@ class PaymentServiceTest {
             ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
             verify(paymentRepository).save(captor.capture());
             assertThat(captor.getValue().getStatus()).isEqualTo(PaymentRecordStatus.INITIATED);
+        }
+
+        @Test
+        void snapshotsProviderAmountCurrencyAndRate_whenProviderCreatesPayment() {
+            Customer cust = customer(uuid(1));
+            Order o = order(uuid(1), cust, PaymentMethod.ONLINE, new BigDecimal("500000"));
+            PaymentProvider provider = mock(PaymentProvider.class);
+            when(orderRepository.findById(uuid(1))).thenReturn(Optional.of(o));
+            when(paymentRepository.existsByOrderId(uuid(1))).thenReturn(false);
+            when(paymentRepository.save(any())).thenAnswer(invocation -> {
+                Payment payment = invocation.getArgument(0);
+                if (payment.getId() == null) {
+                    setId(payment, uuid(10));
+                }
+                return payment;
+            });
+            when(orderRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+            when(transactionRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+            when(paymentMapper.toResponse(any())).thenReturn(PaymentResponse.builder().build());
+            when(providerRegistry.find("VNPAY")).thenReturn(Optional.of(provider));
+            when(provider.createPayment(any(), any(), any(), any())).thenReturn(PaymentProviderCreateResult.builder()
+                    .providerOrderId("provider-order")
+                    .providerAmount(new BigDecimal("20.00"))
+                    .providerCurrency("USD")
+                    .providerExchangeRate(new BigDecimal("25000"))
+                    .build());
+
+            paymentService.initiateOnlinePayment(uuid(1), cust, initRequest(), "idem-key");
+
+            verify(paymentRepository, atLeastOnce()).save(argThat(payment ->
+                    payment.getAmount().compareTo(new BigDecimal("500000")) == 0
+                            && payment.getProviderAmount().compareTo(new BigDecimal("20.00")) == 0
+                            && "USD".equals(payment.getProviderCurrency())
+                            && payment.getProviderExchangeRate().compareTo(new BigDecimal("25000")) == 0));
+            verify(transactionRepository).save(argThat(transaction ->
+                    transaction.getProviderAmount().compareTo(new BigDecimal("20.00")) == 0
+                            && "USD".equals(transaction.getProviderCurrency())));
         }
 
         @Test

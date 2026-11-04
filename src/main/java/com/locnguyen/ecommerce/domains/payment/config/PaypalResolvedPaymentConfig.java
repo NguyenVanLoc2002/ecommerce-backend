@@ -17,8 +17,7 @@ public record PaypalResolvedPaymentConfig(
         String userAction,
         String paymentMethodPreference,
         String shippingPreference,
-        boolean testConversionEnabled,
-        BigDecimal testConversionRateVndToUsd,
+        BigDecimal conversionRateVndToUsd,
         int connectTimeoutMs,
         int readTimeoutMs
 ) {

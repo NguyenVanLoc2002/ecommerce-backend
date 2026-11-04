@@ -63,8 +63,7 @@ class PaymentProviderConfigResolverTest {
         paymentProperties.getPaypal().setUserAction("PAY_NOW");
         paymentProperties.getPaypal().setPaymentMethodPreference("IMMEDIATE_PAYMENT_REQUIRED");
         paymentProperties.getPaypal().setShippingPreference("NO_SHIPPING");
-        paymentProperties.getPaypal().setTestConversionEnabled(true);
-        paymentProperties.getPaypal().setTestConversionRateVndToUsd(new BigDecimal("25000"));
+        paymentProperties.getPaypal().setConversionRateVndToUsd(new BigDecimal("25000"));
         paymentProperties.getPaypal().setConnectTimeoutMs(33_000);
         paymentProperties.getPaypal().setReadTimeoutMs(34_000);
 

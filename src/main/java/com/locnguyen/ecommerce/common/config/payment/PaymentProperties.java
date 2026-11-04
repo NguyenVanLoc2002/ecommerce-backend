@@ -177,14 +177,8 @@ public class PaymentProperties {
         /** PayPal checkout shipping preference. */
         private String shippingPreference = "NO_SHIPPING";
 
-        /**
-         * Enable test-only VND -> configured-currency conversion.
-         * Never enable in production.
-         */
-        private boolean testConversionEnabled = false;
-
-        /** Test-only VND amount per 1 USD. */
-        private BigDecimal testConversionRateVndToUsd = new BigDecimal("25000");
+        /** VND per one USD, controlled by the platform and snapshotted at initiation. */
+        private BigDecimal conversionRateVndToUsd;
 
         @Min(value = 30_000, message = "app.payment.paypal.connect-timeout-ms must be >= 30000 ms")
         private int connectTimeoutMs = 30_000;

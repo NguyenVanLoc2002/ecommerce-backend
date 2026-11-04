@@ -193,6 +193,9 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
         txn.setTransactionCode(CodeGenerator.generatePaymentTransactionCode());
         txn.setStatus(success ? TransactionStatus.SUCCESS : TransactionStatus.FAILED);
         txn.setAmount(payment.getAmount());
+        txn.setProviderAmount(payment.getProviderAmount());
+        txn.setProviderCurrency(payment.getProviderCurrency());
+        txn.setProviderExchangeRate(payment.getProviderExchangeRate());
         txn.setMethod(payment.getMethod());
         txn.setProvider(PaymentProviderType.fromValue(provider));
         txn.setProviderTxnId(providerTxnId);
