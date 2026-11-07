@@ -737,6 +737,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `shippingFee`, `note`
   - `events`
   - `createdAt`, `updatedAt`
+  - pickup location is provider-internal; it is not exposed to customer shipment responses
 - `ShipmentEventResponse`
   - `id`, `status`, `location`, `description`, `eventTime`
 

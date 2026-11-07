@@ -29,6 +29,7 @@ import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveResolvedCo
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.dto.AhamoveEstimateOptionResponse;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
+import com.locnguyen.ecommerce.domains.inventory.service.WarehouseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -61,6 +62,7 @@ public class CarrierServiceImpl implements CarrierService {
     private final AhamoveClient ahamoveClient;
     private final AhamoveConfigResolver ahamoveConfigResolver;
     private final AhamoveMapper ahamoveMapper;
+    private final WarehouseService warehouseService;
 
     @Override
     @Transactional(readOnly = true)
@@ -415,6 +417,7 @@ public class CarrierServiceImpl implements CarrierService {
         copy.setPickupLng(source.getPickupLng());
         copy.setDefaultServiceCode(source.getDefaultServiceCode());
         copy.setDefaultPaymentMethod(source.getDefaultPaymentMethod());
+        copy.setDefaultPickupWarehouseId(source.getDefaultPickupWarehouseId());
         copy.setConnectionStatus(source.getConnectionStatus());
         copy.setConfigJson(source.getConfigJson());
         return copy;
@@ -423,6 +426,7 @@ public class CarrierServiceImpl implements CarrierService {
     private void applyTypedAhamoveSettings(CarrierConfig config, UpdateAhamoveIntegrationRequest request) {
         config.setProviderAccountPhone(normalizeOptional(request.getPhone()));
         config.setProviderBrandName(normalizeOptional(request.getBrandName()));
+        config.setDefaultPickupWarehouseId(request.getPickupWarehouseId());
         config.setPickupAddress(normalizeOptional(request.getPickupAddress()));
         config.setPickupShortAddress(normalizeOptional(request.getPickupShortAddress()));
         config.setPickupName(normalizeOptional(request.getPickupName()));
@@ -511,6 +515,7 @@ public class CarrierServiceImpl implements CarrierService {
                 .hasWebhookSecret(hasEncryptedValue(config.getWebhookSecretEnc()))
                 .phone(firstNonBlank(config.getProviderAccountPhone()))
                 .brandName(firstNonBlank(config.getProviderBrandName()))
+                .pickupWarehouseId(config.getDefaultPickupWarehouseId())
                 .pickupAddress(firstNonBlank(config.getPickupAddress()))
                 .pickupShortAddress(firstNonBlank(config.getPickupShortAddress()))
                 .pickupName(firstNonBlank(config.getPickupName()))
@@ -720,17 +725,25 @@ public class CarrierServiceImpl implements CarrierService {
         if (normalizeOptional(config.getProviderAccountPhone()) == null) {
             missingFields.add("phone");
         }
-        if (normalizeOptional(config.getPickupAddress()) == null) {
-            missingFields.add("pickupAddress");
-        }
-        if (normalizeOptional(config.getPickupPhone()) == null) {
-            missingFields.add("pickupPhone");
-        }
-        if (config.getPickupLat() == null) {
-            missingFields.add("pickupLat");
-        }
-        if (config.getPickupLng() == null) {
-            missingFields.add("pickupLng");
+        if (config.getDefaultPickupWarehouseId() != null) {
+            try {
+                warehouseService.getPickupLocation(config.getDefaultPickupWarehouseId());
+            } catch (AppException ex) {
+                missingFields.add("pickupWarehouse");
+            }
+        } else {
+            if (normalizeOptional(config.getPickupAddress()) == null) {
+                missingFields.add("pickupAddress");
+            }
+            if (normalizeOptional(config.getPickupPhone()) == null) {
+                missingFields.add("pickupPhone");
+            }
+            if (config.getPickupLat() == null) {
+                missingFields.add("pickupLat");
+            }
+            if (config.getPickupLng() == null) {
+                missingFields.add("pickupLng");
+            }
         }
         if (normalizeOptional(config.getDefaultServiceCode()) == null) {
             missingFields.add("defaultServiceCode");

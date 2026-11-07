@@ -5,6 +5,8 @@ import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.security.AesGcmTextCipher;
 import com.locnguyen.ecommerce.domains.carrier.entity.CarrierConfig;
+import com.locnguyen.ecommerce.domains.inventory.dto.WarehousePickupLocation;
+import com.locnguyen.ecommerce.domains.inventory.service.WarehouseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +20,7 @@ public class AhamoveConfigResolver {
     private final AesGcmTextCipher textCipher;
     private final AhamoveProperties properties;
     private final ObjectMapper objectMapper;
+    private final WarehouseService warehouseService;
 
     public AhamoveResolvedConfig resolve(CarrierConfig config) {
         return resolve(config, true, true);
@@ -46,6 +49,7 @@ public class AhamoveConfigResolver {
         }
 
         AhamoveConfigData data = parseConfigData(config.getConfigJson());
+        WarehousePickupLocation pickupLocation = resolvePickupLocation(config);
         String baseUrl = firstNonBlank(config.getBaseUrl(), properties.getBaseUrl());
         String apiKey = allowPropertyFallback
                 ? firstNonBlank(decrypt(config.getApiKeyEnc()), properties.getApiKey())
@@ -59,10 +63,18 @@ public class AhamoveConfigResolver {
         String webhookToken = allowPropertyFallback
                 ? firstNonBlank(decrypt(config.getWebhookSecretEnc()), data.getWebhookToken(), properties.getWebhookToken())
                 : firstNonBlank(decrypt(config.getWebhookSecretEnc()), data.getWebhookToken());
-        String pickupAddress = firstNonBlank(config.getPickupAddress(), data.getPickupAddress());
-        String pickupShortAddress = firstNonBlank(config.getPickupShortAddress(), data.getPickupShortAddress());
-        String pickupName = firstNonBlank(config.getPickupName(), data.getPickupName(), brandName);
-        String pickupPhone = firstNonBlank(config.getPickupPhone(), data.getPickupPhone(), phone);
+        String pickupAddress = pickupLocation != null
+                ? pickupLocation.address()
+                : firstNonBlank(config.getPickupAddress(), data.getPickupAddress());
+        String pickupShortAddress = pickupLocation != null
+                ? pickupLocation.shortAddress()
+                : firstNonBlank(config.getPickupShortAddress(), data.getPickupShortAddress());
+        String pickupName = pickupLocation != null
+                ? pickupLocation.contactName()
+                : firstNonBlank(config.getPickupName(), data.getPickupName(), brandName);
+        String pickupPhone = pickupLocation != null
+                ? pickupLocation.contactPhone()
+                : firstNonBlank(config.getPickupPhone(), data.getPickupPhone(), phone);
         String groupServiceId = allowPropertyFallback
                 ? firstNonBlank(config.getDefaultServiceCode(), data.getGroupServiceId(), properties.getGroupServiceId())
                 : firstNonBlank(config.getDefaultServiceCode(), data.getGroupServiceId());
@@ -100,8 +112,8 @@ public class AhamoveConfigResolver {
                 trimToNull(pickupShortAddress),
                 pickupName != null ? pickupName.trim() : null,
                 pickupPhone != null ? pickupPhone.trim() : null,
-                firstNonNull(config.getPickupLat(), data.getPickupLat()),
-                firstNonNull(config.getPickupLng(), data.getPickupLng()),
+                pickupLocation != null ? pickupLocation.latitude() : firstNonNull(config.getPickupLat(), data.getPickupLat()),
+                pickupLocation != null ? pickupLocation.longitude() : firstNonNull(config.getPickupLng(), data.getPickupLng()),
                 groupServiceId != null ? groupServiceId.trim() : null,
                 paymentMethod != null ? paymentMethod.trim() : null,
                 groupRequests
@@ -118,6 +130,13 @@ public class AhamoveConfigResolver {
             throw new AppException(ErrorCode.CARRIER_CONFIG_MISSING,
                     "AhaMove configJson is invalid");
         }
+    }
+
+    private WarehousePickupLocation resolvePickupLocation(CarrierConfig config) {
+        if (config.getDefaultPickupWarehouseId() == null) {
+            return null;
+        }
+        return warehouseService.getPickupLocation(config.getDefaultPickupWarehouseId());
     }
 
     private String decrypt(String encryptedValue) {

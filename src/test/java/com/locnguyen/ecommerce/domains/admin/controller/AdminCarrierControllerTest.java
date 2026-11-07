@@ -169,6 +169,7 @@ class AdminCarrierControllerTest {
                 .hasApiKey(true)
                 .hasWebhookSecret(true)
                 .phone("84338710667")
+                .pickupWarehouseId(UUID.fromString("00000000-0000-0000-0000-000000000009"))
                 .pickupAddress("123 Nguyen Hue")
                 .connectionStatus(CarrierConnectionStatus.CONNECTED)
                 .lastHealthCheckAt(LocalDateTime.of(2026, 5, 17, 10, 0))
@@ -180,6 +181,7 @@ class AdminCarrierControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.carrierCode").value("AHAMOVE"))
                 .andExpect(jsonPath("$.data.phone").value("84338710667"))
+                .andExpect(jsonPath("$.data.pickupWarehouseId").value("00000000-0000-0000-0000-000000000009"))
                 .andExpect(jsonPath("$.data.connectionStatus").value("CONNECTED"));
     }
 

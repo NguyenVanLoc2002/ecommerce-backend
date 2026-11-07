@@ -25,6 +25,7 @@ import com.locnguyen.ecommerce.domains.carrier.mapper.CarrierMapper;
 import com.locnguyen.ecommerce.domains.carrier.repository.CarrierConfigRepository;
 import com.locnguyen.ecommerce.domains.carrier.repository.CarrierRepository;
 import com.locnguyen.ecommerce.domains.carrier.service.impl.CarrierServiceImpl;
+import com.locnguyen.ecommerce.domains.inventory.service.WarehouseService;
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveClient;
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveConfigResolver;
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveResolvedConfig;
@@ -62,6 +63,7 @@ public class CarrierServiceTest {
     @Mock CarrierProperties carrierProperties;
     @Mock AhamoveClient ahamoveClient;
     @Mock AhamoveConfigResolver ahamoveConfigResolver;
+    @Mock WarehouseService warehouseService;
 
     @InjectMocks CarrierServiceImpl carrierService;
 
@@ -227,6 +229,30 @@ public class CarrierServiceTest {
                     "defaultServiceCode");
             assertThat(response.getMaskedWebhookToken()).endsWith("1234");
             assertThat(response.getMaskedWebhookToken()).doesNotContain("webhook-secret");
+        }
+
+        @Test
+        void getAhamoveIntegration_whenSelectedWarehouseIsInvalid_reportsPickupWarehouseAsBlocking() {
+            UUID carrierId = uuid(101);
+            UUID warehouseId = uuid(102);
+            Carrier carrier = carrier(carrierId, CarrierStatus.ACTIVE, CarrierProviderType.AHAMOVE);
+            CarrierConfig config = new CarrierConfig();
+            config.setCarrier(carrier);
+            config.setApiKeyEnc("enc-api");
+            config.setProviderAccountPhone("84338710667");
+            config.setDefaultPickupWarehouseId(warehouseId);
+            config.setDefaultServiceCode("BIKE");
+
+            when(carrierRepository.findById(carrierId)).thenReturn(Optional.of(carrier));
+            when(carrierConfigRepository.findByCarrierId(carrierId)).thenReturn(Optional.of(config));
+            when(warehouseService.getPickupLocation(warehouseId))
+                    .thenThrow(new AppException(ErrorCode.VALIDATION_ERROR, "Pickup warehouse must be active"));
+
+            AhamoveIntegrationResponse response = carrierService.getAhamoveIntegration(carrierId);
+
+            assertThat(response.getPickupWarehouseId()).isEqualTo(warehouseId);
+            assertThat(response.getQuoteReady()).isFalse();
+            assertThat(response.getMissingQuoteFields()).containsExactly("pickupWarehouse");
         }
 
         @Test

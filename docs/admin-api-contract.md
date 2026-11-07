@@ -578,6 +578,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `enabled`: optional boolean
   - `phone`: optional, max 50, provider account phone used to mint AhaMove bearer tokens
   - `brandName`: optional, max 200
+  - `pickupWarehouseId`: optional UUID of the active warehouse that owns pickup details; new integrations should use this field
   - `pickupAddress`: optional, max 500
   - `pickupShortAddress`: optional, max 255
   - `pickupName`: optional, max 200
@@ -591,6 +592,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `enabled`, `baseUrl`
   - `hasApiKey`, `hasSecretKey`, `hasWebhookSecret`
   - `phone`, `brandName`
+  - `pickupWarehouseId`
   - `pickupAddress`, `pickupShortAddress`, `pickupName`, `pickupPhone`
   - `pickupLat`, `pickupLng`
   - `defaultServiceCode`, `defaultPaymentMethod`
@@ -688,6 +690,8 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 - Behavior:
   - secrets are encrypted before persistence
   - typed pickup/service/account fields are persisted in dedicated columns
+  - when `pickupWarehouseId` is supplied, shipment requests resolve pickup details from that active warehouse; it must contain address, contact name, contact phone, latitude, and longitude
+  - without `pickupWarehouseId`, existing typed pickup fields and legacy `configJson` remain supported during migration
   - the backend also mirrors typed AhaMove values into legacy `configJson` for provider backward compatibility
   - when `enabled=true`, the backend validates that the effective config is complete enough for runtime use
 - AhaMove staging notes:
@@ -892,13 +896,15 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 
 - `WarehouseResponse`
   - `id`, `name`, `code`, `location`, `status`, `createdAt`
+  - pickup profile: `pickupAddress`, `pickupShortAddress`, `pickupContactName`, `pickupContactPhone`, `pickupLat`, `pickupLng`
 - `CreateWarehouseRequest`
   - `name`: required, max 100
   - `code`: required, max 50, pattern `^[A-Za-z0-9_-]+$`
   - `location`: optional, max 255
+  - pickup profile fields are optional unless the warehouse is selected for a carrier integration
 - `UpdateWarehouseRequest`
   - partial update version of:
-  - `name`, `location`, `status`
+  - `name`, `location`, `status`, and pickup profile fields
 
 ### GET `/api/v1/admin/warehouses`
 
@@ -1378,8 +1384,9 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `COMPLETED` -> `DELIVERED`
   - `CANCELLED`, path failure -> `FAILED`
   - `IN_RETURN`, `RETURNED` -> `RETURNED`
-- Known integration limitation:
-  - the current order domain does not persist a dedicated pickup/store address, so AhaMove pickup data must be provided in carrier `configJson`
+- Pickup location behavior:
+  - AhaMove may resolve pickup data from the managed warehouse selected by `pickupWarehouseId` on the carrier integration.
+  - Existing typed carrier pickup fields and legacy `configJson` remain a fallback only while configurations are migrated.
 
 ---
 
