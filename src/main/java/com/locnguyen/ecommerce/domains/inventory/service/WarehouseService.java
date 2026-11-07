@@ -3,6 +3,7 @@ package com.locnguyen.ecommerce.domains.inventory.service;
 import com.locnguyen.ecommerce.domains.inventory.dto.CreateWarehouseRequest;
 import com.locnguyen.ecommerce.domains.inventory.dto.UpdateWarehouseRequest;
 import com.locnguyen.ecommerce.domains.inventory.dto.WarehouseFilter;
+import com.locnguyen.ecommerce.domains.inventory.dto.WarehousePickupLocation;
 import com.locnguyen.ecommerce.domains.inventory.dto.WarehouseResponse;
 import com.locnguyen.ecommerce.domains.inventory.entity.Warehouse;
 
@@ -22,6 +23,8 @@ public interface WarehouseService {
     WarehouseResponse updateWarehouse(UUID id, UpdateWarehouseRequest request);
 
     void deleteWarehouse(UUID id);
+
+    WarehousePickupLocation getPickupLocation(UUID id);
 
     Warehouse findOrThrow(UUID id);
 }

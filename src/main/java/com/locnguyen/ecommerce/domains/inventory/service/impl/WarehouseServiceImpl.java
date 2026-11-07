@@ -6,6 +6,7 @@ import com.locnguyen.ecommerce.common.utils.SecurityUtils;
 import com.locnguyen.ecommerce.domains.inventory.dto.CreateWarehouseRequest;
 import com.locnguyen.ecommerce.domains.inventory.dto.UpdateWarehouseRequest;
 import com.locnguyen.ecommerce.domains.inventory.dto.WarehouseFilter;
+import com.locnguyen.ecommerce.domains.inventory.dto.WarehousePickupLocation;
 import com.locnguyen.ecommerce.domains.inventory.dto.WarehouseResponse;
 import com.locnguyen.ecommerce.domains.inventory.entity.Warehouse;
 import com.locnguyen.ecommerce.domains.inventory.enums.WarehouseStatus;
@@ -64,6 +65,8 @@ public class WarehouseServiceImpl implements WarehouseService {
         warehouse.setName(request.getName().trim());
         warehouse.setCode(request.getCode().trim());
         warehouse.setLocation(request.getLocation());
+        applyPickupDetails(warehouse, request.getPickupAddress(), request.getPickupShortAddress(),
+                request.getPickupContactName(), request.getPickupContactPhone(), request.getPickupLat(), request.getPickupLng());
         warehouse.setStatus(WarehouseStatus.ACTIVE);
 
         warehouse = warehouseRepository.save(warehouse);
@@ -81,6 +84,24 @@ public class WarehouseServiceImpl implements WarehouseService {
         }
         if (request.getLocation() != null) {
             warehouse.setLocation(request.getLocation());
+        }
+        if (request.getPickupAddress() != null) {
+            warehouse.setPickupAddress(normalizeOptional(request.getPickupAddress()));
+        }
+        if (request.getPickupShortAddress() != null) {
+            warehouse.setPickupShortAddress(normalizeOptional(request.getPickupShortAddress()));
+        }
+        if (request.getPickupContactName() != null) {
+            warehouse.setPickupContactName(normalizeOptional(request.getPickupContactName()));
+        }
+        if (request.getPickupContactPhone() != null) {
+            warehouse.setPickupContactPhone(normalizeOptional(request.getPickupContactPhone()));
+        }
+        if (request.getPickupLat() != null) {
+            warehouse.setPickupLat(request.getPickupLat());
+        }
+        if (request.getPickupLng() != null) {
+            warehouse.setPickupLng(request.getPickupLng());
         }
         if (request.getStatus() != null) {
             warehouse.setStatus(request.getStatus());
@@ -102,8 +123,59 @@ public class WarehouseServiceImpl implements WarehouseService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public WarehousePickupLocation getPickupLocation(UUID id) {
+        Warehouse warehouse = findOrThrow(id);
+        if (warehouse.getStatus() != WarehouseStatus.ACTIVE) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "Pickup warehouse must be active");
+        }
+
+        String address = normalizeOptional(warehouse.getPickupAddress());
+        String contactName = normalizeOptional(warehouse.getPickupContactName());
+        String contactPhone = normalizeOptional(warehouse.getPickupContactPhone());
+        if (address == null || contactName == null || contactPhone == null
+                || warehouse.getPickupLat() == null || warehouse.getPickupLng() == null) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR,
+                    "Pickup warehouse must include address, contact name, contact phone, latitude, and longitude");
+        }
+
+        return new WarehousePickupLocation(
+                warehouse.getId(),
+                address,
+                normalizeOptional(warehouse.getPickupShortAddress()),
+                contactName,
+                contactPhone,
+                warehouse.getPickupLat(),
+                warehouse.getPickupLng());
+    }
+
+    @Override
     public Warehouse findOrThrow(UUID id) {
         return warehouseRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.WAREHOUSE_NOT_FOUND));
+    }
+
+    private void applyPickupDetails(
+            Warehouse warehouse,
+            String address,
+            String shortAddress,
+            String contactName,
+            String contactPhone,
+            java.math.BigDecimal latitude,
+            java.math.BigDecimal longitude) {
+        warehouse.setPickupAddress(normalizeOptional(address));
+        warehouse.setPickupShortAddress(normalizeOptional(shortAddress));
+        warehouse.setPickupContactName(normalizeOptional(contactName));
+        warehouse.setPickupContactPhone(normalizeOptional(contactPhone));
+        warehouse.setPickupLat(latitude);
+        warehouse.setPickupLng(longitude);
+    }
+
+    private String normalizeOptional(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 }
