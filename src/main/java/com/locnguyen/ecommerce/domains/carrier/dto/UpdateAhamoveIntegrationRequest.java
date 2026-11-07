@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -32,6 +33,11 @@ public class UpdateAhamoveIntegrationRequest {
     @Size(max = 200)
     private String brandName;
 
+    private UUID pickupWarehouseId;
+
+    /**
+     * Legacy fallback pickup fields. New integrations should select pickupWarehouseId.
+     */
     @Size(max = 500)
     private String pickupAddress;
 

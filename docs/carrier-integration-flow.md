@@ -484,14 +484,18 @@ Carrier config persistence giu:
 - generic `/config` endpoint van ton tai
 - provider runtime cu van co the doc `configJson` mirror
 
-### 12.3 Gioi han domain hien tai
+### 12.3 Managed warehouse pickup location
 
-Day la gioi han nghiep vu quan trong:
+Pickup data is owned by `Warehouse`, not by the carrier provider. A warehouse may
+store its pickup address, contact name/phone, and latitude/longitude. An AhaMove
+carrier integration can select one active, complete warehouse through
+`defaultPickupWarehouseId`.
 
-- he thong chua co model pickup location rieng cho store/warehouse
-- hien tai pickup info dang nam trong `CarrierConfig`
-- neu sau nay co nhieu kho/nhieu diem lay hang, can tach pickup source khoi carrier config
-- khong duoc fake toa do neu nghiep vu khong co du lieu that
+At runtime, the selected warehouse is the pickup source for AhaMove quote and
+shipment requests. If no warehouse has been selected, the backend continues to
+use typed carrier pickup fields and then legacy `configJson` as a migration
+fallback. A selected warehouse that is inactive, soft-deleted, or incomplete
+fails validation rather than silently using stale carrier pickup data.
 
 ### 12.4 Cac bien moi truong lien quan
 

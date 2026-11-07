@@ -24,6 +24,7 @@ public class AhamoveIntegrationResponse {
     private final Boolean hasWebhookSecret;
     private final String phone;
     private final String brandName;
+    private final UUID pickupWarehouseId;
     private final String pickupAddress;
     private final String pickupShortAddress;
     private final String pickupName;

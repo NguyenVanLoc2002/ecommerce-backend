@@ -8,6 +8,7 @@ import lombok.Getter;
 
 import java.time.LocalDateTime;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 @Getter
 @Builder
@@ -19,6 +20,12 @@ public class WarehouseResponse {
     private final String name;
     private final String code;
     private final String location;
+    private final String pickupAddress;
+    private final String pickupShortAddress;
+    private final String pickupContactName;
+    private final String pickupContactPhone;
+    private final BigDecimal pickupLat;
+    private final BigDecimal pickupLng;
     private final WarehouseStatus status;
     private final LocalDateTime createdAt;
 }

@@ -9,6 +9,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "store_carrier_configs")
@@ -68,6 +69,9 @@ public class CarrierConfig extends BaseEntity {
 
     @Column(name = "default_payment_method", length = 50)
     private String defaultPaymentMethod;
+
+    @Column(name = "default_pickup_warehouse_id")
+    private UUID defaultPickupWarehouseId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "connection_status", length = 50)
