@@ -407,6 +407,16 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - Response:
   - `ApiResponse<ProductDetailResponse>`
 
+### GET `/api/v1/products/slug/{slug}`
+
+- Access: public
+- Description: resolve one published product by its canonical storefront slug.
+- Response:
+  - `ApiResponse<ProductDetailResponse>`
+- Errors:
+  - `PRODUCT_NOT_FOUND` when no active product has the slug
+  - `PRODUCT_INACTIVE` when the matching product is not published
+
 ---
 
 ## 6. Cart
@@ -422,7 +432,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `id`, `items`, `totalItems`, `subTotal`, `updatedAt`
 - `CartItemResponse`
   - `id`, `variantId`, `variantName`, `sku`
-  - `productSlug`, `productName`
+  - `productId`, `productSlug`, `productName`, `brandName`, `productImageUrl`
   - `unitPrice`, `salePrice`
   - `quantity`, `availableStock`, `lineTotal`
   - `createdAt`
@@ -503,7 +513,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `subTotal`, `discountAmount`, `shippingFee`, `totalAmount`
   - `voucherCode`, `customerNote`
 - `OrderItemResponse`
-  - `id`, `variantId`, `productName`, `variantName`, `sku`, `productImageUrl`
+  - `id`, `variantId`, `productId`, `productSlug`, `productName`, `brandName`, `variantName`, `sku`, `productImageUrl`
   - `unitPrice`, `salePrice`, `quantity`, `lineTotal`
 
 ### GET `/api/v1/carriers/checkout-options`
@@ -803,9 +813,9 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - `ReviewResponse`
   - `id`
   - `customerId`, `customerName`
-  - `productId`, `productName`
+  - `productId`, `productSlug`, `productName`, `brandName`, `productImageUrl`
   - `variantId`, `variantName`, `sku`
-  - `orderItemId`
+  - `orderItemId`, `orderId`
   - `rating`, `comment`
   - `status`, `adminNote`, `moderatedAt`, `moderatedBy`
   - `createdAt`, `updatedAt`

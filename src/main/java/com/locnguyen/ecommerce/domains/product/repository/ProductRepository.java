@@ -42,4 +42,17 @@ public interface ProductRepository extends JpaRepository<Product, UUID>,
               AND p.deleted = false
             """)
     Optional<Product> findDetailById(@Param("id") UUID id);
+
+    @Query("""
+            SELECT DISTINCT p FROM Product p
+            LEFT JOIN FETCH p.brand
+            LEFT JOIN FETCH p.categories
+            LEFT JOIN FETCH p.variants v
+            LEFT JOIN FETCH v.attributeValues av
+            LEFT JOIN FETCH av.attribute
+            LEFT JOIN FETCH p.media
+            WHERE p.slug = :slug
+              AND p.deleted = false
+            """)
+    Optional<Product> findDetailBySlug(@Param("slug") String slug);
 }

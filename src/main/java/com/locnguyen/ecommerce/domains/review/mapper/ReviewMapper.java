@@ -11,10 +11,14 @@ public interface ReviewMapper {
     @Mapping(target = "customerId",   source = "customer.id")
     @Mapping(target = "customerName", expression = "java(review.getCustomer().getUser().getFirstName() + \" \" + review.getCustomer().getUser().getLastName())")
     @Mapping(target = "productId",    source = "product.id")
+    @Mapping(target = "productSlug",  source = "product.slug")
     @Mapping(target = "productName",  source = "product.name")
+    @Mapping(target = "brandName",    source = "product.brand.name")
+    @Mapping(target = "productImageUrl", source = "orderItem.productImageUrl")
     @Mapping(target = "variantId",    source = "variant.id")
     @Mapping(target = "variantName",  source = "variant.variantName")
     @Mapping(target = "sku",          source = "variant.sku")
     @Mapping(target = "orderItemId",  source = "orderItem.id")
+    @Mapping(target = "orderId",      source = "orderItem.order.id")
     ReviewResponse toResponse(Review review);
 }

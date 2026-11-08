@@ -15,6 +15,8 @@ import com.locnguyen.ecommerce.domains.inventory.repository.InventoryRepository;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import com.locnguyen.ecommerce.domains.productvariant.enums.ProductVariantStatus;
 import com.locnguyen.ecommerce.domains.productvariant.repository.ProductVariantRepository;
+import com.locnguyen.ecommerce.domains.product.entity.ProductMedia;
+import com.locnguyen.ecommerce.domains.product.enums.MediaType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -257,8 +259,11 @@ public class CartServiceImpl implements CartService {
                 .variantId(variant.getId())
                 .variantName(variant.getVariantName())
                 .sku(variant.getSku())
+                .productId(variant.getProduct().getId())
                 .productName(variant.getProduct().getName())
                 .productSlug(variant.getProduct().getSlug())
+                .brandName(variant.getProduct().getBrand() != null ? variant.getProduct().getBrand().getName() : null)
+                .productImageUrl(resolveProductImageUrl(variant))
                 .unitPrice(variant.getBasePrice())
                 .salePrice(variant.getSalePrice())
                 .quantity(item.getQuantity())
@@ -266,5 +271,21 @@ public class CartServiceImpl implements CartService {
                 .lineTotal(effectivePrice.multiply(BigDecimal.valueOf(item.getQuantity())))
                 .createdAt(item.getCreatedAt())
                 .build();
+    }
+
+    private String resolveProductImageUrl(ProductVariant variant) {
+        return variant.getProduct().getMedia().stream()
+                .filter(media -> media.getMediaType() == MediaType.IMAGE)
+                .sorted(java.util.Comparator
+                        .comparing(ProductMedia::isPrimary).reversed()
+                        .thenComparing(media -> media.getVariant() == null ? 0 : 1)
+                        .thenComparing(ProductMedia::getSortOrder)
+                        .thenComparing(ProductMedia::getId))
+                .filter(media -> media.isPrimary()
+                        || media.getVariant() == null
+                        || media.getVariant().getId().equals(variant.getId()))
+                .map(ProductMedia::getMediaUrl)
+                .findFirst()
+                .orElse(null);
     }
 }

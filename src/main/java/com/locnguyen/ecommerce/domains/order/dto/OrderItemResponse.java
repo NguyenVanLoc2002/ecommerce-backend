@@ -16,7 +16,10 @@ public class OrderItemResponse {
 
     private final UUID id;
     private final UUID variantId;
+    private final UUID productId;
+    private final String productSlug;
     private final String productName;
+    private final String brandName;
     private final String variantName;
     private final String sku;
     private final String productImageUrl;

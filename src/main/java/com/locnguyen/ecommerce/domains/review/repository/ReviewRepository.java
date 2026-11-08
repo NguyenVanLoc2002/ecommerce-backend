@@ -6,6 +6,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -20,7 +22,12 @@ public interface ReviewRepository extends JpaRepository<Review, UUID>, JpaSpecif
     /** All reviews by a customer, newest first â€” for "my reviews" feed. */
     Page<Review> findByCustomerIdOrderByCreatedAtDesc(UUID customerId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"customer", "customer.user", "product", "product.brand", "variant", "orderItem", "orderItem.order"})
     Page<Review> findByCustomerIdAndDeletedFalseOrderByCreatedAtDesc(UUID customerId, Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = {"customer", "customer.user", "product", "product.brand", "variant", "orderItem", "orderItem.order"})
+    Page<Review> findAll(Specification<Review> specification, Pageable pageable);
 
     /** Approved reviews for a product â€” shown on the public product page. */
     Page<Review> findByProductIdAndStatusOrderByCreatedAtDesc(

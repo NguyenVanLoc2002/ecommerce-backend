@@ -98,6 +98,23 @@ public class ProductServiceImpl implements ProductService {
         return toDetailResponse(product);
     }
 
+    /**
+     * Get a published product by its public storefront slug without requiring
+     * clients to page through the catalogue.
+     */
+    @Cacheable(value = AppConstants.CACHE_PRODUCT_DETAIL, key = "'slug:' + #slug")
+    @Transactional(readOnly = true)
+    public ProductDetailResponse getProductBySlug(String slug) {
+        Product product = productRepository.findDetailBySlug(slug)
+                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+
+        if (product.getStatus() != ProductStatus.PUBLISHED) {
+            throw new AppException(ErrorCode.PRODUCT_INACTIVE);
+        }
+
+        return toDetailResponse(product);
+    }
+
     // ─── Admin CRUD ────────────────────────────────────────────────────────────
 
     @Caching(evict = {

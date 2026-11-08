@@ -19,12 +19,16 @@ public class ReviewResponse {
     private String customerName;
 
     private UUID productId;
+    private String productSlug;
     private String productName;
+    private String brandName;
+    private String productImageUrl;
     private UUID variantId;
     private String variantName;
     private String sku;
 
     private UUID orderItemId;
+    private UUID orderId;
 
     private Integer rating;
     private String comment;

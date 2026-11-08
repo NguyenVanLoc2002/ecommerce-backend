@@ -19,8 +19,11 @@ public class CartItemResponse {
     private final UUID variantId;
     private final String variantName;
     private final String sku;
+    private final UUID productId;
     private final String productSlug;
     private final String productName;
+    private final String brandName;
+    private final String productImageUrl;
     private final BigDecimal unitPrice;
     private final BigDecimal salePrice;
     private final Integer quantity;
