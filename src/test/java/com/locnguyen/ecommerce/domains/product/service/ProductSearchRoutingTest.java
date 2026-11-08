@@ -6,6 +6,7 @@ import com.locnguyen.ecommerce.domains.brand.repository.BrandRepository;
 import com.locnguyen.ecommerce.domains.category.mapper.CategoryMapper;
 import com.locnguyen.ecommerce.domains.category.repository.CategoryRepository;
 import com.locnguyen.ecommerce.domains.product.dto.ProductFilter;
+import com.locnguyen.ecommerce.domains.product.dto.ProductDetailResponse;
 import com.locnguyen.ecommerce.domains.product.dto.ProductListItemResponse;
 import com.locnguyen.ecommerce.domains.product.entity.Product;
 import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
@@ -28,9 +29,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -118,6 +122,25 @@ class ProductSearchRoutingTest {
         ProductFilter forwarded = filterCaptor.getValue();
         assertThat(forwarded.getStatus()).isEqualTo(ProductStatus.PUBLISHED);
         assertThat(forwarded.getMinPrice()).isEqualByComparingTo("100000");
+    }
+
+    @Test
+    void product_slug_lookup_uses_direct_repository_query() {
+        Product product = new Product();
+        UUID productId = UUID.randomUUID();
+        ReflectionTestUtils.setField(product, "id", productId);
+        product.setName("Direct lookup product");
+        product.setSlug("direct-lookup-product");
+        product.setStatus(ProductStatus.PUBLISHED);
+
+        when(productRepository.findDetailBySlug("direct-lookup-product")).thenReturn(Optional.of(product));
+
+        ProductDetailResponse response = service.getProductBySlug("direct-lookup-product");
+
+        assertThat(response.getId()).isEqualTo(productId);
+        assertThat(response.getSlug()).isEqualTo("direct-lookup-product");
+        verify(productRepository).findDetailBySlug("direct-lookup-product");
+        verify(productRepository, never()).findAll(any(Specification.class), any(Pageable.class));
     }
 
     private static <T> T mock(Class<T> type) {

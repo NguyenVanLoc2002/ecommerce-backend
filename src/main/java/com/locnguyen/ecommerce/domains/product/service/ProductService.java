@@ -16,6 +16,8 @@ public interface ProductService {
 
     ProductDetailResponse getProductById(UUID id);
 
+    ProductDetailResponse getProductBySlug(String slug);
+
     ProductDetailResponse createProduct(CreateProductRequest request);
 
     ProductDetailResponse updateProduct(UUID id, UpdateProductRequest request);

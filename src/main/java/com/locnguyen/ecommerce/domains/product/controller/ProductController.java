@@ -40,6 +40,12 @@ public class ProductController {
         return ApiResponse.success(productService.getPublishedProducts(filter, pageable));
     }
 
+    @Operation(summary = "Get published product detail by storefront slug")
+    @GetMapping("/slug/{slug}")
+    public ApiResponse<ProductDetailResponse> getProductBySlug(@PathVariable String slug) {
+        return ApiResponse.success(productService.getProductBySlug(slug));
+    }
+
     @Operation(summary = "Get published product detail with variants and media")
     @GetMapping("/{id}")
     public ApiResponse<ProductDetailResponse> getProduct(@PathVariable UUID id) {
