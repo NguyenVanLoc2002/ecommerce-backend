@@ -158,15 +158,12 @@ public class CarrierServiceTest {
             request.setWebhookSecret("webhook-secret");
             request.setBaseUrl("https://carrier.test");
             request.setEnabled(true);
-            request.setConfigJson("{\"mode\":\"sandbox\"}");
 
             when(carrierRepository.findById(uuid(3))).thenReturn(Optional.of(carrier));
             when(carrierConfigRepository.findByCarrierId(uuid(3))).thenReturn(Optional.of(config));
             when(textCipher.encrypt("api-key")).thenReturn("enc-api");
             when(textCipher.encrypt("secret-key")).thenReturn("enc-secret");
             when(textCipher.encrypt("webhook-secret")).thenReturn("enc-webhook");
-            when(objectMapper.readTree("{\"mode\":\"sandbox\"}")).thenReturn(new ObjectMapper().readTree("{\"mode\":\"sandbox\"}"));
-            when(objectMapper.writeValueAsString(any())).thenReturn("{\"mode\":\"sandbox\"}");
             when(carrierConfigRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
             when(carrierMapper.toResponse(any(Carrier.class), any(CarrierConfig.class)))
                     .thenReturn(CarrierResponse.builder()
@@ -187,7 +184,7 @@ public class CarrierServiceTest {
             assertThat(saved.getSecretKeyEnc()).isEqualTo("enc-secret");
             assertThat(saved.getWebhookSecretEnc()).isEqualTo("enc-webhook");
             assertThat(saved.getBaseUrl()).isEqualTo("https://carrier.test");
-            assertThat(saved.getConfigJson()).isEqualTo("{\"mode\":\"sandbox\"}");
+            assertThat(saved.getConfigJson()).isNull();
             assertThat(response.getHasApiKey()).isTrue();
             assertThat(response.getHasSecretKey()).isTrue();
             assertThat(response.getHasWebhookSecret()).isTrue();

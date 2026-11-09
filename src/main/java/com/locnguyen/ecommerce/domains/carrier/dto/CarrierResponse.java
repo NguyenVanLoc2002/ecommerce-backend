@@ -26,7 +26,6 @@ public class CarrierResponse {
     private final Boolean hasApiKey;
     private final Boolean hasSecretKey;
     private final Boolean hasWebhookSecret;
-    private final String configJson;
     private final CarrierConnectionStatus connectionStatus;
     private final LocalDateTime lastHealthCheckAt;
     private final String lastHealthCheckError;

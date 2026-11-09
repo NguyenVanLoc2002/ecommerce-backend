@@ -553,7 +553,6 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `logoUrl`, `description`
   - `configEnabled`, `baseUrl`
   - `hasApiKey`, `hasSecretKey`, `hasWebhookSecret`
-  - `configJson`: legacy compatibility field; admin UI should treat this as read-only debug data for provider-specific config that has not been migrated yet
   - `connectionStatus`, `lastHealthCheckAt`, `lastHealthCheckError`
   - `createdAt`, `updatedAt`
 - `CreateCarrierRequest`
@@ -569,9 +568,8 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `apiKey`, `secretKey`, `webhookSecret`: optional plain-text inputs; server encrypts before persistence
   - `baseUrl`: optional, max 500
   - `enabled`: optional boolean
-  - `configJson`: optional JSON string, must be valid JSON when provided
-  - legacy compatibility only for `AHAMOVE`
-  - the backend now mirrors typed AhaMove fields into this JSON for backward compatibility with existing provider code
+  - raw `configJson` is not accepted or returned by normal admin operations
+  - legacy AhaMove data remains server-side only during the compatibility window documented in `docs/carrier-config-legacy-retirement.md`
 - `UpdateAhamoveIntegrationRequest`
   - `apiKey`, `secretKey`, `webhookSecret`: optional plain-text secret inputs; encrypted before persistence
   - `baseUrl`: optional, max 500
@@ -671,8 +669,6 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - secrets are encrypted before persistence
   - responses never return raw `apiKey`, `secretKey`, or `webhookSecret`
   - responses expose only boolean flags: `hasApiKey`, `hasSecretKey`, `hasWebhookSecret`
-- Validation:
-  - `configJson` must be valid JSON when present
 - Response:
   - `ApiResponse<CarrierResponse>`
 
@@ -691,8 +687,8 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - secrets are encrypted before persistence
   - typed pickup/service/account fields are persisted in dedicated columns
   - when `pickupWarehouseId` is supplied, shipment requests resolve pickup details from that active warehouse; it must contain address, contact name, contact phone, latitude, and longitude
-  - without `pickupWarehouseId`, existing typed pickup fields and legacy `configJson` remain supported during migration
-  - the backend also mirrors typed AhaMove values into legacy `configJson` for provider backward compatibility
+  - without `pickupWarehouseId`, existing typed pickup fields and server-side legacy data remain supported during the compatibility window
+  - normal admin responses never expose raw legacy configuration data
   - when `enabled=true`, the backend validates that the effective config is complete enough for runtime use
 - AhaMove staging notes:
   - base URL default: `https://partner-apistg.ahamove.com`
@@ -1386,7 +1382,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `IN_RETURN`, `RETURNED` -> `RETURNED`
 - Pickup location behavior:
   - AhaMove may resolve pickup data from the managed warehouse selected by `pickupWarehouseId` on the carrier integration.
-  - Existing typed carrier pickup fields and legacy `configJson` remain a fallback only while configurations are migrated.
+  - Existing typed carrier pickup fields remain the normal fallback while legacy data is migrated server-side.
 
 ---
 
