@@ -33,7 +33,6 @@ public interface CarrierMapper {
                 .hasSecretKey(config != null && config.getSecretKeyEnc() != null && !config.getSecretKeyEnc().isBlank())
                 .hasWebhookSecret(config != null && config.getWebhookSecretEnc() != null
                         && !config.getWebhookSecretEnc().isBlank())
-                .configJson(config != null ? config.getConfigJson() : null)
                 .connectionStatus(config != null ? config.getConnectionStatus() : null)
                 .lastHealthCheckAt(config != null ? config.getLastHealthCheckAt() : null)
                 .lastHealthCheckError(config != null ? config.getLastHealthCheckError() : null)

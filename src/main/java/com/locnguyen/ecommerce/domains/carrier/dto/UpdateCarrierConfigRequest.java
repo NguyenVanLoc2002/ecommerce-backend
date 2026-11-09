@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.carrier.dto;
 
+import com.fasterxml.jackson.annotation.JsonSetter;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,6 +23,8 @@ public class UpdateCarrierConfigRequest {
 
     private Boolean enabled;
 
-    @Size(max = 5000)
-    private String configJson;
+    @JsonSetter("configJson")
+    public void rejectLegacyConfigJson(String ignored) {
+        throw new IllegalArgumentException("configJson is no longer supported; use typed provider configuration");
+    }
 }

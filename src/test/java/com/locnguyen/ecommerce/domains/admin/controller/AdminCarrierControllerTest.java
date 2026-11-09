@@ -106,7 +106,18 @@ class AdminCarrierControllerTest {
                 .andExpect(jsonPath("$.data.hasWebhookSecret").value(true))
                 .andExpect(jsonPath("$.data.apiKey").doesNotExist())
                 .andExpect(jsonPath("$.data.secretKey").doesNotExist())
-                .andExpect(jsonPath("$.data.webhookSecret").doesNotExist());
+                .andExpect(jsonPath("$.data.webhookSecret").doesNotExist())
+                .andExpect(jsonPath("$.data.configJson").doesNotExist());
+    }
+
+    @Test
+    void updateConfig_whenLegacyConfigJsonProvided_rejectsUnknownField() throws Exception {
+        UUID carrierId = UUID.fromString("00000000-0000-0000-0000-000000000012");
+
+        mockMvc.perform(put("/api/v1/admin/carriers/{id}/config", carrierId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"configJson\":\"{\\\"phone\\\":\\\"84338710667\\\"}\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

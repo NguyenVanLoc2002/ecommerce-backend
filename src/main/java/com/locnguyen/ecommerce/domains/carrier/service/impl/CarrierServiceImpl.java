@@ -155,10 +155,6 @@ public class CarrierServiceImpl implements CarrierService {
         if (request.getEnabled() != null) {
             config.setEnabled(request.getEnabled());
         }
-        if (request.getConfigJson() != null) {
-            config.setConfigJson(normalizeJson(request.getConfigJson()));
-        }
-
         if (carrier.getProviderType() == CarrierProviderType.AHAMOVE) {
             syncAhamoveTypedFieldsFromLegacyJson(config);
             ensureConnectionStatusDefault(config);
@@ -647,18 +643,6 @@ public class CarrierServiceImpl implements CarrierService {
     private String encryptOrClear(String rawValue) {
         String normalized = normalizeOptional(rawValue);
         return normalized == null ? null : textCipher.encrypt(normalized);
-    }
-
-    private String normalizeJson(String value) {
-        String normalized = normalizeOptional(value);
-        if (normalized == null) {
-            return null;
-        }
-        try {
-            return objectMapper.writeValueAsString(objectMapper.readTree(normalized));
-        } catch (Exception ex) {
-            throw new AppException(ErrorCode.VALIDATION_ERROR, "configJson must be valid JSON");
-        }
     }
 
     private boolean hasEncryptedValue(String encryptedValue) {
