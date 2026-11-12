@@ -3,6 +3,7 @@ package com.locnguyen.ecommerce.domains.inventory.service;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.inventory.dto.AdjustStockRequest;
 import com.locnguyen.ecommerce.domains.inventory.dto.InventoryFilter;
+import com.locnguyen.ecommerce.domains.inventory.dto.InventoryListItemResponse;
 import com.locnguyen.ecommerce.domains.inventory.dto.InventoryResponse;
 import com.locnguyen.ecommerce.domains.inventory.dto.ReserveStockRequest;
 import com.locnguyen.ecommerce.domains.inventory.dto.StockFilter;
@@ -15,7 +16,7 @@ import java.util.UUID;
 
 public interface InventoryService {
 
-    PagedResponse<InventoryResponse> getInventories(InventoryFilter filter, Pageable pageable);
+    PagedResponse<InventoryListItemResponse> getInventories(InventoryFilter filter, Pageable pageable);
 
     List<InventoryResponse> getInventoryByVariant(UUID variantId);
 

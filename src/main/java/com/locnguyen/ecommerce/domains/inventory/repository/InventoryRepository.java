@@ -2,6 +2,7 @@ package com.locnguyen.ecommerce.domains.inventory.repository;
 
 import com.locnguyen.ecommerce.domains.inventory.entity.Inventory;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
@@ -16,6 +17,16 @@ import java.util.UUID;
 public interface InventoryRepository extends
         JpaRepository<Inventory, UUID>,
         JpaSpecificationExecutor<Inventory> {
+
+    /**
+     * Loads the to-one associations used by the inventory list read model in
+     * the page query, preventing per-row lazy loads while mapping its DTO.
+     */
+    @Override
+    @EntityGraph(attributePaths = {"variant", "variant.product", "warehouse"})
+    org.springframework.data.domain.Page<Inventory> findAll(
+            org.springframework.data.jpa.domain.Specification<Inventory> specification,
+            org.springframework.data.domain.Pageable pageable);
 
     Optional<Inventory> findByVariantIdAndWarehouseId(UUID variantId, UUID warehouseId);
 

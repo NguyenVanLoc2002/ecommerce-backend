@@ -46,12 +46,12 @@ public class InventoryServiceImpl implements InventoryService {
     // ─── Read operations ─────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public PagedResponse<InventoryResponse> getInventories(InventoryFilter filter, Pageable pageable) {
+    public PagedResponse<InventoryListItemResponse> getInventories(InventoryFilter filter, Pageable pageable) {
         Page<Inventory> page = inventoryRepository.findAll(
                 InventorySpecification.withFilter(filter),
                 pageable
         );
-        return PagedResponse.of(page.map(inventoryMapper::toResponse));
+        return PagedResponse.of(page.map(inventoryMapper::toListItemResponse));
     }
 
     @Transactional(readOnly = true)

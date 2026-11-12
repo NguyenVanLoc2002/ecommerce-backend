@@ -49,6 +49,7 @@ public class InventorySpecification {
                 String keyword = "%" + filter.getKeyword().trim().toUpperCase() + "%";
 
                 predicates.add(cb.or(
+                        cb.like(cb.upper(productJoin.get("name")), keyword),
                         cb.like(cb.upper(variantJoin.get("sku")), keyword),
                         cb.like(cb.upper(variantJoin.get("variantName")), keyword),
                         cb.like(cb.upper(warehouseJoin.get("name")), keyword)

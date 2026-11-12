@@ -760,12 +760,18 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `warehouseId`
   - `productId`
   - `sku`
-  - `keyword`
+  - `keyword` (product name, variant name, SKU, or warehouse name)
   - `variantStatus`
   - `outOfStock`
   - `lowStock`
   - `lowStockThreshold`
-- `InventoryResponse`
+- `InventoryListItemResponse` (used by the paginated inventory list)
+  - `id`, `productId`, `productName`
+  - `variantId`, `variantName`, `sku`
+  - `warehouseId`, `warehouseName`
+  - `onHand`, `reserved`, `available`
+  - `updatedAt`
+- `InventoryResponse` (used by variant, warehouse and detail endpoints)
   - `id`, `variantId`, `variantName`, `sku`
   - `warehouseId`, `warehouseName`
   - `onHand`, `reserved`, `available`
@@ -806,7 +812,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `page`, `size`, `sort`
   - default: `size=20`, `sort=updatedAt,desc`
 - Response:
-  - `ApiResponse<PagedResponse<InventoryResponse>>`
+  - `ApiResponse<PagedResponse<InventoryListItemResponse>>`
 
 ### GET `/api/v1/admin/inventories/variant/{variantId}`
 
