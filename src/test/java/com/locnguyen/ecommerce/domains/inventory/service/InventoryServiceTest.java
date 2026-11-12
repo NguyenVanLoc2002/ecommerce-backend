@@ -3,6 +3,8 @@ package com.locnguyen.ecommerce.domains.inventory.service;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.domains.inventory.dto.ReserveStockRequest;
+import com.locnguyen.ecommerce.domains.inventory.dto.InventoryFilter;
+import com.locnguyen.ecommerce.domains.inventory.dto.InventoryListItemResponse;
 import com.locnguyen.ecommerce.domains.inventory.entity.Inventory;
 import com.locnguyen.ecommerce.domains.inventory.entity.InventoryReservation;
 import com.locnguyen.ecommerce.domains.inventory.entity.StockMovement;
@@ -24,6 +26,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -113,6 +117,32 @@ class InventoryServiceTest {
 
     private static void setId(Object entity, UUID id) {
         ReflectionTestUtils.setField(entity, "id", id);
+    }
+
+    @Test
+    void getInventories_mapsTheFetchedPageToListReadModel() {
+        Inventory inv = inventory(uuid(10), variant(uuid(1)), warehouse(uuid(2)), 8, 3);
+        InventoryListItemResponse row = InventoryListItemResponse.builder()
+                .id(uuid(10))
+                .productId(uuid(3))
+                .productName("Running Shorts")
+                .variantId(uuid(1))
+                .warehouseId(uuid(2))
+                .onHand(8)
+                .reserved(3)
+                .available(5)
+                .build();
+        PageRequest pageable = PageRequest.of(0, 20);
+
+        when(inventoryRepository.findAll(any(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(inv), pageable, 1));
+        when(inventoryMapper.toListItemResponse(inv)).thenReturn(row);
+
+        var result = inventoryService.getInventories(new InventoryFilter(), pageable);
+
+        assertThat(result.getItems()).containsExactly(row);
+        verify(inventoryMapper).toListItemResponse(inv);
+        verify(inventoryMapper, never()).toResponse(inv);
     }
 
     // ─── reserveStock ─────────────────────────────────────────────────────────

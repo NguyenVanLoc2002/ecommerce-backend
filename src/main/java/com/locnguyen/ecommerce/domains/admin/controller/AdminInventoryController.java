@@ -44,7 +44,7 @@ public class AdminInventoryController {
 
     @Operation(summary = "List inventories (paginated, filterable)")
     @GetMapping
-    public ApiResponse<PagedResponse<InventoryResponse>> getInventories(
+    public ApiResponse<PagedResponse<InventoryListItemResponse>> getInventories(
             InventoryFilter filter,
             @PageableDefault(
                     size = AppConstants.DEFAULT_PAGE_SIZE,
