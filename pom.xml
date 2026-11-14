@@ -24,9 +24,17 @@
         <!-- Override Spring Boot 3.3's managed Flyway (10.17) to a build that
              officially supports MariaDB 11.3+. -->
         <flyway.version>11.10.5</flyway.version>
+        <aws.sdk.version>2.27.21</aws.sdk.version>
     </properties>
 
     <dependencies>
+
+        <!-- ===== OBJECT STORAGE (Cloudflare R2 via S3 API) ===== -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
 
         <!-- ===== WEB ===== -->
         <dependency>

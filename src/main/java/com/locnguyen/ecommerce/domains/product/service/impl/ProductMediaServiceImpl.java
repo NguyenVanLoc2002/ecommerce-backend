@@ -3,6 +3,8 @@ package com.locnguyen.ecommerce.domains.product.service.impl;
 import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
+import com.locnguyen.ecommerce.domains.catalogasset.service.CatalogAsset;
+import com.locnguyen.ecommerce.domains.catalogasset.service.CatalogAssetService;
 import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.product.dto.CreateProductMediaRequest;
@@ -16,6 +18,8 @@ import com.locnguyen.ecommerce.domains.product.repository.ProductRepository;
 import com.locnguyen.ecommerce.domains.product.service.ProductMediaService;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import com.locnguyen.ecommerce.domains.productvariant.repository.ProductVariantRepository;
+import com.locnguyen.ecommerce.infrastructure.storage.R2StorageProperties;
+import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -34,6 +38,8 @@ public class ProductMediaServiceImpl implements ProductMediaService {
     private final ProductVariantRepository variantRepository;
     private final ProductMediaRepository mediaRepository;
     private final AuditLogService auditLogService;
+    private final CatalogAssetService catalogAssetService;
+    private final R2StorageProperties r2StorageProperties;
 
     @Override
     @Caching(evict = {
@@ -47,11 +53,14 @@ public class ProductMediaServiceImpl implements ProductMediaService {
         if (request.isPrimary() && mediaType != MediaType.IMAGE) {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "Only image media can be primary");
         }
+        if (request.getStorageKey() != null && mediaType != MediaType.IMAGE) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "Managed catalog assets must be images");
+        }
 
         ProductMedia media = new ProductMedia();
         media.setProduct(product);
         media.setVariant(resolveVariant(productId, request.getVariantId()));
-        media.setMediaUrl(request.getMediaUrl().trim());
+        applyAsset(media, request.getMediaUrl(), request.getStorageKey());
         media.setMediaType(mediaType);
         media.setSortOrder(request.getSortOrder() != null ? request.getSortOrder() : 0);
         if (request.isPrimary()) {
@@ -81,7 +90,13 @@ public class ProductMediaServiceImpl implements ProductMediaService {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "Only image media can be primary");
         }
 
-        if (request.getMediaUrl() != null) media.setMediaUrl(request.getMediaUrl().trim());
+        if (request.getMediaUrl() != null || request.getStorageKey() != null) {
+            String previousStorageKey = media.getStorageKey();
+            applyAsset(media, request.getMediaUrl(), request.getStorageKey());
+            if (previousStorageKey != null && !previousStorageKey.equals(media.getStorageKey())) {
+                catalogAssetService.scheduleDelete(previousStorageKey);
+            }
+        }
         if (request.getMediaType() != null) media.setMediaType(mediaType);
         if (request.getSortOrder() != null) media.setSortOrder(request.getSortOrder());
         if (request.isVariantIdProvided()) media.setVariant(resolveVariant(productId, request.getVariantId()));
@@ -104,7 +119,9 @@ public class ProductMediaServiceImpl implements ProductMediaService {
     public void deleteMedia(UUID productId, UUID mediaId) {
         findProductOrThrow(productId);
         ProductMedia media = findMediaOrThrow(productId, mediaId);
+        String storageKey = media.getStorageKey();
         mediaRepository.delete(media);
+        catalogAssetService.scheduleDelete(storageKey);
         auditLogService.log(AuditAction.PRODUCT_UPDATED, "PRODUCT_MEDIA", String.valueOf(mediaId),
                 "productId=" + productId + " action=deleted");
         log.info("Product media deleted: id={} productId={}", mediaId, productId);
@@ -131,10 +148,53 @@ public class ProductMediaServiceImpl implements ProductMediaService {
                 .forEach(existing -> existing.setPrimary(false));
     }
 
+    private void applyAsset(ProductMedia media, String mediaUrl, String storageKey) {
+        boolean hasUrl = mediaUrl != null && !mediaUrl.isBlank();
+        boolean hasStorageKey = storageKey != null && !storageKey.isBlank();
+        if (hasUrl == hasStorageKey) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "Provide exactly one of mediaUrl or storageKey");
+        }
+        if (hasStorageKey) {
+            CatalogAsset asset = catalogAssetService.claimVerifiedAsset(storageKey.trim());
+            media.setMediaUrl(asset.mediaUrl());
+            media.setStorageKey(asset.storageKey());
+            media.setContentType(asset.contentType());
+            media.setSizeBytes(asset.sizeBytes());
+            media.setOriginalFilename(asset.originalFilename());
+            media.setProvider(asset.provider());
+            return;
+        }
+        rejectUnverifiedR2Url(mediaUrl);
+        media.setMediaUrl(mediaUrl.trim());
+        media.setStorageKey(null);
+        media.setContentType(null);
+        media.setSizeBytes(null);
+        media.setOriginalFilename(null);
+        media.setProvider(null);
+    }
+
+    private void rejectUnverifiedR2Url(String mediaUrl) {
+        String host = URI.create(mediaUrl.trim()).getHost();
+        String publicBaseUrl = r2StorageProperties.getPublicBaseUrl();
+        String managedHost = publicBaseUrl == null || publicBaseUrl.isBlank()
+                ? null
+                : URI.create(publicBaseUrl).getHost();
+        if ((host != null && host.endsWith(".r2.cloudflarestorage.com"))
+                || (managedHost != null && managedHost.equalsIgnoreCase(host))) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR,
+                    "R2 catalog images must use a verified storageKey instead of mediaUrl");
+        }
+    }
+
     private MediaResponse toResponse(ProductMedia media) {
         return MediaResponse.builder()
                 .id(media.getId())
                 .mediaUrl(media.getMediaUrl())
+                .storageKey(media.getStorageKey())
+                .contentType(media.getContentType())
+                .sizeBytes(media.getSizeBytes())
+                .originalFilename(media.getOriginalFilename())
+                .provider(media.getProvider())
                 .mediaType(media.getMediaType().name())
                 .sortOrder(media.getSortOrder())
                 .primary(media.isPrimary())

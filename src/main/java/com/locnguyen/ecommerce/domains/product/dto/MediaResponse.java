@@ -16,6 +16,11 @@ public class MediaResponse implements Serializable {
 
     private final UUID id;
     private final String mediaUrl;
+    private final String storageKey;
+    private final String contentType;
+    private final Long sizeBytes;
+    private final String originalFilename;
+    private final String provider;
     private final String mediaType;
     private final Integer sortOrder;
     private final boolean primary;

@@ -3,6 +3,8 @@ package com.locnguyen.ecommerce.domains.product.service;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
+import com.locnguyen.ecommerce.domains.catalogasset.service.CatalogAssetService;
+import com.locnguyen.ecommerce.infrastructure.storage.R2StorageProperties;
 import com.locnguyen.ecommerce.domains.product.dto.CreateProductMediaRequest;
 import com.locnguyen.ecommerce.domains.product.dto.MediaResponse;
 import com.locnguyen.ecommerce.domains.product.dto.UpdateProductMediaRequest;
@@ -42,6 +44,8 @@ class ProductMediaServiceTest {
     @Mock ProductVariantRepository variantRepository;
     @Mock ProductMediaRepository mediaRepository;
     @Mock AuditLogService auditLogService;
+    @Mock CatalogAssetService catalogAssetService;
+    @Mock R2StorageProperties r2StorageProperties;
 
     @InjectMocks ProductMediaServiceImpl service;
 
