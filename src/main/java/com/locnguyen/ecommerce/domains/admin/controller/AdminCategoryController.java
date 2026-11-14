@@ -38,6 +38,12 @@ public class AdminCategoryController {
         return ApiResponse.success(categoryService.getAllCategories(filter, pageable));
     }
 
+    @Operation(summary = "Get category by ID")
+    @GetMapping("/{id}")
+    public ApiResponse<CategoryResponse> getCategoryById(@PathVariable UUID id) {
+        return ApiResponse.success(categoryService.getCategoryById(id));
+    }
+
     @Operation(summary = "Create category")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping
