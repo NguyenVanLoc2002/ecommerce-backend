@@ -9,6 +9,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -28,6 +29,8 @@ public class ProductDetailResponse implements Serializable {
     private final String slug;
     private final String shortDescription;
     private final String description;
+    private final BigDecimal minPrice;
+    private final BigDecimal maxPrice;
     private final ProductStatus status;
     private final boolean featured;
     private final BrandResponse brand;

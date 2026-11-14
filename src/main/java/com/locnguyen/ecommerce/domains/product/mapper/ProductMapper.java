@@ -28,6 +28,8 @@ public interface ProductMapper {
     @Mapping(target = "categoryNames", source = ".", qualifiedByName = "extractCategoryNames")
     ProductListItemResponse toListItem(Product product);
 
+    @Mapping(target = "minPrice", source = ".", qualifiedByName = "extractMinPrice")
+    @Mapping(target = "maxPrice", source = ".", qualifiedByName = "extractMaxPrice")
     ProductDetailResponse toDetail(Product product);
 
     // ─── Helper methods ──────────────────────────────────────────────────────
