@@ -10,6 +10,7 @@ import com.locnguyen.ecommerce.domains.product.dto.ProductDetailResponse;
 import com.locnguyen.ecommerce.domains.product.dto.ProductListItemResponse;
 import com.locnguyen.ecommerce.domains.product.entity.Product;
 import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
+import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import com.locnguyen.ecommerce.domains.product.mapper.ProductMapper;
 import com.locnguyen.ecommerce.domains.product.mapper.ProductVariantMapper;
 import com.locnguyen.ecommerce.domains.product.repository.ProductRepository;
@@ -141,6 +142,29 @@ class ProductSearchRoutingTest {
         assertThat(response.getSlug()).isEqualTo("direct-lookup-product");
         verify(productRepository).findDetailBySlug("direct-lookup-product");
         verify(productRepository, never()).findAll(any(Specification.class), any(Pageable.class));
+    }
+
+    @Test
+    void product_slug_lookup_derives_price_range_from_non_deleted_variants() {
+        Product product = new Product();
+        product.setName("Priced product");
+        product.setSlug("priced-product");
+        product.setStatus(ProductStatus.PUBLISHED);
+
+        ProductVariant saleVariant = new ProductVariant();
+        saleVariant.setBasePrice(new BigDecimal("300000"));
+        saleVariant.setSalePrice(new BigDecimal("250000"));
+        ProductVariant baseVariant = new ProductVariant();
+        baseVariant.setBasePrice(new BigDecimal("320000"));
+        product.getVariants().add(saleVariant);
+        product.getVariants().add(baseVariant);
+
+        when(productRepository.findDetailBySlug("priced-product")).thenReturn(Optional.of(product));
+
+        ProductDetailResponse response = service.getProductBySlug("priced-product");
+
+        assertThat(response.getMinPrice()).isEqualByComparingTo("250000");
+        assertThat(response.getMaxPrice()).isEqualByComparingTo("320000");
     }
 
     private static <T> T mock(Class<T> type) {

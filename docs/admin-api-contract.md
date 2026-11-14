@@ -74,6 +74,7 @@ Role summary by module:
   - `createdAt`
 - `ProductDetailResponse`
   - `id`, `name`, `slug`, `shortDescription`, `description`
+  - `minPrice`, `maxPrice` (derived from each non-deleted variant's sale price when present, otherwise base price)
   - `status`, `featured`
   - `brand`, `categories`, `variants`, `media`
   - `createdAt`, `updatedAt`
