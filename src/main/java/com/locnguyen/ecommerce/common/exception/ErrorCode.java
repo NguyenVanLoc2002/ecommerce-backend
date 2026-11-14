@@ -57,6 +57,11 @@ public enum ErrorCode {
     // ─── Product ────────────────────────────────────────────────────────────
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product not found"),
     PRODUCT_MEDIA_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_MEDIA_NOT_FOUND", "Product media not found"),
+    STORAGE_OBJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "STORAGE_OBJECT_NOT_FOUND", "Uploaded object not found"),
+    STORAGE_ASSET_NOT_VERIFIED(HttpStatus.UNPROCESSABLE_ENTITY, "STORAGE_ASSET_NOT_VERIFIED", "Uploaded asset is not verified"),
+    STORAGE_METADATA_MISMATCH(HttpStatus.UNPROCESSABLE_ENTITY, "STORAGE_METADATA_MISMATCH", "Uploaded object metadata does not match the request"),
+    STORAGE_OPERATION_FAILED(HttpStatus.UNPROCESSABLE_ENTITY, "STORAGE_OPERATION_FAILED", "Storage operation failed"),
+    STORAGE_CONFIGURATION_INVALID(HttpStatus.SERVICE_UNAVAILABLE, "STORAGE_CONFIGURATION_INVALID", "Storage configuration is invalid"),
     PRODUCT_INACTIVE(HttpStatus.UNPROCESSABLE_ENTITY, "PRODUCT_INACTIVE",
             "Product is currently inactive"),
 

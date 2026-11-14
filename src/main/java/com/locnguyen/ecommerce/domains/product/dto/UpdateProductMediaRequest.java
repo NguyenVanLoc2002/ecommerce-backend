@@ -15,6 +15,9 @@ public class UpdateProductMediaRequest {
     @Pattern(regexp = "https?://\\S+", message = "Media URL must use http or https")
     private String mediaUrl;
 
+    @Size(max = 500)
+    private String storageKey;
+
     private MediaType mediaType;
 
     @Min(value = 0, message = "Sort order must not be negative")

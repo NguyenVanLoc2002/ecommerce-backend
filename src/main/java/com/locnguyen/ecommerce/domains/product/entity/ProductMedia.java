@@ -30,6 +30,21 @@ public class ProductMedia extends BaseEntity {
     @Column(name = "media_url", length = 500, nullable = false)
     private String mediaUrl;
 
+    @Column(name = "storage_key", unique = true, length = 500)
+    private String storageKey;
+
+    @Column(name = "content_type", length = 100)
+    private String contentType;
+
+    @Column(name = "size_bytes")
+    private Long sizeBytes;
+
+    @Column(name = "original_filename", length = 255)
+    private String originalFilename;
+
+    @Column(name = "provider", length = 30)
+    private String provider;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "media_type", length = 20, nullable = false)
     private MediaType mediaType = MediaType.IMAGE;

@@ -101,7 +101,7 @@ Role summary by module:
   - `attributeId`, `attributeName`, `attributeCode`
   - `valueId`, `value`, `displayValue`
 - `MediaResponse`
-  - `id`, `mediaUrl`, `mediaType`, `sortOrder`, `primary`, `variantId`
+  - `id`, `mediaUrl`, `storageKey`, `contentType`, `sizeBytes`, `originalFilename`, `provider`, `mediaType`, `sortOrder`, `primary`, `variantId`
 - `CreateVariantRequest`
   - `sku`: optional, max 100. Server generates one when blank or `autoGenerateSku=true`.
   - `autoGenerateSku`: optional boolean
@@ -195,12 +195,27 @@ Role summary by module:
 - Response:
   - `ApiResponse<Void>`
 
+### POST `/api/v1/admin/catalog-uploads`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: creates a short-lived presigned `PUT` URL for a catalog image. The server creates the object key; it never accepts a client-selected path or returns R2 credentials.
+- Request: `purpose` (`CATALOG_IMAGE`), `originalFilename`, `contentType` (`image/jpeg`, `image/png`, or `image/webp`), and exact positive `sizeBytes` within the configured limit.
+- Response: `201 ApiResponse<PresignedCatalogUploadResponse>` with `storageKey`, `uploadUrl`, `expiresAt`, and `requiredContentType`.
+
+### POST `/api/v1/admin/catalog-uploads/complete`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: verifies an uploaded object with `HeadObject`. The object must exist and match the requested content type and byte size before its `storageKey` can be attached to product media.
+- Request: `storageKey`.
+- Response: `200 ApiResponse<CatalogAssetResponse>` with the public custom-domain `mediaUrl` and verified metadata.
+- Configuration and R2 CORS/custom-domain setup: [r2-catalog-storage.md](r2-catalog-storage.md).
+
 ### POST `/api/v1/admin/products/{productId}/media`
 
 - Access: `ADMIN`, `SUPER_ADMIN`
-- Description: attach URL-based media to a product gallery or one of its active variants. This MVP stores an existing `http` or `https` URL; it does not upload, proxy, or delete remote assets.
+- Description: attach a verified R2 catalog image or a legacy external URL to a product gallery or one of its active variants.
 - Request:
-  - `mediaUrl`: required HTTP(S) URL, max 500 characters
+  - exactly one of `storageKey` (verified response from `/catalog-uploads/complete`) or legacy `mediaUrl` (HTTP(S), max 500 characters)
   - `mediaType`: optional `IMAGE` (default) or `VIDEO`
   - `sortOrder`: optional integer, minimum `0` (default `0`)
   - `primary`: optional boolean (default `false`); only `IMAGE` may be primary
@@ -211,14 +226,14 @@ Role summary by module:
 ### PATCH `/api/v1/admin/products/{productId}/media/{mediaId}`
 
 - Access: `ADMIN`, `SUPER_ADMIN`
-- Description: partially update URL, type, sort order, primary flag, or variant assignment. Send `variantId: null` to move media back to the product gallery.
+- Description: partially update an asset, type, sort order, primary flag, or variant assignment. Send `variantId: null` to move media back to the product gallery. Replacing a managed asset schedules its object deletion after the transaction.
 - Validation and primary rules match the create endpoint. `mediaId` must belong to `{productId}`.
 - Response: `200 ApiResponse<MediaResponse>`
 
 ### DELETE `/api/v1/admin/products/{productId}/media/{mediaId}`
 
 - Access: `ADMIN`, `SUPER_ADMIN`
-- Description: permanently removes the `product_media` metadata row only. The backend does not own or delete the remote URL's asset.
+- Description: permanently removes the `product_media` metadata row. A managed R2 object is put into retryable deletion after the transaction; a legacy URL is never deleted remotely.
 - Response: `204 ApiResponse<Void>`
 
 ### GET `/api/v1/admin/products/{productId}/variants`
