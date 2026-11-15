@@ -12,6 +12,7 @@ public interface CategoryMapper {
 
     @Mapping(target = "parentId",
             expression = "java(category.getParent() != null ? category.getParent().getId() : null)")
+    @Mapping(target = "imageStorageKey", source = "assetStorageKey")
     CategoryResponse toResponse(Category category);
 
     void updateEntity(UpdateCategoryRequest request, @MappingTarget Category category);

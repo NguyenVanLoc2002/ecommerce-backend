@@ -21,6 +21,8 @@ import com.locnguyen.ecommerce.domains.carrier.repository.CarrierConfigRepositor
 import com.locnguyen.ecommerce.domains.carrier.repository.CarrierRepository;
 import com.locnguyen.ecommerce.domains.carrier.service.CarrierService;
 import com.locnguyen.ecommerce.domains.carrier.specification.CarrierSpecification;
+import com.locnguyen.ecommerce.domains.catalogasset.enums.CatalogUploadPurpose;
+import com.locnguyen.ecommerce.domains.catalogasset.service.CatalogAssetService;
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveClient;
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveConfigData;
 import com.locnguyen.ecommerce.infrastructure.external.ahamove.AhamoveConfigResolver;
@@ -63,6 +65,7 @@ public class CarrierServiceImpl implements CarrierService {
     private final AhamoveConfigResolver ahamoveConfigResolver;
     private final AhamoveMapper ahamoveMapper;
     private final WarehouseService warehouseService;
+    private final CatalogAssetService catalogAssetService;
 
     @Override
     @Transactional(readOnly = true)
@@ -90,9 +93,15 @@ public class CarrierServiceImpl implements CarrierService {
         carrier.setName(normalizeRequired(request.getName()));
         carrier.setProviderType(request.getProviderType());
         carrier.setStatus(request.getStatus() != null ? request.getStatus() : CarrierStatus.ACTIVE);
-        carrier.setLogoUrl(normalizeOptional(request.getLogoUrl()));
+        if (hasValue(request.getLogoStorageKey()) && hasValue(request.getLogoUrl())) throw new AppException(ErrorCode.VALIDATION_ERROR, "Provide either logoUrl or logoStorageKey");
+        if (hasValue(request.getLogoStorageKey())) {
+            var asset = catalogAssetService.claimVerifiedAsset(request.getLogoStorageKey().trim(), CatalogUploadPurpose.CARRIER_LOGO);
+            carrier.setLogoUrl(asset.mediaUrl());
+            carrier.setAssetStorageKey(asset.storageKey());
+        } else carrier.setLogoUrl(normalizeOptional(request.getLogoUrl()));
         carrier.setDescription(normalizeOptional(request.getDescription()));
         carrier = carrierRepository.save(carrier);
+        if (carrier.getAssetStorageKey() != null) catalogAssetService.associateAsset(carrier.getAssetStorageKey(), CatalogUploadPurpose.CARRIER_LOGO, "CARRIER", carrier.getId());
 
         log.info("Carrier created: id={} code={} provider={}",
                 carrier.getId(), carrier.getCode(), carrier.getProviderType());
@@ -122,14 +131,24 @@ public class CarrierServiceImpl implements CarrierService {
         if (request.getStatus() != null) {
             carrier.setStatus(request.getStatus());
         }
-        if (request.getLogoUrl() != null) {
+        String previousAsset = carrier.getAssetStorageKey();
+        boolean sameAsset = hasValue(request.getLogoStorageKey()) && request.getLogoStorageKey().trim().equals(previousAsset);
+        if (hasValue(request.getLogoStorageKey()) && !sameAsset) {
+            if (hasValue(request.getLogoUrl())) throw new AppException(ErrorCode.VALIDATION_ERROR, "Provide either logoUrl or logoStorageKey");
+            var asset = catalogAssetService.claimVerifiedAsset(request.getLogoStorageKey().trim(), CatalogUploadPurpose.CARRIER_LOGO);
+            carrier.setLogoUrl(asset.mediaUrl());
+            carrier.setAssetStorageKey(asset.storageKey());
+        } else if (!hasValue(request.getLogoStorageKey()) && request.getLogoUrl() != null) {
             carrier.setLogoUrl(normalizeOptional(request.getLogoUrl()));
+            carrier.setAssetStorageKey(null);
         }
         if (request.getDescription() != null) {
             carrier.setDescription(normalizeOptional(request.getDescription()));
         }
 
         carrier = carrierRepository.save(carrier);
+        if (previousAsset != null && !previousAsset.equals(carrier.getAssetStorageKey())) catalogAssetService.detachAsset(previousAsset, "CARRIER", carrier.getId());
+        if (carrier.getAssetStorageKey() != null && !carrier.getAssetStorageKey().equals(previousAsset)) catalogAssetService.associateAsset(carrier.getAssetStorageKey(), CatalogUploadPurpose.CARRIER_LOGO, "CARRIER", carrier.getId());
         auditLogService.log(AuditAction.CARRIER_UPDATED, "CARRIER", carrier.getId().toString());
         return carrierMapper.toResponse(carrier);
     }
@@ -639,6 +658,8 @@ public class CarrierServiceImpl implements CarrierService {
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
     }
+
+    private boolean hasValue(String value) { return value != null && !value.isBlank(); }
 
     private String encryptOrClear(String rawValue) {
         String normalized = normalizeOptional(rawValue);

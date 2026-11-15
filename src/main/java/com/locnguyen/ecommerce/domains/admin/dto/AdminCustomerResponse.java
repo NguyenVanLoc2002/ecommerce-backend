@@ -47,6 +47,9 @@ public class AdminCustomerResponse {
     @Schema(description = "Avatar URL")
     private final String avatarUrl;
 
+    @Schema(description = "Managed avatar storage key when the avatar is R2-backed")
+    private final String avatarStorageKey;
+
     @Schema(description = "Loyalty points")
     private final Integer loyaltyPoints;
 

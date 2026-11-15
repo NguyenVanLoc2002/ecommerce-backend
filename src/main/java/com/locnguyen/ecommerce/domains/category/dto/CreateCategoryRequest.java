@@ -28,6 +28,9 @@ public class CreateCategoryRequest {
     @Schema(example = "https://cdn.example.com/categories/ao-nam.jpg")
     private String imageUrl;
 
+    @Size(max = 500)
+    private String imageStorageKey;
+
     @Schema(example = "1")
     private Integer sortOrder;
 }

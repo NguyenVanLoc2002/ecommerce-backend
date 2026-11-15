@@ -15,4 +15,5 @@ public interface CatalogUploadRepository extends JpaRepository<CatalogUpload, UU
     Optional<CatalogUpload> findByStorageKey(String storageKey);
     List<CatalogUpload> findTop100ByStatusOrderByCreatedAtAsc(CatalogAssetStatus status);
     List<CatalogUpload> findTop100ByStatusInAndCreatedAtBeforeOrderByCreatedAtAsc(Collection<CatalogAssetStatus> statuses, LocalDateTime createdAt);
+    List<CatalogUpload> findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(CatalogAssetStatus status, LocalDateTime createdAt);
 }

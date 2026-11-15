@@ -21,6 +21,7 @@ public class BrandResponse implements Serializable {
     private final String name;
     private final String slug;
     private final String logoUrl;
+    private final String logoStorageKey;
     private final String description;
     private final Integer sortOrder;
     private final BrandStatus status;

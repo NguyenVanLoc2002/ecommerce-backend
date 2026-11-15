@@ -26,6 +26,7 @@ public interface CarrierMapper {
                 .providerType(carrier.getProviderType())
                 .status(carrier.getStatus())
                 .logoUrl(carrier.getLogoUrl())
+                .logoStorageKey(carrier.getAssetStorageKey())
                 .description(carrier.getDescription())
                 .configEnabled(config != null ? config.isEnabled() : null)
                 .baseUrl(config != null ? config.getBaseUrl() : null)

@@ -8,6 +8,8 @@ public interface StorageService {
 
     StorageObjectMetadata headObject(String storageKey);
 
+    byte[] readObjectPrefix(String storageKey, int maxBytes);
+
     void deleteObject(String storageKey);
 
     String publicUrl(String storageKey);

@@ -39,9 +39,9 @@ Add local Admin origins only to non-production buckets. Do not enable wildcard o
 
 ## Admin workflow
 
-1. `POST /api/v1/admin/catalog-uploads` with `purpose: CATALOG_IMAGE`, an original filename, one of `image/jpeg`, `image/png`, `image/webp`, and the exact byte size.
+1. `POST /api/v1/admin/catalog-uploads` with the domain purpose (`CATALOG_IMAGE`, `CATEGORY_IMAGE`, `BRAND_LOGO`, `CUSTOMER_AVATAR`, or `CARRIER_LOGO`), an original filename, one of `image/jpeg`, `image/png`, `image/webp`, and the exact byte size.
 2. Send a browser `PUT` to `uploadUrl` with the returned `requiredContentType`. Do not add credentials.
-3. `POST /api/v1/admin/catalog-uploads/complete` with `storageKey`. The backend uses `HeadObject` and checks content type and size.
-4. Create or replace product media with `storageKey`, never with the presigned URL. The API returns its public `mediaUrl` through the custom domain.
+3. `POST /api/v1/admin/catalog-uploads/complete` with `storageKey`. The backend checks object metadata, size, and the actual JPEG/PNG/WebP signature.
+4. Attach the verified key using the matching Admin domain request field: `storageKey` for Product Media, `imageStorageKey` for Category, `logoStorageKey` for Brand/Carrier, or `avatarStorageKey` for Customer. Never persist the presigned URL. Domain responses keep returning the public delivery URL and include the managed storage key when present.
 
-Legacy HTTP(S) `mediaUrl` values remain supported for existing non-managed assets. A managed object is deleted only after its media relation is removed or replaced; failed deletes remain `DELETE_PENDING` for the scheduled retry. Unattached requested or verified uploads are removed after the configured retention period.
+Legacy HTTP(S) image URLs remain readable and writable. A managed object is associated with one entity at a time; the purpose must match the domain. Replacing an image updates the domain reference transactionally and detaches the previous association only after the entity update succeeds. Cleanup verifies that no association remains before deleting an object; failures remain `DELETE_PENDING` for scheduled retry. Unattached uploads and attached objects without a live association are removed after the configured retention period. Migrations V38-V41 add nullable legacy-compatible references, optimistic version fields for single-image domains and Product Media, and association records (including a backfill for current Product Media assets); they do not migrate or delete external URLs.

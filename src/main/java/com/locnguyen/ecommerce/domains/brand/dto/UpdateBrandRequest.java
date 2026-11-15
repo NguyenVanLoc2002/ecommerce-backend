@@ -17,6 +17,9 @@ public class UpdateBrandRequest {
 
     private String logoUrl;
 
+    @Size(max = 500)
+    private String logoStorageKey;
+
     private String description;
 
     private BrandStatus status;

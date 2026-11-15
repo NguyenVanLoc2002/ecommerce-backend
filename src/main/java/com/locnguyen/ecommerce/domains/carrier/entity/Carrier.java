@@ -32,6 +32,13 @@ public class Carrier extends BaseEntity {
     @Column(name = "logo_url", length = 500)
     private String logoUrl;
 
+    @Column(name = "asset_storage_key", length = 500, unique = true)
+    private String assetStorageKey;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Column(name = "description", length = 500)
     private String description;
 

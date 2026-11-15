@@ -20,6 +20,7 @@ public class CarrierResponse {
     private final CarrierProviderType providerType;
     private final CarrierStatus status;
     private final String logoUrl;
+    private final String logoStorageKey;
     private final String description;
     private final Boolean configEnabled;
     private final String baseUrl;

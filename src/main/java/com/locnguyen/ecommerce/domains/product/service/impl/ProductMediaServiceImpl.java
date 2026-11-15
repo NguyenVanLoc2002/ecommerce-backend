@@ -5,6 +5,7 @@ import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.domains.catalogasset.service.CatalogAsset;
 import com.locnguyen.ecommerce.domains.catalogasset.service.CatalogAssetService;
+import com.locnguyen.ecommerce.domains.catalogasset.enums.CatalogUploadPurpose;
 import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.product.dto.CreateProductMediaRequest;
@@ -69,6 +70,7 @@ public class ProductMediaServiceImpl implements ProductMediaService {
         }
 
         media = mediaRepository.save(media);
+        if (media.getStorageKey() != null) catalogAssetService.associateAsset(media.getStorageKey(), com.locnguyen.ecommerce.domains.catalogasset.enums.CatalogUploadPurpose.CATALOG_IMAGE, "PRODUCT_MEDIA", media.getId());
         auditLogService.log(AuditAction.PRODUCT_UPDATED, "PRODUCT_MEDIA", String.valueOf(media.getId()),
                 "productId=" + productId + " action=created");
         log.info("Product media created: id={} productId={}", media.getId(), productId);
@@ -90,11 +92,10 @@ public class ProductMediaServiceImpl implements ProductMediaService {
             throw new AppException(ErrorCode.VALIDATION_ERROR, "Only image media can be primary");
         }
 
+        String previousStorageKey = media.getStorageKey();
         if (request.getMediaUrl() != null || request.getStorageKey() != null) {
-            String previousStorageKey = media.getStorageKey();
-            applyAsset(media, request.getMediaUrl(), request.getStorageKey());
-            if (previousStorageKey != null && !previousStorageKey.equals(media.getStorageKey())) {
-                catalogAssetService.scheduleDelete(previousStorageKey);
+            if (request.getStorageKey() == null || !request.getStorageKey().equals(previousStorageKey)) {
+                applyAsset(media, request.getMediaUrl(), request.getStorageKey());
             }
         }
         if (request.getMediaType() != null) media.setMediaType(mediaType);
@@ -104,6 +105,8 @@ public class ProductMediaServiceImpl implements ProductMediaService {
         media.setPrimary(primary);
 
         media = mediaRepository.save(media);
+        if (previousStorageKey != null && !previousStorageKey.equals(media.getStorageKey())) catalogAssetService.detachAsset(previousStorageKey, "PRODUCT_MEDIA", mediaId);
+        if (media.getStorageKey() != null && !media.getStorageKey().equals(previousStorageKey)) catalogAssetService.associateAsset(media.getStorageKey(), CatalogUploadPurpose.CATALOG_IMAGE, "PRODUCT_MEDIA", media.getId());
         auditLogService.log(AuditAction.PRODUCT_UPDATED, "PRODUCT_MEDIA", String.valueOf(mediaId),
                 "productId=" + productId + " action=updated");
         log.info("Product media updated: id={} productId={}", mediaId, productId);
@@ -121,7 +124,7 @@ public class ProductMediaServiceImpl implements ProductMediaService {
         ProductMedia media = findMediaOrThrow(productId, mediaId);
         String storageKey = media.getStorageKey();
         mediaRepository.delete(media);
-        catalogAssetService.scheduleDelete(storageKey);
+        catalogAssetService.detachAsset(storageKey, "PRODUCT_MEDIA", mediaId);
         auditLogService.log(AuditAction.PRODUCT_UPDATED, "PRODUCT_MEDIA", String.valueOf(mediaId),
                 "productId=" + productId + " action=deleted");
         log.info("Product media deleted: id={} productId={}", mediaId, productId);

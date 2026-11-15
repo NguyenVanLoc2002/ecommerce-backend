@@ -17,6 +17,8 @@ import com.locnguyen.ecommerce.domains.brand.mapper.BrandMapper;
 import com.locnguyen.ecommerce.domains.brand.repository.BrandRepository;
 import com.locnguyen.ecommerce.domains.brand.service.BrandService;
 import com.locnguyen.ecommerce.domains.brand.specification.BrandSpecification;
+import com.locnguyen.ecommerce.domains.catalogasset.enums.CatalogUploadPurpose;
+import com.locnguyen.ecommerce.domains.catalogasset.service.CatalogAssetService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -36,6 +38,7 @@ public class BrandServiceImpl implements BrandService {
     private final BrandRepository brandRepository;
     private final BrandMapper brandMapper;
     private final AuditLogService auditLogService;
+    private final CatalogAssetService catalogAssetService;
 
     @Override
     @Transactional(readOnly = true)
@@ -71,10 +74,16 @@ public class BrandServiceImpl implements BrandService {
         Brand brand = new Brand();
         brand.setName(request.getName().trim());
         brand.setSlug(request.getSlug().trim());
-        brand.setLogoUrl(request.getLogoUrl());
+        if (hasValue(request.getLogoStorageKey()) && hasValue(request.getLogoUrl())) throw new AppException(ErrorCode.VALIDATION_ERROR, "Provide either logoUrl or logoStorageKey");
+        if (hasValue(request.getLogoStorageKey())) {
+            var asset = catalogAssetService.claimVerifiedAsset(request.getLogoStorageKey().trim(), CatalogUploadPurpose.BRAND_LOGO);
+            brand.setLogoUrl(asset.mediaUrl());
+            brand.setAssetStorageKey(asset.storageKey());
+        } else brand.setLogoUrl(request.getLogoUrl());
         brand.setDescription(request.getDescription());
         brand.setStatus(BrandStatus.ACTIVE);
         brand = brandRepository.save(brand);
+        if (brand.getAssetStorageKey() != null) catalogAssetService.associateAsset(brand.getAssetStorageKey(), CatalogUploadPurpose.BRAND_LOGO, "BRAND", brand.getId());
         log.info("Brand created: id={} name={}", brand.getId(), brand.getName());
         auditLogService.log(AuditAction.BRAND_CREATED, "BRAND",
                 String.valueOf(brand.getId()), "name=" + brand.getName());
@@ -94,10 +103,23 @@ public class BrandServiceImpl implements BrandService {
             }
             brand.setSlug(newSlug);
         }
-        if (request.getLogoUrl() != null) brand.setLogoUrl(request.getLogoUrl());
+        String previousAsset = brand.getAssetStorageKey();
+        boolean sameAsset = hasValue(request.getLogoStorageKey()) && request.getLogoStorageKey().trim().equals(previousAsset);
+        if (hasValue(request.getLogoStorageKey()) && !sameAsset) {
+            if (hasValue(request.getLogoUrl())) throw new AppException(ErrorCode.VALIDATION_ERROR, "Provide either logoUrl or logoStorageKey");
+            var asset = catalogAssetService.claimVerifiedAsset(request.getLogoStorageKey().trim(), CatalogUploadPurpose.BRAND_LOGO);
+            brand.setLogoUrl(asset.mediaUrl());
+            brand.setAssetStorageKey(asset.storageKey());
+        } else if (!hasValue(request.getLogoStorageKey()) && request.getLogoUrl() != null) {
+            String url = request.getLogoUrl().trim();
+            brand.setLogoUrl(url.isEmpty() ? null : url);
+            brand.setAssetStorageKey(null);
+        }
         if (request.getDescription() != null) brand.setDescription(request.getDescription());
         if (request.getStatus() != null) brand.setStatus(request.getStatus());
         brand = brandRepository.save(brand);
+        if (previousAsset != null && !previousAsset.equals(brand.getAssetStorageKey())) catalogAssetService.detachAsset(previousAsset, "BRAND", brand.getId());
+        if (brand.getAssetStorageKey() != null && !brand.getAssetStorageKey().equals(previousAsset)) catalogAssetService.associateAsset(brand.getAssetStorageKey(), CatalogUploadPurpose.BRAND_LOGO, "BRAND", brand.getId());
         log.info("Brand updated: id={}", id);
         auditLogService.log(AuditAction.BRAND_UPDATED, "BRAND", String.valueOf(id));
         return brandMapper.toResponse(brand);
@@ -119,4 +141,6 @@ public class BrandServiceImpl implements BrandService {
         return brandRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.BRAND_NOT_FOUND));
     }
+
+    private boolean hasValue(String value) { return value != null && !value.isBlank(); }
 }
