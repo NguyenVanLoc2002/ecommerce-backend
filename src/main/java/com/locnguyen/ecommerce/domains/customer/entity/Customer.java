@@ -44,6 +44,13 @@ public class Customer extends SoftDeleteEntity {
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
 
+    @Column(name = "asset_storage_key", length = 500, unique = true)
+    private String assetStorageKey;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Column(name = "loyalty_points", nullable = false)
     private Integer loyaltyPoints = 0;
 

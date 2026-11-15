@@ -1,0 +1,1 @@
+ALTER TABLE product_media ADD COLUMN version BIGINT NOT NULL DEFAULT 0;

@@ -22,6 +22,9 @@ public class UpdateCategoryRequest {
 
     private String imageUrl;
 
+    @Size(max = 500)
+    private String imageStorageKey;
+
     private CategoryStatus status;
 
     private Integer sortOrder;

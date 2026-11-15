@@ -22,5 +22,8 @@ public class CreateBrandRequest {
     @Schema(example = "https://cdn.example.com/brands/local-brand-a.png")
     private String logoUrl;
 
+    @Size(max = 500)
+    private String logoStorageKey;
+
     private String description;
 }

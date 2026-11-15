@@ -134,7 +134,7 @@ class InventoryServiceTest {
                 .build();
         PageRequest pageable = PageRequest.of(0, 20);
 
-        when(inventoryRepository.findAll(any(), eq(pageable)))
+        when(inventoryRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(inv), pageable, 1));
         when(inventoryMapper.toListItemResponse(inv)).thenReturn(row);
 

@@ -12,6 +12,8 @@ import com.locnguyen.ecommerce.domains.admin.service.AdminCustomerService;
 import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
+import com.locnguyen.ecommerce.domains.catalogasset.enums.CatalogUploadPurpose;
+import com.locnguyen.ecommerce.domains.catalogasset.service.CatalogAssetService;
 import com.locnguyen.ecommerce.domains.customer.repository.CustomerRepository;
 import com.locnguyen.ecommerce.domains.customer.specification.CustomerSpecification;
 import com.locnguyen.ecommerce.domains.user.entity.User;
@@ -33,6 +35,7 @@ public class AdminCustomerServiceImpl implements AdminCustomerService {
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
     private final AuditLogService auditLogService;
+    private final CatalogAssetService catalogAssetService;
 
     @Override
     @Transactional(readOnly = true)
@@ -85,15 +88,27 @@ public class AdminCustomerServiceImpl implements AdminCustomerService {
         if (request.getBirthDate() != null) {
             customer.setBirthDate(request.getBirthDate());
         }
-        if (request.getAvatarUrl() != null) {
+        String previousAsset = customer.getAssetStorageKey();
+        boolean sameAvatarAsset = request.getAvatarStorageKey() != null && request.getAvatarStorageKey().trim().equals(previousAsset);
+        if (request.getAvatarStorageKey() != null && !request.getAvatarStorageKey().isBlank() && !sameAvatarAsset && request.getAvatarUrl() != null && !request.getAvatarUrl().isBlank()) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "Provide either avatarUrl or avatarStorageKey");
+        }
+        if (request.getAvatarStorageKey() != null && !request.getAvatarStorageKey().isBlank() && !sameAvatarAsset) {
+            var asset = catalogAssetService.claimVerifiedAsset(request.getAvatarStorageKey().trim(), CatalogUploadPurpose.CUSTOMER_AVATAR);
+            customer.setAvatarUrl(asset.mediaUrl());
+            customer.setAssetStorageKey(asset.storageKey());
+        } else if ((request.getAvatarStorageKey() == null || request.getAvatarStorageKey().isBlank()) && request.getAvatarUrl() != null) {
             String trimmed = request.getAvatarUrl().trim();
             customer.setAvatarUrl(trimmed.isEmpty() ? null : trimmed);
+            customer.setAssetStorageKey(null);
         }
 
         if (userChanged) {
             userRepository.save(user);
         }
         customer = customerRepository.save(customer);
+        if (previousAsset != null && !previousAsset.equals(customer.getAssetStorageKey())) catalogAssetService.detachAsset(previousAsset, "CUSTOMER", customer.getId());
+        if (customer.getAssetStorageKey() != null && !customer.getAssetStorageKey().equals(previousAsset)) catalogAssetService.associateAsset(customer.getAssetStorageKey(), CatalogUploadPurpose.CUSTOMER_AVATAR, "CUSTOMER", customer.getId());
 
         log.info("Admin updated customer: id={} by={}",
                 id, SecurityUtils.getCurrentUsernameOrSystem());
@@ -158,6 +173,7 @@ public class AdminCustomerServiceImpl implements AdminCustomerService {
                 .gender(customer.getGender())
                 .birthDate(customer.getBirthDate())
                 .avatarUrl(customer.getAvatarUrl())
+                .avatarStorageKey(customer.getAssetStorageKey())
                 .loyaltyPoints(customer.getLoyaltyPoints())
                 .createdAt(customer.getCreatedAt())
                 .updatedAt(customer.getUpdatedAt());

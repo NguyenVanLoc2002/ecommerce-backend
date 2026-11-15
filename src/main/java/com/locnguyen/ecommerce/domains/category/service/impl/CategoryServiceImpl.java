@@ -17,6 +17,8 @@ import com.locnguyen.ecommerce.domains.category.mapper.CategoryMapper;
 import com.locnguyen.ecommerce.domains.category.repository.CategoryRepository;
 import com.locnguyen.ecommerce.domains.category.service.CategoryService;
 import com.locnguyen.ecommerce.domains.category.specification.CategorySpecification;
+import com.locnguyen.ecommerce.domains.catalogasset.enums.CatalogUploadPurpose;
+import com.locnguyen.ecommerce.domains.catalogasset.service.CatalogAssetService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -39,6 +41,7 @@ public class CategoryServiceImpl implements CategoryService {
     private final CategoryRepository categoryRepository;
     private final CategoryMapper categoryMapper;
     private final AuditLogService auditLogService;
+    private final CatalogAssetService catalogAssetService;
 
     @Override
     public PagedResponse<CategoryResponse> getAllCategories(CategoryFilter filter, Pageable pageable) {
@@ -77,7 +80,16 @@ public class CategoryServiceImpl implements CategoryService {
         category.setName(request.getName().trim());
         category.setSlug(request.getSlug().trim());
         category.setDescription(request.getDescription());
-        category.setImageUrl(request.getImageUrl());
+        if (hasValue(request.getImageStorageKey()) && hasValue(request.getImageUrl())) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "Provide either imageUrl or imageStorageKey");
+        }
+        if (hasValue(request.getImageStorageKey())) {
+            var asset = catalogAssetService.claimVerifiedAsset(request.getImageStorageKey().trim(), CatalogUploadPurpose.CATEGORY_IMAGE);
+            category.setImageUrl(asset.mediaUrl());
+            category.setAssetStorageKey(asset.storageKey());
+        } else {
+            category.setImageUrl(request.getImageUrl());
+        }
         category.setStatus(CategoryStatus.ACTIVE);
         category.setSortOrder(request.getSortOrder() != null ? request.getSortOrder() : 0);
 
@@ -88,6 +100,7 @@ public class CategoryServiceImpl implements CategoryService {
         }
 
         category = categoryRepository.save(category);
+        if (category.getAssetStorageKey() != null) catalogAssetService.associateAsset(category.getAssetStorageKey(), CatalogUploadPurpose.CATEGORY_IMAGE, "CATEGORY", category.getId());
         log.info("Category created: id={} name={}", category.getId(), category.getName());
         auditLogService.log(AuditAction.CATEGORY_CREATED, "CATEGORY",
                 String.valueOf(category.getId()), "name=" + category.getName());
@@ -113,8 +126,17 @@ public class CategoryServiceImpl implements CategoryService {
         if (request.getDescription() != null) {
             category.setDescription(request.getDescription());
         }
-        if (request.getImageUrl() != null) {
-            category.setImageUrl(request.getImageUrl());
+        String previousAsset = category.getAssetStorageKey();
+        boolean sameAsset = hasValue(request.getImageStorageKey()) && request.getImageStorageKey().trim().equals(previousAsset);
+        if (hasValue(request.getImageStorageKey()) && !sameAsset) {
+            if (hasValue(request.getImageUrl())) throw new AppException(ErrorCode.VALIDATION_ERROR, "Provide either imageUrl or imageStorageKey");
+            var asset = catalogAssetService.claimVerifiedAsset(request.getImageStorageKey().trim(), CatalogUploadPurpose.CATEGORY_IMAGE);
+            category.setImageUrl(asset.mediaUrl());
+            category.setAssetStorageKey(asset.storageKey());
+        } else if (!hasValue(request.getImageStorageKey()) && request.getImageUrl() != null) {
+            String url = request.getImageUrl().trim();
+            category.setImageUrl(url.isEmpty() ? null : url);
+            category.setAssetStorageKey(null);
         }
         if (request.getStatus() != null) {
             category.setStatus(request.getStatus());
@@ -132,6 +154,8 @@ public class CategoryServiceImpl implements CategoryService {
         }
 
         category = categoryRepository.save(category);
+        if (previousAsset != null && !previousAsset.equals(category.getAssetStorageKey())) catalogAssetService.detachAsset(previousAsset, "CATEGORY", category.getId());
+        if (category.getAssetStorageKey() != null && !category.getAssetStorageKey().equals(previousAsset)) catalogAssetService.associateAsset(category.getAssetStorageKey(), CatalogUploadPurpose.CATEGORY_IMAGE, "CATEGORY", category.getId());
         log.info("Category updated: id={}", id);
         auditLogService.log(AuditAction.CATEGORY_UPDATED, "CATEGORY", String.valueOf(id));
         return categoryMapper.toResponse(category);
@@ -153,4 +177,6 @@ public class CategoryServiceImpl implements CategoryService {
         return categoryRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new AppException(ErrorCode.CATEGORY_NOT_FOUND));
     }
+
+    private boolean hasValue(String value) { return value != null && !value.isBlank(); }
 }

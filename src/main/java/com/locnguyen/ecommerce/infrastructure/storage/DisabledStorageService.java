@@ -25,6 +25,11 @@ public class DisabledStorageService implements StorageService {
     }
 
     @Override
+    public byte[] readObjectPrefix(String storageKey, int maxBytes) {
+        throw disabled();
+    }
+
+    @Override
     public void deleteObject(String storageKey) {
         throw disabled();
     }

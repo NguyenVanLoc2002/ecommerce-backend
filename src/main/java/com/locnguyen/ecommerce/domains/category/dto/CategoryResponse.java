@@ -28,6 +28,7 @@ public class CategoryResponse implements Serializable {
     private final String slug;
     private final String description;
     private final String imageUrl;
+    private final String imageStorageKey;
     private final CategoryStatus status;
     private final Integer sortOrder;
     private final LocalDateTime createdAt;

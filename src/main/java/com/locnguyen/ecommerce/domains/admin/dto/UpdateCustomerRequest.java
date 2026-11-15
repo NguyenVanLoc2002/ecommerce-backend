@@ -47,4 +47,7 @@ public class UpdateCustomerRequest {
     @Size(max = 500, message = "Avatar URL must not exceed 500 characters")
     @Schema(description = "Avatar URL", example = "https://cdn.example.com/avatars/abc.jpg")
     private String avatarUrl;
+
+    @Size(max = 500)
+    private String avatarStorageKey;
 }

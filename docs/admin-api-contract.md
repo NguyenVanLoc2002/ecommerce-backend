@@ -129,7 +129,7 @@ Role summary by module:
 
 ### GET `/api/v1/admin/products`
 
-- Access: `ADMIN`, `SUPER_ADMIN`
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`; `STAFF` is restricted to Category, Brand and Carrier image purposes. Product and Customer image purposes require `ADMIN` or `SUPER_ADMIN`.
 - Description: list all products, including non-public statuses
 - Soft-delete behavior:
   - soft-deleted products are excluded by default; `isDeleted=true` returns
@@ -198,16 +198,17 @@ Role summary by module:
 ### POST `/api/v1/admin/catalog-uploads`
 
 - Access: `ADMIN`, `SUPER_ADMIN`
-- Description: creates a short-lived presigned `PUT` URL for a catalog image. The server creates the object key; it never accepts a client-selected path or returns R2 credentials.
-- Request: `purpose` (`CATALOG_IMAGE`), `originalFilename`, `contentType` (`image/jpeg`, `image/png`, or `image/webp`), and exact positive `sizeBytes` within the configured limit.
-- Response: `201 ApiResponse<PresignedCatalogUploadResponse>` with `storageKey`, `uploadUrl`, `expiresAt`, and `requiredContentType`.
+- Description: creates a short-lived presigned `PUT` URL. The server creates the object key; it never accepts a client-selected path or returns R2 credentials.
+- Request: `purpose` (`CATALOG_IMAGE`, `CATEGORY_IMAGE`, `BRAND_LOGO`, `CUSTOMER_AVATAR`, or `CARRIER_LOGO`), `originalFilename`, `contentType` (`image/jpeg`, `image/png`, or `image/webp`), and exact positive `sizeBytes` within the configured limit.
+- Response: `201 ApiResponse<PresignedCatalogUploadResponse>` with `assetId`, `storageKey`, `uploadUrl`, `expiresAt`, `requiredContentType`, `status=REQUESTED`, and `associationStatus=UNATTACHED`.
 
 ### POST `/api/v1/admin/catalog-uploads/complete`
 
-- Access: `ADMIN`, `SUPER_ADMIN`
-- Description: verifies an uploaded object with `HeadObject`. The object must exist and match the requested content type and byte size before its `storageKey` can be attached to product media.
+- Access: same purpose-specific roles as upload intent; only the creating actor may complete the intent.
+- Description: verifies object existence, stored content type, exact size, and JPEG/PNG/WebP byte signature before its `storageKey` can be attached to an entity. Completion is idempotent for the same uploader.
 - Request: `storageKey`.
-- Response: `200 ApiResponse<CatalogAssetResponse>` with the public custom-domain `mediaUrl` and verified metadata.
+- Response: `200 ApiResponse<CatalogAssetResponse>` with `assetId`, public custom-domain `mediaUrl`, `storageKey`, verified metadata, `status=VERIFIED` (or `ATTACHED` for an idempotent repeat), and `associationStatus` (`UNATTACHED` or `ATTACHED`).
+- Attach requests must use the purpose-specific key field. An asset can be associated with only one entity, and only after verification. Repeating complete/attach for the same actor and association is idempotent; attaching to another entity or a second managed image conflicts. Replacements update the entity and association in one transaction; detached objects enter retryable cleanup only after no association remains. Upload intents expire at their returned `expiresAt` (configured 1–900 second presign TTL); abandoned REQUESTED/VERIFIED uploads and unassociated ATTACHED assets are cleaned after the configured orphan-retention interval.
 - Configuration and R2 CORS/custom-domain setup: [r2-catalog-storage.md](r2-catalog-storage.md).
 
 ### POST `/api/v1/admin/products/{productId}/media`
@@ -226,7 +227,7 @@ Role summary by module:
 ### PATCH `/api/v1/admin/products/{productId}/media/{mediaId}`
 
 - Access: `ADMIN`, `SUPER_ADMIN`
-- Description: partially update an asset, type, sort order, primary flag, or variant assignment. Send `variantId: null` to move media back to the product gallery. Replacing a managed asset schedules its object deletion after the transaction.
+- Description: partially update an asset, type, sort order, primary flag, or variant assignment. Send `variantId: null` to move media back to the product gallery. Asset associations are updated transactionally; object cleanup checks that no association remains.
 - Validation and primary rules match the create endpoint. `mediaId` must belong to `{productId}`.
 - Response: `200 ApiResponse<MediaResponse>`
 
@@ -426,7 +427,7 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
   - `status`
   - `isDeleted`, `includeDeleted`
 - `CategoryResponse`
-  - `id`, `parentId`, `name`, `slug`, `description`, `imageUrl`
+  - `id`, `parentId`, `name`, `slug`, `description`, `imageUrl`, `imageStorageKey`
   - `status`, `sortOrder`, `createdAt`
 - `CreateCategoryRequest`
   - `parentId`: optional
@@ -434,10 +435,11 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
   - `slug`: required, max 255
   - `description`: optional
   - `imageUrl`: optional
+  - `imageStorageKey`: optional verified `CATEGORY_IMAGE` asset; mutually exclusive with `imageUrl`
   - `sortOrder`: optional
 - `UpdateCategoryRequest`
   - partial update version of:
-  - `parentId`, `name`, `slug`, `description`, `imageUrl`, `status`, `sortOrder`
+  - `parentId`, `name`, `slug`, `description`, `imageUrl`, `imageStorageKey`, `status`, `sortOrder`
 
 ### GET `/api/v1/admin/categories`
 
@@ -497,16 +499,17 @@ Reusable attribute definitions used to build variant pickers and tag descriptive
   - `status`
   - `isDeleted`, `includeDeleted`
 - `BrandResponse`
-  - `id`, `name`, `slug`, `logoUrl`, `description`
+  - `id`, `name`, `slug`, `logoUrl`, `logoStorageKey`, `description`
   - `sortOrder`, `status`, `createdAt`
 - `CreateBrandRequest`
   - `name`: required, max 100
   - `slug`: required, max 255
   - `logoUrl`: optional
+  - `logoStorageKey`: optional verified `BRAND_LOGO` asset; mutually exclusive with `logoUrl`
   - `description`: optional
 - `UpdateBrandRequest`
   - partial update version of:
-  - `name`, `slug`, `logoUrl`, `description`, `status`
+  - `name`, `slug`, `logoUrl`, `logoStorageKey`, `description`, `status`
 
 ### GET `/api/v1/admin/brands`
 
@@ -566,7 +569,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `enabled`
 - `CarrierResponse`
   - `id`, `code`, `name`, `providerType`, `status`
-  - `logoUrl`, `description`
+  - `logoUrl`, `logoStorageKey`, `description`
   - `configEnabled`, `baseUrl`
   - `hasApiKey`, `hasSecretKey`, `hasWebhookSecret`
   - `connectionStatus`, `lastHealthCheckAt`, `lastHealthCheckError`
@@ -577,9 +580,10 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `providerType`: required enum, currently supports `MANUAL`, `MOCK`, `AHAMOVE`, `GHN`, `GHTK`
   - `status`: optional, defaults to `ACTIVE`
   - `logoUrl`, `description`: optional, max 500
+  - `logoStorageKey`: optional verified `CARRIER_LOGO` asset; mutually exclusive with `logoUrl`
 - `UpdateCarrierRequest`
   - partial update version of:
-  - `code`, `name`, `providerType`, `status`, `logoUrl`, `description`
+  - `code`, `name`, `providerType`, `status`, `logoUrl`, `logoStorageKey`, `description`
 - `UpdateCarrierConfigRequest`
   - `apiKey`, `secretKey`, `webhookSecret`: optional plain-text inputs; server encrypts before persistence
   - `baseUrl`: optional, max 500
@@ -2000,7 +2004,7 @@ is intentionally outside the surface of this module.
 - `AdminCustomerResponse`
   - `id` (customerId), `userId`, `email`
   - `firstName`, `lastName`, `phoneNumber`
-  - `status` (from linked user), `gender`, `birthDate`, `avatarUrl`, `loyaltyPoints`
+  - `status` (from linked user), `gender`, `birthDate`, `avatarUrl`, `avatarStorageKey`, `loyaltyPoints`
   - `createdAt`, `updatedAt` (from `Customer`)
   - never exposes the user's `passwordHash`
 - `UpdateCustomerRequest` — all fields optional, partial update
@@ -2008,6 +2012,7 @@ is intentionally outside the surface of this module.
   - `phoneNumber`: `@PhoneNumber`; applied to `User`; uniqueness enforced
   - `gender`, `birthDate`: applied to `Customer`
   - `avatarUrl`: max 500; applied to `Customer`; blank string clears the avatar
+  - `avatarStorageKey`: optional verified `CUSTOMER_AVATAR` asset; mutually exclusive with a non-blank `avatarUrl`
   - **Not updatable** here: `email`, `password`, `status`, `roles`. Use `/status` for status, `admin/users` for system roles.
 - `UpdateCustomerStatusRequest`
   - `status`: required `UserStatus` — propagated to the linked `User.status`

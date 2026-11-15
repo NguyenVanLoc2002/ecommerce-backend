@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
@@ -55,6 +56,22 @@ public class R2StorageService implements StorageService {
                 throw new AppException(ErrorCode.STORAGE_OBJECT_NOT_FOUND);
             }
             throw new AppException(ErrorCode.STORAGE_OPERATION_FAILED, "Unable to verify uploaded asset");
+        }
+    }
+
+    @Override
+    public byte[] readObjectPrefix(String storageKey, int maxBytes) {
+        try {
+            return s3Client.getObjectAsBytes(GetObjectRequest.builder()
+                    .bucket(properties.getBucket())
+                    .key(storageKey)
+                    .range("bytes=0-" + Math.max(0, maxBytes - 1))
+                    .build()).asByteArray();
+        } catch (NoSuchKeyException exception) {
+            throw new AppException(ErrorCode.STORAGE_OBJECT_NOT_FOUND);
+        } catch (S3Exception exception) {
+            if (exception.statusCode() == 404) throw new AppException(ErrorCode.STORAGE_OBJECT_NOT_FOUND);
+            throw new AppException(ErrorCode.STORAGE_OPERATION_FAILED, "Unable to inspect uploaded asset");
         }
     }
 

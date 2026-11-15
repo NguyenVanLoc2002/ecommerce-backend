@@ -54,4 +54,8 @@ public class ProductMedia extends BaseEntity {
 
     @Column(name = "is_primary", nullable = false)
     private boolean primary = false;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 }

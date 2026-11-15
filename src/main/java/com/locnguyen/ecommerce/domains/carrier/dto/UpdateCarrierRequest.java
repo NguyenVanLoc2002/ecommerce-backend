@@ -24,5 +24,8 @@ public class UpdateCarrierRequest {
     private String logoUrl;
 
     @Size(max = 500)
+    private String logoStorageKey;
+
+    @Size(max = 500)
     private String description;
 }

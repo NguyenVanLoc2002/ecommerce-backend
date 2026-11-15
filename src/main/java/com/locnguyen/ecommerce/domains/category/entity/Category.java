@@ -45,6 +45,13 @@ public class Category extends SoftDeleteEntity {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    @Column(name = "asset_storage_key", length = 500, unique = true)
+    private String assetStorageKey;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50, nullable = false)
     private CategoryStatus status = CategoryStatus.ACTIVE;
