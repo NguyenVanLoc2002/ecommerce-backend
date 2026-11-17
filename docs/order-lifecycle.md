@@ -1,5 +1,7 @@
 # Order Lifecycle
 
+Order/customer snapshot, carrier-cost and durable provider-attempt design is tracked separately in [Order Management Contract and Safe Migration Proposal](order-management-contracts-proposal.md). That proposal does not change the state machine or payment/shipping policies described here.
+
 Tài liệu mô tả vòng đời đơn hàng và rule chuyển trạng thái.
 
 ---

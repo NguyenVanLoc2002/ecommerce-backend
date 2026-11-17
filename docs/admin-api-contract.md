@@ -979,6 +979,8 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 
 ## 7. Order
 
+> **Issue #53 design review:** The order/customer snapshot distinction, legacy-order fallback, PII access rules, and shipment-cost semantics are under proposal in [Order Management Contract and Safe Migration Proposal](order-management-contracts-proposal.md). The proposal does not change the current API contract. In particular, `customerName` and `customerEmail` in the Admin list currently come from the linked customer's current profile; do not treat them as order-time snapshots.
+
 ### DTOs
 
 - `OrderAdminFilter`
@@ -1274,6 +1276,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `shippingFee`, `note`
   - `events`
   - `createdAt`, `updatedAt`
+  - `shippingFee` is the current legacy shipment field; its historical/business meaning is not established as carrier cost. See the Issue #53 proposal before using it as such.
 - `ShipmentEventResponse`
   - `id`, `status`, `location`, `description`, `eventTime`
 - `CreateShipmentRequest`
