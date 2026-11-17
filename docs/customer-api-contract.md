@@ -480,6 +480,8 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 
 ## 7. Order flow
 
+> **Issue #53 design review:** The proposed order-time customer snapshot and legacy-order fallback are documented in [Order Management Contract and Safe Migration Proposal](order-management-contracts-proposal.md). This proposal does not change the current API contract. `OrderResponse.shippingFee` remains the amount used in the customer order total; any future field for actual or estimated carrier cost is a separate concept and requires an approved compatible API change.
+
 ### Order DTOs
 
 - `CheckoutCarrierOptionResponse`

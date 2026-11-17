@@ -316,10 +316,11 @@ Step by step:
    - `trackingNumber`
    - `providerTrackingUrl`
    - `providerStatus`
-   - `shippingFee`
    - internal `ShipmentStatus`
 8. Shipment event noi bo duoc tao neu can.
 9. Shipment duoc save.
+
+The backend currently does not map a provider booking result to `Shipment.shippingFee`; that field is assigned from the admin request or defaults to zero. Keep checkout `Order.shippingFee` distinct: it is included in the amount charged to the customer. The legacy shipment field's historical meaning is unverified and must not be treated as actual carrier cost without evidence. See [Order Management Contract and Safe Migration Proposal](order-management-contracts-proposal.md) for the proposed additive cost fields and migration policy.
 
 Luu y:
 
@@ -446,6 +447,8 @@ Shipment persistence giu:
 - `providerStatus`
 - `providerTrackingUrl`
 - `shippingFee`
+
+`Shipment.shippingFee` is retained as a legacy field with unverified business meaning. It is not evidence of provider cost. New carrier cost fields and safe handling of historical values are pending review under [Issue #53](order-management-contracts-proposal.md).
 
 Webhook persistence giu:
 
