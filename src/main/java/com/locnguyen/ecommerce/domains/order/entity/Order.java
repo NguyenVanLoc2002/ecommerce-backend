@@ -40,8 +40,20 @@ public class Order extends BaseEntity {
     @ToString.Exclude
     private Customer customer;
 
+    @Column(name = "customer_id", insertable = false, updatable = false)
+    private UUID customerId;
+
     @Column(name = "order_code", length = 50, nullable = false, unique = true)
     private String orderCode;
+
+    /** Customer identity captured at checkout; null for orders created before this snapshot existed. */
+    @Column(name = "customer_name_snapshot", length = 200)
+    @ToString.Exclude
+    private String customerNameSnapshot;
+
+    @Column(name = "customer_email_snapshot", length = 255)
+    @ToString.Exclude
+    private String customerEmailSnapshot;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50, nullable = false)

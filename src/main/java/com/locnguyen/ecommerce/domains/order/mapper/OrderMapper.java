@@ -13,7 +13,11 @@ import java.util.List;
 @Mapper(componentModel = "spring")
 public interface OrderMapper {
 
-    @Mapping(target = "customerId", source = "customer.id")
+    @Mapping(target = "customerId", source = "customerId")
+    @Mapping(target = "customerSnapshotAvailable", expression = "java(order.getCustomerNameSnapshot() != null || order.getCustomerEmailSnapshot() != null)")
+    @Mapping(target = "currentCustomerName", ignore = true)
+    @Mapping(target = "currentCustomerEmail", ignore = true)
+    @Mapping(target = "currentCustomerProfileAvailable", ignore = true)
     OrderResponse toResponse(Order order);
 
     @Mapping(target = "productId", source = "variant.product.id")

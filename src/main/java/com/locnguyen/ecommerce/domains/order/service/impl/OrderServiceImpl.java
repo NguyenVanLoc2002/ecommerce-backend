@@ -205,9 +205,9 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public OrderResponse getOrderByCode(String orderCode) {
-        Order order = orderRepository.findByOrderCode(orderCode)
+        Order order = orderRepository.findAdminByOrderCodeWithCurrentCustomer(orderCode)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
-        return buildOrderResponse(order);
+        return buildAdminOrderResponse(order);
     }
 
     @Override
@@ -221,7 +221,9 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public OrderResponse getOrderByIdAdmin(UUID orderId) {
-        return buildOrderResponse(findOrThrow(orderId));
+        Order order = orderRepository.findAdminByIdWithCurrentCustomer(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+        return buildAdminOrderResponse(order);
     }
 
     @Override
@@ -419,6 +421,9 @@ public class OrderServiceImpl implements OrderService {
 
         Order order = new Order();
         order.setCustomer(customer);
+        var customerUser = customer.getUser();
+        order.setCustomerNameSnapshot(joinName(customerUser.getFirstName(), customerUser.getLastName()));
+        order.setCustomerEmailSnapshot(customerUser.getEmail());
         order.setOrderCode(orderCode);
         order.setStatus(paymentMethod == PaymentMethod.ONLINE
                 ? OrderStatus.AWAITING_PAYMENT
@@ -600,7 +605,10 @@ public class OrderServiceImpl implements OrderService {
         return OrderResponse.builder()
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
-                .customerId(order.getCustomer().getId())
+                .customerId(order.getCustomerId())
+                .customerNameSnapshot(order.getCustomerNameSnapshot())
+                .customerEmailSnapshot(order.getCustomerEmailSnapshot())
+                .customerSnapshotAvailable(order.getCustomerNameSnapshot() != null || order.getCustomerEmailSnapshot() != null)
                 .status(order.getStatus())
                 .paymentMethod(order.getPaymentMethod())
                 .paymentStatus(order.getPaymentStatus())
@@ -626,6 +634,16 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
+    private OrderResponse buildAdminOrderResponse(Order order) {
+        var customer = order.getCustomer();
+        var user = customer == null ? null : customer.getUser();
+        return buildOrderResponse(order).toBuilder()
+                .currentCustomerName(user == null ? null : joinName(user.getFirstName(), user.getLastName()))
+                .currentCustomerEmail(user == null ? null : user.getEmail())
+                .currentCustomerProfileAvailable(user != null)
+                .build();
+    }
+
     private OrderListItemResponse buildListItemResponse(Order order) {
         return OrderListItemResponse.builder()
                 .id(order.getId())
@@ -640,13 +658,18 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private AdminOrderListItemResponse buildAdminListItemResponse(Order order) {
-        var user = order.getCustomer().getUser();
+        var profileAvailable = order.getCustomer() != null && order.getCustomer().getUser() != null;
+        var user = profileAvailable ? order.getCustomer().getUser() : null;
         return AdminOrderListItemResponse.builder()
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
-                .customerId(order.getCustomer().getId())
-                .customerName(user.getFirstName() + " " + user.getLastName())
-                .customerEmail(user.getEmail())
+                .customerId(order.getCustomerId())
+                .customerNameSnapshot(order.getCustomerNameSnapshot())
+                .customerEmailSnapshot(order.getCustomerEmailSnapshot())
+                .customerSnapshotAvailable(order.getCustomerNameSnapshot() != null || order.getCustomerEmailSnapshot() != null)
+                .customerName(profileAvailable ? joinName(user.getFirstName(), user.getLastName()) : null)
+                .customerEmail(profileAvailable ? user.getEmail() : null)
+                .currentCustomerProfileAvailable(profileAvailable)
                 .status(order.getStatus())
                 .paymentMethod(order.getPaymentMethod())
                 .paymentStatus(order.getPaymentStatus())
@@ -654,6 +677,12 @@ public class OrderServiceImpl implements OrderService {
                 .totalAmount(order.getTotalAmount())
                 .createdAt(order.getCreatedAt())
                 .build();
+    }
+
+    private String joinName(String firstName, String lastName) {
+        return java.util.stream.Stream.of(firstName, lastName)
+                .filter(value -> value != null && !value.isBlank())
+                .collect(java.util.stream.Collectors.joining(" "));
     }
 
     private void applyTransition(Order order, OrderStatus target, ErrorCode errorCode) {

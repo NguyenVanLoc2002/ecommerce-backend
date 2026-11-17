@@ -14,12 +14,14 @@ import com.locnguyen.ecommerce.domains.cart.enums.CartStatus;
 import com.locnguyen.ecommerce.domains.cart.repository.CartItemRepository;
 import com.locnguyen.ecommerce.domains.cart.repository.CartRepository;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
+import com.locnguyen.ecommerce.domains.user.entity.User;
 import com.locnguyen.ecommerce.domains.inventory.entity.Inventory;
 import com.locnguyen.ecommerce.domains.inventory.entity.Warehouse;
 import com.locnguyen.ecommerce.domains.inventory.repository.InventoryRepository;
 import com.locnguyen.ecommerce.domains.inventory.service.InventoryService;
 import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
 import com.locnguyen.ecommerce.domains.order.dto.OrderPreviewResponse;
+import com.locnguyen.ecommerce.domains.order.dto.OrderAdminFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.entity.OrderItem;
@@ -53,6 +55,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -103,6 +107,11 @@ class OrderServiceTest {
     private Customer customer(UUID id) {
         Customer c = mock(Customer.class);
         when(c.getId()).thenReturn(id);
+        User user = new User();
+        user.setFirstName("Lan");
+        user.setLastName("Nguyen");
+        user.setEmail("lan@example.com");
+        when(c.getUser()).thenReturn(user);
         return c;
     }
 
@@ -232,6 +241,84 @@ class OrderServiceTest {
                 .thenReturn(processingIdem);
     }
 
+    @Test
+    void adminOrderListKeepsHistoricalSnapshotWhenSoftDeletedCustomerProfileIsUnavailable() {
+        Order historicalOrder = new Order();
+        setId(historicalOrder, uuid(501));
+        ReflectionTestUtils.setField(historicalOrder, "customerId", uuid(1));
+        historicalOrder.setCustomer(null);
+        historicalOrder.setCustomerNameSnapshot("Lan Nguyen");
+        historicalOrder.setCustomerEmailSnapshot("lan@example.com");
+        historicalOrder.setOrderCode("ORD-HISTORIC");
+        historicalOrder.setItems(new ArrayList<>());
+        historicalOrder.setTotalAmount(BigDecimal.TEN);
+
+        User currentUser = new User();
+        currentUser.setFirstName("Updated");
+        currentUser.setLastName("Profile");
+        currentUser.setEmail("updated@example.com");
+        Customer activeCustomer = mock(Customer.class);
+        when(activeCustomer.getUser()).thenReturn(currentUser);
+        Order legacyOrder = new Order();
+        setId(legacyOrder, uuid(502));
+        ReflectionTestUtils.setField(legacyOrder, "customerId", uuid(2));
+        legacyOrder.setCustomer(activeCustomer);
+        legacyOrder.setCustomerNameSnapshot(null);
+        legacyOrder.setCustomerEmailSnapshot(null);
+        legacyOrder.setOrderCode("ORD-LEGACY");
+        legacyOrder.setItems(new ArrayList<>());
+        legacyOrder.setTotalAmount(BigDecimal.ONE);
+
+        when(orderRepository.adminFilter(any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(historicalOrder, legacyOrder), PageRequest.of(0, 20), 2));
+
+        var result = orderService.getAllOrders(new OrderAdminFilter(), PageRequest.of(0, 20));
+
+        assertThat(result.getItems()).hasSize(2);
+        assertThat(result.getItems().get(0)).satisfies(item -> {
+            assertThat(item.getCustomerId()).isEqualTo(uuid(1));
+            assertThat(item.getCustomerNameSnapshot()).isEqualTo("Lan Nguyen");
+            assertThat(item.getCustomerEmailSnapshot()).isEqualTo("lan@example.com");
+            assertThat(item.isCustomerSnapshotAvailable()).isTrue();
+            assertThat(item.isCurrentCustomerProfileAvailable()).isFalse();
+            assertThat(item.getCustomerName()).isNull();
+            assertThat(item.getCustomerEmail()).isNull();
+        });
+        assertThat(result.getItems().get(1)).satisfies(item -> {
+            assertThat(item.getCustomerNameSnapshot()).isNull();
+            assertThat(item.getCustomerEmailSnapshot()).isNull();
+            assertThat(item.isCustomerSnapshotAvailable()).isFalse();
+            assertThat(item.getCustomerName()).isEqualTo("Updated Profile");
+            assertThat(item.getCustomerEmail()).isEqualTo("updated@example.com");
+            assertThat(item.isCurrentCustomerProfileAvailable()).isTrue();
+        });
+    }
+
+    @Test
+    void adminOrderDetailSeparatesSnapshotFromCurrentProfileSummary() {
+        Order order = new Order();
+        setId(order, uuid(503));
+        ReflectionTestUtils.setField(order, "customerId", uuid(3));
+        order.setCustomerNameSnapshot("Checkout Name");
+        order.setCustomerEmailSnapshot("checkout@example.com");
+        order.setItems(new ArrayList<>());
+        User user = new User();
+        user.setFirstName("Current");
+        user.setLastName("Name");
+        user.setEmail("current@example.com");
+        Customer customer = mock(Customer.class);
+        when(customer.getUser()).thenReturn(user);
+        order.setCustomer(customer);
+        when(orderRepository.findAdminByIdWithCurrentCustomer(uuid(503))).thenReturn(Optional.of(order));
+        OrderResponse response = orderService.getOrderByIdAdmin(uuid(503));
+
+        assertThat(response.getCustomerNameSnapshot()).isEqualTo("Checkout Name");
+        assertThat(response.getCustomerEmailSnapshot()).isEqualTo("checkout@example.com");
+        assertThat(response.getCurrentCustomerName()).isEqualTo("Current Name");
+        assertThat(response.getCurrentCustomerEmail()).isEqualTo("current@example.com");
+        assertThat(response.getCurrentCustomerProfileAvailable()).isTrue();
+    }
+
     // ─── createOrder ─────────────────────────────────────────────────────────
 
     @Nested
@@ -338,6 +425,8 @@ class OrderServiceTest {
             verify(orderRepository).save(captor.capture());
             assertThat(captor.getValue().getStatus()).isEqualTo(OrderStatus.PENDING);
             assertThat(captor.getValue().getPaymentMethod()).isEqualTo(PaymentMethod.COD);
+            assertThat(captor.getValue().getCustomerNameSnapshot()).isEqualTo("Lan Nguyen");
+            assertThat(captor.getValue().getCustomerEmailSnapshot()).isEqualTo("lan@example.com");
         }
 
         @Test

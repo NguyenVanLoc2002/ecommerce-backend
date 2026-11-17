@@ -24,8 +24,14 @@ public class AdminOrderListItemResponse {
     private String orderCode;
 
     private UUID customerId;
+    /** Order-time identity; null when this is a legacy order without a snapshot. */
+    private String customerNameSnapshot;
+    private String customerEmailSnapshot;
+    private boolean customerSnapshotAvailable;
+    /** Current profile summary, present only when the customer profile is active. */
     private String customerName;
     private String customerEmail;
+    private boolean currentCustomerProfileAvailable;
 
     private OrderStatus status;
     private PaymentMethod paymentMethod;

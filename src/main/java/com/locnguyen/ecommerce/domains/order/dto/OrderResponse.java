@@ -15,7 +15,7 @@ import java.util.List;
 
 import java.util.UUID;
 @Getter
-@Builder
+@Builder(toBuilder = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Schema(description = "Order response — full order with items")
 public class OrderResponse {
@@ -23,6 +23,12 @@ public class OrderResponse {
     private final UUID id;
     private final String orderCode;
     private final UUID customerId;
+    private final String customerNameSnapshot;
+    private final String customerEmailSnapshot;
+    private final boolean customerSnapshotAvailable;
+    private final String currentCustomerName;
+    private final String currentCustomerEmail;
+    private final Boolean currentCustomerProfileAvailable;
     private final OrderStatus status;
     private final PaymentMethod paymentMethod;
     private final PaymentStatus paymentStatus;
