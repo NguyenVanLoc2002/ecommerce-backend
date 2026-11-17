@@ -31,6 +31,9 @@ import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.mapper.OrderMapper;
 import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.shipment.service.ShipmentService;
+import com.locnguyen.ecommerce.domains.shipment.service.ShipmentListSummary;
+import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import com.locnguyen.ecommerce.domains.order.service.impl.OrderServiceImpl;
 import com.locnguyen.ecommerce.domains.idempotency.entity.IdempotencyKey;
 import com.locnguyen.ecommerce.domains.idempotency.enums.IdempotencyStatus;
@@ -59,6 +62,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -99,6 +103,7 @@ class OrderServiceTest {
     @Mock CarrierCheckoutService carrierCheckoutService;
     @Mock ProductMediaRepository productMediaRepository;
     @Mock VoucherService voucherService;
+    @Mock ShipmentService shipmentService;
 
     @InjectMocks OrderServiceImpl orderService;
 
@@ -269,8 +274,10 @@ class OrderServiceTest {
         legacyOrder.setItems(new ArrayList<>());
         legacyOrder.setTotalAmount(BigDecimal.ONE);
 
-        when(orderRepository.adminFilter(any(), any(), any(), any()))
+        when(orderRepository.adminSearch(any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(historicalOrder, legacyOrder), PageRequest.of(0, 20), 2));
+        when(shipmentService.getListSummaries(anyList())).thenReturn(List.of());
+        when(orderItemRepository.countQuantitiesByOrderIds(anyList())).thenReturn(List.of());
 
         var result = orderService.getAllOrders(new OrderAdminFilter(), PageRequest.of(0, 20));
 
@@ -317,6 +324,73 @@ class OrderServiceTest {
         assertThat(response.getCurrentCustomerName()).isEqualTo("Current Name");
         assertThat(response.getCurrentCustomerEmail()).isEqualTo("current@example.com");
         assertThat(response.getCurrentCustomerProfileAvailable()).isTrue();
+    }
+
+    @Test
+    void adminOrderListAddsShipmentAttentionWithoutChangingOrderState() {
+        Order failed = new Order();
+        setId(failed, uuid(510));
+        failed.setOrderCode("ORD-FAILED");
+        failed.setStatus(OrderStatus.SHIPPED);
+        failed.setPaymentStatus(PaymentStatus.PENDING);
+        failed.setTotalAmount(BigDecimal.TEN);
+        Order returned = new Order();
+        setId(returned, uuid(511));
+        returned.setOrderCode("ORD-RETURNED");
+        returned.setStatus(OrderStatus.SHIPPED);
+        returned.setPaymentStatus(PaymentStatus.PENDING);
+        returned.setTotalAmount(BigDecimal.ONE);
+
+        when(orderRepository.adminSearch(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(failed, returned), PageRequest.of(0, 20), 2));
+        when(orderItemRepository.countQuantitiesByOrderIds(anyList())).thenReturn(List.of());
+        when(shipmentService.getListSummaries(anyList())).thenReturn(List.of(
+                new ShipmentListSummary(uuid(510), ShipmentStatus.FAILED, "Carrier", "TRACK-1"),
+                new ShipmentListSummary(uuid(511), ShipmentStatus.RETURNED, "Carrier", "TRACK-2")));
+
+        var result = orderService.getAllOrders(new OrderAdminFilter(), PageRequest.of(0, 20));
+
+        assertThat(result.getItems()).extracting("attention")
+                .containsExactly("DELIVERY_FAILED", "RETURNED_HANDLING");
+        assertThat(result.getItems().get(0).getTrackingNumber()).isEqualTo("TRACK-1");
+        assertThat(failed.getStatus()).isEqualTo(OrderStatus.SHIPPED);
+        assertThat(returned.getStatus()).isEqualTo(OrderStatus.SHIPPED);
+        verify(orderItemRepository, times(1)).countQuantitiesByOrderIds(anyList());
+        verify(shipmentService, times(1)).getListSummaries(anyList());
+    }
+
+    @Test
+    void adminOrderListRejectsUnsupportedSortField() {
+        assertThatThrownBy(() -> orderService.getAllOrders(new OrderAdminFilter(),
+                PageRequest.of(0, 20, org.springframework.data.domain.Sort.by("customerEmail"))))
+                .isInstanceOf(AppException.class)
+                .extracting(error -> ((AppException) error).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+    }
+
+    @Test
+    void adminOrderListCombinesSearchFiltersAndServerSortInOnePageQuery() {
+        OrderAdminFilter filter = new OrderAdminFilter();
+        filter.setKeyword("  ORD-55  ");
+        filter.setStatus(OrderStatus.PROCESSING);
+        filter.setPaymentStatus(PaymentStatus.FAILED);
+        filter.setPaymentMethod(PaymentMethod.ONLINE);
+        filter.setShipmentStatus(ShipmentStatus.IN_TRANSIT);
+        LocalDateTime from = LocalDateTime.parse("2026-01-01T00:00:00");
+        LocalDateTime to = LocalDateTime.parse("2026-01-31T23:59:59");
+        filter.setCreatedFrom(from);
+        filter.setCreatedTo(to);
+        when(orderRepository.adminSearch(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
+        when(shipmentService.getListSummaries(anyList())).thenReturn(List.of());
+
+        orderService.getAllOrders(filter,
+                PageRequest.of(0, 10, org.springframework.data.domain.Sort.by("createdAt").ascending()));
+
+        verify(orderRepository).adminSearch(isNull(), eq(OrderStatus.PROCESSING), eq(PaymentStatus.FAILED),
+                eq(PaymentMethod.ONLINE), eq(from), eq(to), eq("ORD-55"), eq(ShipmentStatus.IN_TRANSIT),
+                argThat(pageable -> pageable.getSort().getOrderFor("createdAt").isAscending()));
+        verify(shipmentService, times(1)).getListSummaries(anyList());
     }
 
     // ─── createOrder ─────────────────────────────────────────────────────────
@@ -1080,4 +1154,3 @@ class OrderServiceTest {
         }
     }
 }
-

@@ -11,6 +11,7 @@ import com.locnguyen.ecommerce.domains.shipment.dto.UpdateShipmentStatusRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.util.UUID;
+import java.util.List;
 
 public interface ShipmentService {
 
@@ -23,6 +24,8 @@ public interface ShipmentService {
     ShipmentResponse getById(UUID shipmentId);
 
     ShipmentResponse getByOrderId(UUID orderId);
+
+    List<ShipmentListSummary> getListSummaries(List<UUID> orderIds);
 
     PagedResponse<ShipmentResponse> getShipments(ShipmentFilter filter, Pageable pageable);
 

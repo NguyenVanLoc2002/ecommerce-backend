@@ -2,9 +2,12 @@ package com.locnguyen.ecommerce.domains.order.dto;
 
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
+import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 /**
  * Admin-facing query filter for listing all orders.
@@ -22,4 +25,12 @@ public class OrderAdminFilter {
 
     /** Filter by payment status. */
     private PaymentStatus paymentStatus;
+
+    /** Search order code and approved order-time/current customer name and email fields. */
+    private String keyword;
+
+    private LocalDateTime createdFrom;
+    private LocalDateTime createdTo;
+    private PaymentMethod paymentMethod;
+    private ShipmentStatus shipmentStatus;
 }

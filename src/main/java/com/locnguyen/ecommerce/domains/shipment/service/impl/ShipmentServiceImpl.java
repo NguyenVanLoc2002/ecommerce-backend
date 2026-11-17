@@ -31,6 +31,7 @@ import com.locnguyen.ecommerce.domains.shipment.mapper.ShipmentMapper;
 import com.locnguyen.ecommerce.domains.shipment.repository.ShipmentEventRepository;
 import com.locnguyen.ecommerce.domains.shipment.repository.ShipmentRepository;
 import com.locnguyen.ecommerce.domains.shipment.service.ShipmentService;
+import com.locnguyen.ecommerce.domains.shipment.service.ShipmentListSummary;
 import com.locnguyen.ecommerce.domains.shipment.service.ShipmentProviderUpdate;
 import com.locnguyen.ecommerce.domains.shipment.specification.ShipmentSpecification;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -56,6 +58,19 @@ public class ShipmentServiceImpl implements ShipmentService {
     private final CarrierRepository carrierRepository;
     private final CarrierConfigRepository carrierConfigRepository;
     private final CarrierProviderRegistry carrierProviderRegistry;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ShipmentListSummary> getListSummaries(List<UUID> orderIds) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            return List.of();
+        }
+        return shipmentRepository.findByOrderIdIn(orderIds).stream()
+                .map(shipment -> new ShipmentListSummary(
+                        shipment.getOrder().getId(), shipment.getStatus(), shipment.getCarrier(),
+                        shipment.getTrackingNumber()))
+                .toList();
+    }
 
     @Override
     @Transactional

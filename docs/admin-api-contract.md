@@ -984,14 +984,15 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 ### DTOs
 
 - `OrderAdminFilter`
-  - `customerId`
-  - `status`
-  - `paymentStatus`
+  - `keyword` (order code, order-time customer name/email, current active customer name/email)
+  - `customerId`, `status`, `paymentStatus`, `paymentMethod`, `shipmentStatus`
+  - `createdFrom`, `createdTo` (inclusive ISO date-time bounds; Admin Web converts the browser-local picker value to UTC before sending)
 - `AdminOrderListItemResponse`
   - `id`, `orderCode`
   - `customerId`, `customerNameSnapshot`, `customerEmailSnapshot`, `customerSnapshotAvailable`
   - `customerName`, `customerEmail`, `currentCustomerProfileAvailable` (active profile summary only)
   - `status`, `paymentMethod`, `paymentStatus`
+  - `shipmentStatus`, `carrier`, `trackingNumber`, `attention`, `attentionReason`
   - `totalItems`, `totalAmount`
   - `createdAt`
 - `OrderResponse`
@@ -1014,14 +1015,21 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 - Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
 - Description: list orders
 - Filters:
-  - `customerId`, `status`, `paymentStatus`
+  - `keyword`, `customerId`, `status`, `paymentStatus`, `paymentMethod`, `shipmentStatus`, `createdFrom`, `createdTo`
+  - Keyword search covers order code and approved order-time/current customer name and email fields. Phone numbers are not searched.
+  - `createdFrom` and `createdTo` are inclusive. If both are supplied, `createdFrom` must not be later than `createdTo`.
+  - Shipment status is matched against the order's shipment using an existence predicate.
 - Pagination:
   - `page`, `size`, `sort`
   - controller default: `size=20`
-  - repository query orders by `createdAt DESC`
+  - allowed sort fields: `orderCode`, `status`, `createdAt`, `totalAmount`; default `createdAt DESC`
+  - unsupported sort fields return a validation error
 - Response:
   - `ApiResponse<PagedResponse<AdminOrderListItemResponse>>`
   - Snapshot fields describe checkout time. `customerName` and `customerEmail` describe the current active profile only; they are null when it is soft-deleted. Legacy orders return `customerSnapshotAvailable: false` and null snapshot values. The list keeps deleted customers' order history visible and does not call the Customer API per row.
+  - Shipment summaries and item totals are loaded in page-sized batch queries; no per-order endpoint calls are required.
+  - `attention` is derived from existing payment/order/shipment state and may be `PAYMENT_FAILED`, `READY_TO_SHIP`, `DELIVERY_FAILED`, `RETURNED_HANDLING`, or `DELIVERED_AWAITING_COMPLETION`. `attentionReason` is a display explanation. These fields do not persist or mutate order state.
+  - `trackingNumber` and carrier details are available to STAFF, ADMIN, and SUPER_ADMIN through this existing admin-only endpoint; no additional customer PII is included.
 
 ### GET `/api/v1/admin/orders/{id}`
 
