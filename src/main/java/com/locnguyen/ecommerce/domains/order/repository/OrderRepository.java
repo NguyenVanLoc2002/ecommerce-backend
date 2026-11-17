@@ -14,6 +14,12 @@ import java.util.Optional;
 import java.util.UUID;
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
+    @Query("SELECT o FROM Order o LEFT JOIN FETCH o.customer c LEFT JOIN FETCH c.user WHERE o.id = :id")
+    Optional<Order> findAdminByIdWithCurrentCustomer(@Param("id") UUID id);
+
+    @Query("SELECT o FROM Order o LEFT JOIN FETCH o.customer c LEFT JOIN FETCH c.user WHERE o.orderCode = :orderCode")
+    Optional<Order> findAdminByOrderCodeWithCurrentCustomer(@Param("orderCode") String orderCode);
+
     Optional<Order> findByOrderCode(String orderCode);
 
     Page<Order> findByCustomerIdOrderByCreatedAtDesc(UUID customerId, Pageable pageable);
@@ -31,18 +37,18 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     long countCompletedByCustomerId(@Param("customerId") UUID customerId);
 
     /**
-     * Admin listing — eager-fetches customer + user to avoid N+1 on the response builder.
+     * Admin listing — left-fetches customer + user so soft-deleted customers do not hide order history.
      * The separate countQuery avoids a Hibernate error when using JOIN FETCH with pagination.
      */
     @Query(
         value = "SELECT o FROM Order o " +
-                "JOIN FETCH o.customer c JOIN FETCH c.user u " +
-                "WHERE (:customerId IS NULL OR c.id = :customerId) " +
+                "LEFT JOIN FETCH o.customer c LEFT JOIN FETCH c.user u " +
+                "WHERE (:customerId IS NULL OR o.customerId = :customerId) " +
                 "AND (:status IS NULL OR o.status = :status) " +
                 "AND (:paymentStatus IS NULL OR o.paymentStatus = :paymentStatus) " +
                 "ORDER BY o.createdAt DESC",
         countQuery = "SELECT COUNT(o) FROM Order o " +
-                "WHERE (:customerId IS NULL OR o.customer.id = :customerId) " +
+                "WHERE (:customerId IS NULL OR o.customerId = :customerId) " +
                 "AND (:status IS NULL OR o.status = :status) " +
                 "AND (:paymentStatus IS NULL OR o.paymentStatus = :paymentStatus)"
     )

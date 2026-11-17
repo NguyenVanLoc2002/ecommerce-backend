@@ -979,7 +979,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 
 ## 7. Order
 
-> **Issue #53 design review:** The order/customer snapshot distinction, legacy-order fallback, PII access rules, and shipment-cost semantics are under proposal in [Order Management Contract and Safe Migration Proposal](order-management-contracts-proposal.md). The proposal does not change the current API contract. In particular, `customerName` and `customerEmail` in the Admin list currently come from the linked customer's current profile; do not treat them as order-time snapshots.
+> **Issue #53 design review:** The order/customer snapshot distinction, legacy-order fallback, PII access rules, and shipment-cost semantics are documented in [Order Management Contract and Safe Migration Proposal](order-management-contracts-proposal.md). Issue #54 adds the order-time identity snapshot while preserving the current profile summary as separate fields.
 
 ### DTOs
 
@@ -989,12 +989,14 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `paymentStatus`
 - `AdminOrderListItemResponse`
   - `id`, `orderCode`
-  - `customerId`, `customerName`, `customerEmail`
+  - `customerId`, `customerNameSnapshot`, `customerEmailSnapshot`, `customerSnapshotAvailable`
+  - `customerName`, `customerEmail`, `currentCustomerProfileAvailable` (active profile summary only)
   - `status`, `paymentMethod`, `paymentStatus`
   - `totalItems`, `totalAmount`
   - `createdAt`
 - `OrderResponse`
-  - `id`, `orderCode`, `customerId`
+  - `id`, `orderCode`, `customerId`, `customerNameSnapshot`, `customerEmailSnapshot`, `customerSnapshotAvailable`
+  - `currentCustomerName`, `currentCustomerEmail`, `currentCustomerProfileAvailable` (Admin detail; profile values are null and availability false when profile is unavailable)
   - `status`, `paymentMethod`, `paymentStatus`
   - `receiverName`, `receiverPhone`
   - `shippingStreet`, `shippingWard`, `shippingDistrict`, `shippingCity`, `shippingPostalCode`
@@ -1019,6 +1021,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - repository query orders by `createdAt DESC`
 - Response:
   - `ApiResponse<PagedResponse<AdminOrderListItemResponse>>`
+  - Snapshot fields describe checkout time. `customerName` and `customerEmail` describe the current active profile only; they are null when it is soft-deleted. Legacy orders return `customerSnapshotAvailable: false` and null snapshot values. The list keeps deleted customers' order history visible and does not call the Customer API per row.
 
 ### GET `/api/v1/admin/orders/{id}`
 
