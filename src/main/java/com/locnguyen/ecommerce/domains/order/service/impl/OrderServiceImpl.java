@@ -42,9 +42,13 @@ import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.mapper.OrderMapper;
 import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
+import com.locnguyen.ecommerce.domains.order.repository.OrderItemCountProjection;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
+import com.locnguyen.ecommerce.domains.shipment.service.ShipmentService;
+import com.locnguyen.ecommerce.domains.shipment.service.ShipmentListSummary;
+import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import com.locnguyen.ecommerce.domains.product.entity.ProductMedia;
 import com.locnguyen.ecommerce.domains.product.enums.MediaType;
 import com.locnguyen.ecommerce.domains.product.repository.ProductMediaRepository;
@@ -56,6 +60,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,6 +70,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -86,6 +93,9 @@ public class OrderServiceImpl implements OrderService {
     private final CarrierCheckoutService carrierCheckoutService;
     private final ProductMediaRepository productMediaRepository;
     private final VoucherService voucherService;
+    private final ShipmentService shipmentService;
+
+    private static final Set<String> ADMIN_ORDER_SORT_FIELDS = Set.of("orderCode", "status", "createdAt", "totalAmount");
 
     @Override
     @Transactional(readOnly = true)
@@ -213,9 +223,38 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public PagedResponse<AdminOrderListItemResponse> getAllOrders(OrderAdminFilter filter, Pageable pageable) {
-        Page<Order> page = orderRepository.adminFilter(
-                filter.getCustomerId(), filter.getStatus(), filter.getPaymentStatus(), pageable);
-        return PagedResponse.of(page.map(this::buildAdminListItemResponse));
+        if (filter.getCreatedFrom() != null && filter.getCreatedTo() != null
+                && filter.getCreatedFrom().isAfter(filter.getCreatedTo())) {
+            throw new AppException(ErrorCode.VALIDATION_ERROR, "createdFrom must be before or equal to createdTo");
+        }
+        Pageable safePageable = withWhitelistedAdminSort(pageable);
+        String keyword = filter.getKeyword() == null || filter.getKeyword().isBlank()
+                ? null : filter.getKeyword().trim();
+        Page<Order> page = orderRepository.adminSearch(
+                filter.getCustomerId(), filter.getStatus(), filter.getPaymentStatus(),
+                filter.getPaymentMethod(), filter.getCreatedFrom(), filter.getCreatedTo(), keyword,
+                filter.getShipmentStatus(), safePageable);
+        List<UUID> orderIds = page.getContent().stream().map(Order::getId).toList();
+        Map<UUID, Integer> itemCounts = orderIds.isEmpty() ? Map.of() :
+                orderItemRepository.countQuantitiesByOrderIds(orderIds).stream().collect(Collectors.toMap(
+                        OrderItemCountProjection::getOrderId,
+                        count -> count.getTotalQuantity() == null ? 0 : count.getTotalQuantity().intValue()));
+        Map<UUID, ShipmentListSummary> shipmentSummaries = shipmentService.getListSummaries(orderIds).stream()
+                .collect(Collectors.toMap(ShipmentListSummary::orderId, summary -> summary));
+        return PagedResponse.of(page.map(order -> buildAdminListItemResponse(order,
+                itemCounts.getOrDefault(order.getId(), 0), shipmentSummaries.get(order.getId()))));
+    }
+
+    private Pageable withWhitelistedAdminSort(Pageable pageable) {
+        Sort sort = pageable.getSort().isUnsorted() ? Sort.by(Sort.Order.desc("createdAt")) :
+                Sort.by(pageable.getSort().stream().map(order -> {
+                    if (!ADMIN_ORDER_SORT_FIELDS.contains(order.getProperty())) {
+                        throw new AppException(ErrorCode.VALIDATION_ERROR,
+                                "Unsupported order sort field: " + order.getProperty());
+                    }
+                    return order;
+                }).toList());
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
     }
 
     @Override
@@ -657,7 +696,8 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    private AdminOrderListItemResponse buildAdminListItemResponse(Order order) {
+    private AdminOrderListItemResponse buildAdminListItemResponse(Order order, int totalItems,
+                                                                   ShipmentListSummary shipment) {
         var profileAvailable = order.getCustomer() != null && order.getCustomer().getUser() != null;
         var user = profileAvailable ? order.getCustomer().getUser() : null;
         return AdminOrderListItemResponse.builder()
@@ -673,10 +713,37 @@ public class OrderServiceImpl implements OrderService {
                 .status(order.getStatus())
                 .paymentMethod(order.getPaymentMethod())
                 .paymentStatus(order.getPaymentStatus())
-                .totalItems(order.getItems().stream().mapToInt(OrderItem::getQuantity).sum())
+                .totalItems(totalItems)
+                .shipmentStatus(shipment == null ? null : shipment.status())
+                .carrier(shipment == null ? null : shipment.carrier())
+                .trackingNumber(shipment == null ? null : shipment.trackingNumber())
+                .attention(resolveOrderAttention(order, shipment))
+                .attentionReason(resolveOrderAttentionReason(order, shipment))
                 .totalAmount(order.getTotalAmount())
                 .createdAt(order.getCreatedAt())
                 .build();
+    }
+
+    private String resolveOrderAttention(Order order, ShipmentListSummary shipment) {
+        if (order.getPaymentStatus() == PaymentStatus.FAILED) return "PAYMENT_FAILED";
+        if (shipment != null && shipment.status() == ShipmentStatus.FAILED) return "DELIVERY_FAILED";
+        if (shipment != null && shipment.status() == ShipmentStatus.RETURNED) return "RETURNED_HANDLING";
+        if (order.getStatus() == OrderStatus.DELIVERED) return "DELIVERED_AWAITING_COMPLETION";
+        if ((order.getStatus() == OrderStatus.CONFIRMED || order.getStatus() == OrderStatus.PROCESSING)
+                && shipment == null) return "READY_TO_SHIP";
+        return null;
+    }
+
+    private String resolveOrderAttentionReason(Order order, ShipmentListSummary shipment) {
+        String attention = resolveOrderAttention(order, shipment);
+        return switch (attention == null ? "" : attention) {
+            case "PAYMENT_FAILED" -> "Payment failed";
+            case "DELIVERY_FAILED" -> "Carrier delivery attempt failed";
+            case "RETURNED_HANDLING" -> "Return requires handling";
+            case "DELIVERED_AWAITING_COMPLETION" -> "Delivered order is awaiting completion";
+            case "READY_TO_SHIP" -> "Order is ready to ship";
+            default -> null;
+        };
     }
 
     private String joinName(String firstName, String lastName) {

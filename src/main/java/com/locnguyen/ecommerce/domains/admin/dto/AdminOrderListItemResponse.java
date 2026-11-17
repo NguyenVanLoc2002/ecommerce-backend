@@ -3,6 +3,7 @@ package com.locnguyen.ecommerce.domains.admin.dto;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
+import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -36,6 +37,11 @@ public class AdminOrderListItemResponse {
     private OrderStatus status;
     private PaymentMethod paymentMethod;
     private PaymentStatus paymentStatus;
+    private ShipmentStatus shipmentStatus;
+    private String carrier;
+    private String trackingNumber;
+    private String attention;
+    private String attentionReason;
 
     private int totalItems;
     private BigDecimal totalAmount;
