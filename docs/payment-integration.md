@@ -110,7 +110,8 @@ Customer places COD order
          │
          ├─► Payment.status → PAID, paidAt = now
          ├─► Order.paymentStatus → PAID, paidAt = now
-         └─► PaymentTransaction{status=SUCCESS} appended
+         └─► PaymentTransaction{status=SUCCESS, referenceType=COD_COLLECTION,
+                                referenceId=orderCode, createdBy=admin actor} appended
 ```
 
 **Idempotency:** if payment already `PAID`, returns existing record silently.  
@@ -185,7 +186,7 @@ POST /api/v1/webhooks/payment/MOMO
          │
          ├─ Idempotency guard: providerTxnId already in payment_transactions → log IGNORED
          │
-         ├─ Load Order by orderCode → findByOrderIdWithLock (pessimistic write lock)
+         ├─ Lock Order by orderCode, then lock its Payment (pessimistic write locks)
          │
          ├─ Amount guard: IPN amount vs payment.amount (BigDecimal compare)
          │    → mismatch → log FAILED → throw PAYMENT_CALLBACK_INVALID
@@ -198,6 +199,8 @@ POST /api/v1/webhooks/payment/MOMO
          │    FAILED  → payment.status=FAILED, order.paymentStatus=FAILED
          │
          ├─ PaymentTransaction{status=SUCCESS/FAILED, referenceType=WEBHOOK} appended
+         │    Cancelled Order + late SUCCESS → keep Order CANCELLED and record
+         │    referenceType=LATE_SUCCESS_AFTER_CANCEL for financial reconciliation
          ├─ WebhookLog.status=PROCESSED, processedAt=now
          │
          └─► HTTP 204 No Content (MoMo IPN spec requires this)

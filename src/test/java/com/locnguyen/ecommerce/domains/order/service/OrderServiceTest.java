@@ -230,6 +230,8 @@ class OrderServiceTest {
 
     @BeforeEach
     void stubCommon() {
+        lenient().when(orderRepository.findByIdWithLock(any()))
+                .thenAnswer(invocation -> orderRepository.findById(invocation.getArgument(0)));
         when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
             Order o = inv.getArgument(0);
             if (o.getId() == null) setId(o, uuid(99));
@@ -978,6 +980,41 @@ class OrderServiceTest {
         }
     }
 
+    @Nested
+    class ProcessOrder {
+
+        @Test
+        void rejects_online_order_without_paid_status() {
+            Customer cust = customer(uuid(1));
+            Order order = savedOrder(uuid(1), cust, OrderStatus.CONFIRMED,
+                    PaymentMethod.ONLINE, new BigDecimal("100000"));
+            order.setPaymentStatus(PaymentStatus.PENDING);
+            when(orderRepository.findById(uuid(1))).thenReturn(Optional.of(order));
+
+            assertThatThrownBy(() -> orderService.processOrder(uuid(1)))
+                    .isInstanceOf(AppException.class)
+                    .extracting(e -> ((AppException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.ORDER_STATUS_INVALID);
+
+            verify(orderRepository, never()).save(argThat(saved ->
+                    saved.getStatus() == OrderStatus.PROCESSING));
+        }
+
+        @Test
+        void allows_cod_order_while_payment_is_pending() {
+            Customer cust = customer(uuid(1));
+            Order order = savedOrder(uuid(1), cust, OrderStatus.CONFIRMED,
+                    PaymentMethod.COD, new BigDecimal("100000"));
+            order.setPaymentStatus(PaymentStatus.PENDING);
+            when(orderRepository.findById(uuid(1))).thenReturn(Optional.of(order));
+
+            orderService.processOrder(uuid(1));
+
+            verify(orderRepository).save(argThat(saved ->
+                    saved.getStatus() == OrderStatus.PROCESSING));
+        }
+    }
+
     // ─── cancelOrder (admin) ─────────────────────────────────────────────────
 
     @Nested
@@ -1083,6 +1120,22 @@ class OrderServiceTest {
                     .isInstanceOf(AppException.class)
                     .extracting(e -> ((AppException) e).getErrorCode())
                     .isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
+        }
+
+        @Test
+        void cannot_cancel_paid_online_order_without_refund() {
+            Customer cust = customer(uuid(1));
+            Order order = savedOrder(uuid(1), cust, OrderStatus.AWAITING_PAYMENT,
+                    PaymentMethod.ONLINE, new BigDecimal("100000"));
+            order.setPaymentStatus(PaymentStatus.PAID);
+            when(orderRepository.findById(uuid(1))).thenReturn(Optional.of(order));
+
+            assertThatThrownBy(() -> orderService.cancelOrder(uuid(1)))
+                    .isInstanceOf(AppException.class)
+                    .extracting(e -> ((AppException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
+
+            verify(inventoryService, never()).releaseStock(anyString(), anyString());
         }
 
         @Test

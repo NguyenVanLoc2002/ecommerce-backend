@@ -65,6 +65,8 @@ Dưới đây là bảng chuyển trạng thái hợp lệ:
 | COD                | Luôn cho phép confirm              |
 | Online Payment     | payment_status = PAID              |
 
+Quy tắc này áp dụng cho mọi request backend có thể đưa đơn online vào khâu xử lý hoặc vận chuyển, gồm `processOrder`, tạo shipment và cập nhật shipment sang `IN_TRANSIT`, `OUT_FOR_DELIVERY` hoặc `DELIVERED`. COD vẫn được giao khi payment `PENDING`; trạng thái giao hàng không tự đánh dấu đã thu COD.
+
 ---
 
 ## 5. Inventory dependency
@@ -86,7 +88,7 @@ Dưới đây là bảng chuyển trạng thái hợp lệ:
 4. Giao hàng → `SHIPPED`
 5. Giao thành công → `DELIVERED`
 6. Sau N ngày không khiếu nại → `COMPLETED`
-7. Thu tiền COD ghi nhận payment `PAID`
+7. Chỉ thao tác xác nhận thu tiền COD mới ghi nhận payment `PAID`; payment transaction lưu `referenceType=COD_COLLECTION` và actor audit.
 
 ---
 
@@ -185,6 +187,9 @@ These actions are idempotent via the **state machine** — sending the same stat
 - Protected via `providerTxnId` uniqueness (DB constraint + application check), not `Idempotency-Key`.
 - Duplicate SUCCESS callback: no-op, returns existing PAID payment.
 - Stale FAILED callback after payment is PAID: rejected.
+- Payment callback and order/shipment state changes serialize on the Order row, then the Payment row where both are needed.
+- A successful callback after cancellation records the received funds as PAID but leaves the Order CANCELLED. Its transaction is marked `LATE_SUCCESS_AFTER_CANCEL` for reconciliation; it never reopens fulfillment.
+- Cancelling an already-paid online order is rejected unless a separate refund flow is performed.
 
 ---
 

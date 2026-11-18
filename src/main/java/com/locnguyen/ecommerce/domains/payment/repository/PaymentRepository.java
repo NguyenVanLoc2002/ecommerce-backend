@@ -28,11 +28,9 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID>,
     /**
      * Load payment by order with a PESSIMISTIC_WRITE (SELECT ... FOR UPDATE) lock.
      *
-     * <p>Used exclusively by {@code processCallback} to serialize concurrent gateway
-     * callbacks. Without this lock, two simultaneous SUCCESS callbacks for the same
-     * payment could both pass the "not PAID" and "no duplicate providerTxnId" checks
-     * and both update the payment to PAID. The lock ensures only one callback thread
-     * processes at a time; the second sees the payment already PAID and returns safely.
+     * <p>Used by callback, capture, and COD collection flows after acquiring the
+     * corresponding Order lock. Keeping the lock order as Order then Payment
+     * serializes payment mutations with fulfillment and cancellation transitions.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Payment p WHERE p.order.id = :orderId")

@@ -5,9 +5,11 @@ import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -23,6 +25,14 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     Optional<Order> findAdminByOrderCodeWithCurrentCustomer(@Param("orderCode") String orderCode);
 
     Optional<Order> findByOrderCode(String orderCode);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findByIdWithLock(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.orderCode = :orderCode")
+    Optional<Order> findByOrderCodeWithLock(@Param("orderCode") String orderCode);
 
     Page<Order> findByCustomerIdOrderByCreatedAtDesc(UUID customerId, Pageable pageable);
 

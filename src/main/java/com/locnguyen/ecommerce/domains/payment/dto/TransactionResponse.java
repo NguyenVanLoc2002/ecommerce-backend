@@ -28,5 +28,6 @@ public class TransactionResponse {
     private final String referenceType;
     private final String referenceId;
     private final String note;
+    private final String createdBy;
     private final LocalDateTime createdAt;
 }

@@ -20,6 +20,7 @@ import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
 import com.locnguyen.ecommerce.domains.payment.dto.InitPaymentRequest;
+import com.locnguyen.ecommerce.domains.payment.dto.PaymentCallbackRequest;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
 import com.locnguyen.ecommerce.domains.payment.enums.PaymentRecordStatus;
 import com.locnguyen.ecommerce.domains.payment.enums.TransactionStatus;
@@ -49,6 +50,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -140,6 +143,50 @@ class MockPaymentCommerceLifecycleIntegrationTest {
                     assertThat(order.getStatus()).isEqualTo(OrderStatus.PROCESSING);
                     assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
                 });
+    }
+
+    @Test
+    void concurrentSuccessCallbacks_recordOnlyOnePaymentTransition() throws Exception {
+        CommerceFixture fixture = createFixture();
+        addProductToCart(fixture);
+        OrderResponse order = checkout(fixture);
+        InitPaymentRequest initiate = new InitPaymentRequest();
+        initiate.setProvider("MOCK");
+        paymentService.initiateOnlinePayment(order.getId(), fixture.customer(), initiate,
+                UUID.randomUUID().toString());
+        PaymentCallbackRequest callback = new PaymentCallbackRequest();
+        callback.setOrderCode(order.getOrderCode());
+        callback.setStatus("SUCCESS");
+        callback.setProvider("VNPAY");
+        callback.setProviderTxnId("CONCURRENT-" + UUID.randomUUID());
+        callback.setPayload("{\"event\":\"SUCCESS\"}");
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        CompletableFuture<Void> first = CompletableFuture.runAsync(() -> runCallback(ready, start, callback));
+        CompletableFuture<Void> second = CompletableFuture.runAsync(() -> runCallback(ready, start, callback));
+        ready.await();
+        start.countDown();
+        CompletableFuture.allOf(first, second).join();
+
+        entityManager.clear();
+        Payment payment = paymentRepository.findByOrderId(order.getId()).orElseThrow();
+        assertThat(payment.getStatus()).isEqualTo(PaymentRecordStatus.PAID);
+        assertThat(paymentTransactionRepository.findByPaymentIdOrderByCreatedAtDesc(payment.getId()))
+                .filteredOn(transaction -> transaction.getStatus() == TransactionStatus.SUCCESS)
+                .hasSize(1);
+    }
+
+    private void runCallback(CountDownLatch ready, CountDownLatch start,
+                             PaymentCallbackRequest callback) {
+        ready.countDown();
+        try {
+            start.await();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while starting concurrent callback", exception);
+        }
+        paymentService.processCallback(callback);
     }
 
     private CommerceFixture createFixture() {

@@ -14,6 +14,7 @@ import com.locnguyen.ecommerce.domains.customer.entity.Customer;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
+import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.payment.dto.*;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
@@ -95,7 +96,14 @@ public class PaymentServiceImpl implements PaymentService {
      */
     @Transactional
     public PaymentResponse completeCodPayment(UUID orderId) {
-        Payment payment = findByOrderIdOrThrow(orderId);
+        Order order = orderRepository.findByIdWithLock(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+        Payment payment = paymentRepository.findByOrderIdWithLock(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        if (payment.getMethod() != PaymentMethod.COD) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Only COD payments can be completed manually");
+        }
 
         // Idempotent: already paid → return silently
         if (payment.getStatus() == PaymentRecordStatus.PAID) {
@@ -113,14 +121,14 @@ public class PaymentServiceImpl implements PaymentService {
         payment = paymentRepository.save(payment);
 
         // Sync denormalized payment status on Order
-        Order order = payment.getOrder();
         order.setPaymentStatus(PaymentStatus.PAID);
         order.setPaidAt(LocalDateTime.now());
         orderRepository.save(order);
 
         recordTransaction(payment, TransactionStatus.SUCCESS,
                 PaymentMethod.COD, null, null,
-                "COD payment collected for order " + order.getOrderCode());
+                "COD payment collected for order " + order.getOrderCode(),
+                "COD_COLLECTION", order.getOrderCode());
 
         log.info("COD payment completed: code={} orderCode={}",
                 payment.getPaymentCode(), order.getOrderCode());
@@ -193,7 +201,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public PaymentResponse captureOnlinePayment(UUID orderId, Customer customer,
                                                 PaymentCaptureRequest request) {
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdWithLock(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
         if (!order.getCustomer().getId().equals(customer.getId())) {
@@ -202,6 +210,10 @@ public class PaymentServiceImpl implements PaymentService {
 
         if (order.getPaymentMethod() != PaymentMethod.ONLINE) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Order payment method is not ONLINE");
+        }
+        if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.REFUNDED) {
+            throw new AppException(ErrorCode.PAYMENT_ALREADY_PROCESSED,
+                    "Cannot capture payment for a cancelled or refunded order");
         }
 
         // Acquire row-level lock to serialize concurrent capture attempts
@@ -421,7 +433,7 @@ public class PaymentServiceImpl implements PaymentService {
      */
     @Transactional
     public PaymentResponse processCallback(PaymentCallbackRequest request) {
-        Order order = orderRepository.findByOrderCode(request.getOrderCode())
+        Order order = orderRepository.findByOrderCodeWithLock(request.getOrderCode())
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_CALLBACK_INVALID,
                         "Order not found: " + request.getOrderCode()));
 
@@ -455,6 +467,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         boolean success = "SUCCESS".equalsIgnoreCase(request.getStatus());
+        boolean lateSuccessAfterCancellation = success && order.getStatus() == OrderStatus.CANCELLED;
 
         if (success) {
             payment.setStatus(PaymentRecordStatus.PAID);
@@ -481,11 +494,19 @@ public class PaymentServiceImpl implements PaymentService {
         txn.setMethod(PaymentMethod.ONLINE);
         txn.setProvider(PaymentProviderType.fromValue(request.getProvider()));
         txn.setProviderTxnId(request.getProviderTxnId());
-        txn.setReferenceType("CALLBACK");
+        txn.setReferenceType(lateSuccessAfterCancellation
+                ? "LATE_SUCCESS_AFTER_CANCEL" : "CALLBACK");
         txn.setReferenceId(request.getOrderCode());
         txn.setPayload(request.getPayload());
-        txn.setNote(success ? "Payment confirmed by gateway" : "Payment rejected by gateway");
+        txn.setNote(lateSuccessAfterCancellation
+                ? "Payment received after order cancellation; reconciliation required"
+                : success ? "Payment confirmed by gateway" : "Payment rejected by gateway");
         transactionRepository.save(txn);
+
+        if (lateSuccessAfterCancellation) {
+            log.error("Late payment success requires reconciliation: orderCode={} paymentCode={}",
+                    order.getOrderCode(), payment.getPaymentCode());
+        }
 
         log.info("Gateway callback processed: code={} orderCode={} success={}",
                 payment.getPaymentCode(), order.getOrderCode(), success);
@@ -563,6 +584,13 @@ public class PaymentServiceImpl implements PaymentService {
     private PaymentTransaction recordTransaction(Payment payment, TransactionStatus status,
                                                  PaymentMethod method, String provider,
                                                  String providerTxnId, String note) {
+        return recordTransaction(payment, status, method, provider, providerTxnId, note, null, null);
+    }
+
+    private PaymentTransaction recordTransaction(Payment payment, TransactionStatus status,
+                                                 PaymentMethod method, String provider,
+                                                 String providerTxnId, String note,
+                                                 String referenceType, String referenceId) {
         PaymentTransaction txn = new PaymentTransaction();
         txn.setPayment(payment);
         txn.setTransactionCode(CodeGenerator.generatePaymentTransactionCode());
@@ -574,6 +602,8 @@ public class PaymentServiceImpl implements PaymentService {
         txn.setMethod(method);
         txn.setProvider(PaymentProviderType.fromValue(provider));
         txn.setProviderTxnId(providerTxnId);
+        txn.setReferenceType(referenceType);
+        txn.setReferenceId(referenceId);
         txn.setNote(note);
         return transactionRepository.save(txn);
     }
