@@ -1113,7 +1113,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `id`, `transactionCode`, `status`, `amount`
   - `method`, `provider`, `providerTxnId`
   - `referenceType`, `referenceId`, `note`
-  - `createdAt`
+  - `createdBy`, `createdAt`
 - `MomoPaymentConfigRequest`
   - partial update request for MoMo integration settings
   - `enabled`: optional boolean
@@ -1195,7 +1195,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 ### POST `/api/v1/admin/payments/order/{orderId}/complete`
 
 - Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
-- Description: mark COD payment as received
+- Description: explicitly confirm COD collection; records `referenceType=COD_COLLECTION` and the authenticated actor in `createdBy`
 - Response:
   - `ApiResponse<PaymentResponse>`
 

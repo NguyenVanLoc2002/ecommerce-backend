@@ -268,7 +268,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse confirmOrder(UUID orderId) {
-        Order order = findOrThrow(orderId);
+        Order order = findForUpdateOrThrow(orderId);
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
 
         OrderStatus current = order.getStatus();
@@ -279,11 +279,7 @@ public class OrderServiceImpl implements OrderService {
                     "Cannot transition from " + current + " to " + target);
         }
 
-        if (order.getPaymentMethod() == PaymentMethod.ONLINE
-                && order.getPaymentStatus() != PaymentStatus.PAID) {
-            throw new AppException(ErrorCode.ORDER_STATUS_INVALID,
-                    "Cannot confirm online order: payment not received");
-        }
+        ensureOnlinePaymentReceived(order, "confirm");
 
         order.setStatus(target);
         order = orderRepository.save(order);
@@ -306,14 +302,14 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse cancelOrder(UUID orderId) {
-        Order order = findOrThrow(orderId);
+        Order order = findForUpdateOrThrow(orderId);
         return doCancelOrder(order);
     }
 
     @Override
     @Transactional
     public OrderResponse cancelMyOrder(UUID orderId, Customer customer) {
-        Order order = findOrThrow(orderId);
+        Order order = findForUpdateOrThrow(orderId);
 
         if (!order.getCustomer().getId().equals(customer.getId())) {
             throw new AppException(ErrorCode.ORDER_NOT_FOUND);
@@ -335,6 +331,12 @@ public class OrderServiceImpl implements OrderService {
         if (!order.getStatus().canTransitionTo(target)) {
             throw new AppException(ErrorCode.ORDER_CANNOT_CANCEL,
                     "Cannot cancel order in status " + order.getStatus());
+        }
+
+        if (order.getPaymentMethod() == PaymentMethod.ONLINE
+                && order.getPaymentStatus() == PaymentStatus.PAID) {
+            throw new AppException(ErrorCode.ORDER_CANNOT_CANCEL,
+                    "Cannot cancel a paid online order without a refund");
         }
 
         order.setStatus(target);
@@ -360,8 +362,9 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse completeOrder(UUID orderId) {
-        Order order = findOrThrow(orderId);
+        Order order = findForUpdateOrThrow(orderId);
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
+        ensureOnlinePaymentReceived(order, "complete");
 
         OrderStatus target = OrderStatus.COMPLETED;
 
@@ -393,8 +396,9 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse processOrder(UUID orderId) {
-        Order order = findOrThrow(orderId);
+        Order order = findForUpdateOrThrow(orderId);
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
+        ensureOnlinePaymentReceived(order, "process");
         applyTransition(order, OrderStatus.PROCESSING, ErrorCode.ORDER_STATUS_INVALID);
         order = orderRepository.save(order);
 
@@ -406,8 +410,9 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse deliverOrder(UUID orderId) {
-        Order order = findOrThrow(orderId);
+        Order order = findForUpdateOrThrow(orderId);
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
+        ensureOnlinePaymentReceived(order, "deliver");
         applyTransition(order, OrderStatus.DELIVERED, ErrorCode.ORDER_STATUS_INVALID);
         order = orderRepository.save(order);
 
@@ -429,6 +434,19 @@ public class OrderServiceImpl implements OrderService {
     private Order findOrThrow(UUID id) {
         return orderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+    }
+
+    private Order findForUpdateOrThrow(UUID id) {
+        return orderRepository.findByIdWithLock(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+    }
+
+    private void ensureOnlinePaymentReceived(Order order, String action) {
+        if (order.getPaymentMethod() == PaymentMethod.ONLINE
+                && order.getPaymentStatus() != PaymentStatus.PAID) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID,
+                    "Cannot " + action + " online order: payment not received");
+        }
     }
 
     private CheckoutDraft loadCheckoutDraft(Customer customer, UUID addressId, boolean lockCart) {

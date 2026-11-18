@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.utils.CodeGenerator;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
+import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentResponse;
 import com.locnguyen.ecommerce.domains.payment.dto.WebhookLogResponse;
@@ -140,7 +141,7 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
         }
 
         // Find order and acquire a row-level lock on payment to prevent race conditions
-        var order = orderRepository.findByOrderCode(orderCode)
+        var order = orderRepository.findByOrderCodeWithLock(orderCode)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_CALLBACK_INVALID,
                         "Order not found for orderCode: " + orderCode));
 
@@ -174,6 +175,8 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
 
         // Determine outcome and mutate payment + order status
         boolean success = paymentProvider.isSuccess(rawBody);
+        boolean lateSuccessAfterCancellation = success
+                && order.getStatus() == OrderStatus.CANCELLED;
 
         if (success) {
             payment.setStatus(PaymentRecordStatus.PAID);
@@ -199,11 +202,19 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
         txn.setMethod(payment.getMethod());
         txn.setProvider(PaymentProviderType.fromValue(provider));
         txn.setProviderTxnId(providerTxnId);
-        txn.setReferenceType("WEBHOOK");
+        txn.setReferenceType(lateSuccessAfterCancellation
+                ? "LATE_SUCCESS_AFTER_CANCEL" : "WEBHOOK");
         txn.setReferenceId(orderCode);
         txn.setPayload(rawBody);
-        txn.setNote(success ? "Payment confirmed via webhook" : "Payment rejected via webhook");
+        txn.setNote(lateSuccessAfterCancellation
+                ? "Payment received after order cancellation; reconciliation required"
+                : success ? "Payment confirmed via webhook" : "Payment rejected via webhook");
         transactionRepository.save(txn);
+
+        if (lateSuccessAfterCancellation) {
+            log.error("Late payment success requires reconciliation: orderCode={} paymentCode={}",
+                    orderCode, payment.getPaymentCode());
+        }
 
         // Link the log to the payment and mark it PROCESSED
         webhookLog.setPayment(payment);

@@ -17,6 +17,8 @@ import com.locnguyen.ecommerce.domains.carrier.repository.CarrierRepository;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.shipment.dto.CancelProviderShipmentRequest;
 import com.locnguyen.ecommerce.domains.shipment.dto.CreateShipmentRequest;
@@ -75,7 +77,7 @@ public class ShipmentServiceImpl implements ShipmentService {
     @Override
     @Transactional
     public ShipmentResponse createShipment(CreateShipmentRequest request) {
-        Order order = orderRepository.findById(request.getOrderId())
+        Order order = orderRepository.findByIdWithLock(request.getOrderId())
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
         if (order.getStatus() != OrderStatus.PROCESSING) {
@@ -83,6 +85,7 @@ public class ShipmentServiceImpl implements ShipmentService {
                     "Order must be in PROCESSING status to create a shipment. Current: "
                             + order.getStatus());
         }
+        ensureOnlinePaymentReceived(order, "create shipment for");
 
         if (shipmentRepository.existsByOrderId(order.getId())) {
             throw new AppException(ErrorCode.SHIPMENT_ALREADY_EXISTS);
@@ -146,6 +149,9 @@ public class ShipmentServiceImpl implements ShipmentService {
     @Transactional
     public ShipmentResponse updateStatus(UUID shipmentId, UpdateShipmentStatusRequest request) {
         Shipment shipment = findByIdOrThrow(shipmentId);
+        Order order = orderRepository.findByIdWithLock(shipment.getOrder().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+        ensureShipmentProgressAllowed(order, request.getStatus());
 
         if (!shipment.getStatus().canTransitionTo(request.getStatus())) {
             throw new AppException(ErrorCode.SHIPMENT_STATUS_INVALID,
@@ -162,7 +168,7 @@ public class ShipmentServiceImpl implements ShipmentService {
 
         if (request.getStatus() == ShipmentStatus.DELIVERED) {
             shipment.setDeliveredAt(eventTime);
-            transitionOrderStatus(shipment.getOrder(), OrderStatus.DELIVERED);
+            transitionOrderStatus(order, OrderStatus.DELIVERED);
         }
 
         shipmentRepository.save(shipment);
@@ -258,6 +264,8 @@ public class ShipmentServiceImpl implements ShipmentService {
     @Transactional
     public ShipmentResponse applyProviderUpdate(ShipmentProviderUpdate update) {
         Shipment shipment = findByIdOrThrow(update.shipmentId());
+        Order order = orderRepository.findByIdWithLock(shipment.getOrder().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
         if (update.providerStatus() != null && !update.providerStatus().isBlank()) {
             shipment.setProviderStatus(update.providerStatus().trim());
@@ -274,11 +282,14 @@ public class ShipmentServiceImpl implements ShipmentService {
         String description = normalizeOptional(update.description());
         String location = normalizeOptional(update.location());
 
+        if (nextStatus != null) {
+            ensureShipmentProgressAllowed(order, nextStatus);
+        }
         if (nextStatus != null && shouldTransition(shipment, nextStatus)) {
             shipment.setStatus(nextStatus);
             if (nextStatus == ShipmentStatus.DELIVERED) {
                 shipment.setDeliveredAt(eventTime);
-                transitionOrderStatus(shipment.getOrder(), OrderStatus.DELIVERED);
+                transitionOrderStatus(order, OrderStatus.DELIVERED);
             }
         } else if (nextStatus != null && shipment.getStatus() != nextStatus) {
             log.warn("Skipping backward or invalid carrier status transition: shipmentId={} current={} incoming={}",
@@ -323,6 +334,9 @@ public class ShipmentServiceImpl implements ShipmentService {
     }
 
     private void transitionOrderStatus(Order order, OrderStatus target) {
+        if (target == OrderStatus.SHIPPED || target == OrderStatus.DELIVERED) {
+            ensureOnlinePaymentReceived(order, "fulfill");
+        }
         if (!order.getStatus().canTransitionTo(target)) {
             log.warn("Skipping order status transition {} -> {} for order {}",
                     order.getStatus(), target, order.getOrderCode());
@@ -331,6 +345,22 @@ public class ShipmentServiceImpl implements ShipmentService {
         order.setStatus(target);
         orderRepository.save(order);
         log.info("Order status transitioned: orderCode={} -> {}", order.getOrderCode(), target);
+    }
+
+    private void ensureShipmentProgressAllowed(Order order, ShipmentStatus target) {
+        if (target == ShipmentStatus.IN_TRANSIT
+                || target == ShipmentStatus.OUT_FOR_DELIVERY
+                || target == ShipmentStatus.DELIVERED) {
+            ensureOnlinePaymentReceived(order, "fulfill");
+        }
+    }
+
+    private void ensureOnlinePaymentReceived(Order order, String action) {
+        if (order.getPaymentMethod() == PaymentMethod.ONLINE
+                && order.getPaymentStatus() != PaymentStatus.PAID) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID,
+                    "Cannot " + action + " online order: payment not received");
+        }
     }
 
     private void configureCarrier(Shipment shipment, Order order, UUID carrierId,
