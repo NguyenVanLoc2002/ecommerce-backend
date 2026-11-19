@@ -37,6 +37,13 @@ public class AdminShipmentController {
         return ApiResponse.created(shipmentService.createShipment(request));
     }
 
+    @Operation(summary = "Reconcile an unknown carrier booking without blindly retrying")
+    @PostMapping("/{id}/booking/reconcile")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<ShipmentResponse> reconcileBooking(@PathVariable UUID id) {
+        return ApiResponse.success(shipmentService.reconcileBooking(id));
+    }
+
     @Operation(summary = "Get a shipment by ID")
     @GetMapping("/{id}")
     public ApiResponse<ShipmentResponse> getById(@PathVariable UUID id) {

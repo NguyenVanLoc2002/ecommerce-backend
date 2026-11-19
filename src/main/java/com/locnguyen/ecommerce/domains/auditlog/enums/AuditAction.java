@@ -78,6 +78,8 @@ public enum AuditAction {
 
     // ─── Shipment / Invoice ──────────────────────────────────────────────────
     SHIPMENT_CREATED,
+    SHIPMENT_CARRIER_OVERRIDDEN,
+    SHIPMENT_BOOKING_RECONCILED,
     SHIPMENT_STATUS_UPDATED,
     INVOICE_GENERATED,
     INVOICE_STATUS_UPDATED,

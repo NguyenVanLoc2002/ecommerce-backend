@@ -14,6 +14,11 @@ import java.time.LocalDateTime;
 public class ManualCarrierProvider implements CarrierProvider {
 
     @Override
+    public CarrierProviderCapabilities capabilities() {
+        return new CarrierProviderCapabilities(false, false, true, true);
+    }
+
+    @Override
     public String getProviderType() {
         return CarrierProviderType.MANUAL.name();
     }

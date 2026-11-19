@@ -3,17 +3,15 @@ package com.locnguyen.ecommerce.domains.shipment.service.impl;
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
-import com.locnguyen.ecommerce.common.utils.CodeGenerator;
 import com.locnguyen.ecommerce.domains.carrier.entity.Carrier;
 import com.locnguyen.ecommerce.domains.carrier.entity.CarrierConfig;
 import com.locnguyen.ecommerce.domains.carrier.enums.CarrierProviderType;
-import com.locnguyen.ecommerce.domains.carrier.enums.CarrierStatus;
 import com.locnguyen.ecommerce.domains.carrier.provider.CarrierProvider;
+import com.locnguyen.ecommerce.domains.carrier.provider.BookingLookupResult;
 import com.locnguyen.ecommerce.domains.carrier.provider.CarrierProviderRegistry;
 import com.locnguyen.ecommerce.domains.carrier.provider.ShipmentTrackingResult;
 import com.locnguyen.ecommerce.domains.carrier.provider.ShippingOrderResult;
 import com.locnguyen.ecommerce.domains.carrier.repository.CarrierConfigRepository;
-import com.locnguyen.ecommerce.domains.carrier.repository.CarrierRepository;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
@@ -29,6 +27,7 @@ import com.locnguyen.ecommerce.domains.shipment.dto.UpdateShipmentStatusRequest;
 import com.locnguyen.ecommerce.domains.shipment.entity.Shipment;
 import com.locnguyen.ecommerce.domains.shipment.entity.ShipmentEvent;
 import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
+import com.locnguyen.ecommerce.domains.shipment.enums.BookingAttemptStatus;
 import com.locnguyen.ecommerce.domains.shipment.mapper.ShipmentMapper;
 import com.locnguyen.ecommerce.domains.shipment.repository.ShipmentEventRepository;
 import com.locnguyen.ecommerce.domains.shipment.repository.ShipmentRepository;
@@ -43,7 +42,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.List;
@@ -57,9 +55,9 @@ public class ShipmentServiceImpl implements ShipmentService {
     private final ShipmentEventRepository shipmentEventRepository;
     private final OrderRepository orderRepository;
     private final ShipmentMapper shipmentMapper;
-    private final CarrierRepository carrierRepository;
     private final CarrierConfigRepository carrierConfigRepository;
     private final CarrierProviderRegistry carrierProviderRegistry;
+    private final ShipmentBookingCoordinator bookingCoordinator;
 
     @Override
     @Transactional(readOnly = true)
@@ -75,48 +73,95 @@ public class ShipmentServiceImpl implements ShipmentService {
     }
 
     @Override
-    @Transactional
     public ShipmentResponse createShipment(CreateShipmentRequest request) {
-        Order order = orderRepository.findByIdWithLock(request.getOrderId())
-                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
-
-        if (order.getStatus() != OrderStatus.PROCESSING) {
-            throw new AppException(ErrorCode.ORDER_STATUS_INVALID,
-                    "Order must be in PROCESSING status to create a shipment. Current: "
-                            + order.getStatus());
+        ShipmentBookingCoordinator.PreparedBooking prepared = bookingCoordinator.prepare(request);
+        if (prepared.attemptId() != null) {
+            try {
+                ShippingOrderResult result = prepared.provider().createShipment(
+                        prepared.shipment(), prepared.shipment().getOrder(), prepared.config(), prepared.idempotencyKey());
+                if (result == null) {
+                    return markUnknownAndRespond(prepared,
+                            new AppException(ErrorCode.CARRIER_PROVIDER_STATUS_UNKNOWN));
+                }
+                try {
+                    bookingCoordinator.complete(prepared.attemptId(), result);
+                } catch (Exception persistenceFailure) {
+                    return markUnknownAndRespond(prepared, persistenceFailure);
+                }
+            } catch (Exception providerFailure) {
+                return markUnknownAndRespond(prepared, providerFailure);
+            }
         }
-        ensureOnlinePaymentReceived(order, "create shipment for");
+        return bookingCoordinator.getShipmentResponse(prepared.shipmentId());
+    }
 
-        if (shipmentRepository.existsByOrderId(order.getId())) {
-            throw new AppException(ErrorCode.SHIPMENT_ALREADY_EXISTS);
+    private ShipmentResponse markUnknownAndRespond(
+            ShipmentBookingCoordinator.PreparedBooking prepared, Exception failure) {
+        try {
+            bookingCoordinator.markUnknown(prepared.attemptId(), failure);
+            return bookingCoordinator.getShipmentResponse(prepared.shipmentId());
+        } catch (Exception persistenceFailure) {
+            log.error("Could not persist unknown carrier outcome: shipmentId={}", prepared.shipmentId());
+            Shipment shipment = prepared.shipment();
+            return ShipmentResponse.builder()
+                    .id(prepared.shipmentId())
+                    .orderId(shipment.getOrder().getId())
+                    .orderCode(shipment.getOrder().getOrderCode())
+                    .shipmentCode(shipment.getShipmentCode())
+                    .carrierId(shipment.getCarrierEntity() != null ? shipment.getCarrierEntity().getId() : null)
+                    .carrier(shipment.getCarrier())
+                    .trackingNumber(shipment.getTrackingNumber())
+                    .status(shipment.getStatus())
+                    .shippingFee(shipment.getShippingFee())
+                    .carrierCost(shipment.getCarrierCost())
+                    .estimatedCarrierCost(shipment.getEstimatedCarrierCost())
+                    .bookingStatus(BookingAttemptStatus.UNKNOWN)
+                    .bookingAttemptKey(prepared.idempotencyKey())
+                    .note(shipment.getNote())
+                    .events(List.of())
+                    .createdAt(shipment.getCreatedAt())
+                    .updatedAt(shipment.getUpdatedAt())
+                    .build();
         }
+    }
 
-        Shipment shipment = new Shipment();
-        shipment.setOrder(order);
-        shipment.setShipmentCode(CodeGenerator.generateShipmentCode());
-        shipment.setEstimatedDeliveryDate(request.getEstimatedDeliveryDate());
-        shipment.setShippingFee(
-                request.getShippingFee() != null ? request.getShippingFee() : BigDecimal.ZERO);
-        shipment.setNote(normalizeOptional(request.getNote()));
-        shipment.setTrackingNumber(normalizeOptional(request.getTrackingNumber()));
-
-        UUID selectedCarrierId = request.getCarrierId() != null ? request.getCarrierId() : order.getCarrierId();
-        String selectedCarrierName = request.getCarrier() != null ? request.getCarrier() : order.getCarrierName();
-        configureCarrier(shipment, order, selectedCarrierId, selectedCarrierName, true);
-
-        shipment = shipmentRepository.save(shipment);
-
-        recordEvent(shipment, ShipmentStatus.PENDING, null,
-                "Shipment created. Awaiting carrier pickup.", LocalDateTime.now());
-
-        transitionOrderStatus(order, OrderStatus.SHIPPED);
-
-        log.info("Shipment created: code={} orderId={} carrier={} linkedCarrierId={}",
-                shipment.getShipmentCode(),
-                order.getId(),
-                shipment.getCarrier(),
-                shipment.getCarrierEntity() != null ? shipment.getCarrierEntity().getId() : null);
-        return shipmentMapper.toResponse(findByIdOrThrow(shipment.getId()));
+    @Override
+    public ShipmentResponse reconcileBooking(UUID shipmentId) {
+        var lookup = bookingCoordinator.getBookingLookup(shipmentId);
+        if (lookup != null && (lookup.status() == BookingAttemptStatus.UNKNOWN
+                || lookup.status() == BookingAttemptStatus.PENDING)) {
+            try {
+                boolean confirmedAbsent = false;
+                if (lookup.provider().supportsBookingLookup()) {
+                    BookingLookupResult result = lookup.provider().findShipmentByIdempotencyKey(
+                            lookup.idempotencyKey(), lookup.shipmentCode(), lookup.config());
+                    if (result.status() == BookingLookupResult.Status.FOUND && result.booking() != null) {
+                        bookingCoordinator.complete(lookup.attemptId(), result.booking());
+                        return bookingCoordinator.getShipmentResponse(shipmentId);
+                    }
+                    confirmedAbsent = result.status() == BookingLookupResult.Status.CONFIRMED_ABSENT;
+                }
+                if (lookup.provider().supportsIdempotentBooking()
+                        && (!lookup.provider().supportsBookingLookup() || confirmedAbsent)) {
+                    bookingCoordinator.startSafeRetry(lookup.attemptId());
+                    ShippingOrderResult retried = lookup.provider().createShipment(
+                            lookup.shipment(), lookup.shipment().getOrder(), lookup.config(), lookup.idempotencyKey());
+                    if (retried == null) {
+                        bookingCoordinator.markUnknown(lookup.attemptId(),
+                                new AppException(ErrorCode.CARRIER_PROVIDER_STATUS_UNKNOWN));
+                    } else {
+                        bookingCoordinator.complete(lookup.attemptId(), retried);
+                    }
+                }
+            } catch (Exception failure) {
+                try {
+                    bookingCoordinator.markUnknown(lookup.attemptId(), failure);
+                } catch (Exception persistenceFailure) {
+                    log.error("Could not persist booking reconciliation outcome: shipmentId={}", shipmentId);
+                }
+            }
+        }
+        return bookingCoordinator.getShipmentResponse(shipmentId);
     }
 
     @Override
@@ -125,7 +170,15 @@ public class ShipmentServiceImpl implements ShipmentService {
         Shipment shipment = findByIdOrThrow(shipmentId);
 
         if (request.getCarrierId() != null || request.getCarrier() != null) {
-            configureCarrier(shipment, shipment.getOrder(), request.getCarrierId(), request.getCarrier(), false);
+            boolean sameCarrierId = request.getCarrierId() == null
+                    || (shipment.getCarrierEntity() != null
+                    && request.getCarrierId().equals(shipment.getCarrierEntity().getId()));
+            boolean sameManualCarrier = request.getCarrier() == null
+                    || request.getCarrier().trim().equals(shipment.getCarrier());
+            if (!sameCarrierId || !sameManualCarrier) {
+                throw new AppException(ErrorCode.CARRIER_REQUEST_FAILED,
+                        "Carrier changes require an audited override before booking");
+            }
         }
         if (request.getTrackingNumber() != null) {
             shipment.setTrackingNumber(normalizeOptional(request.getTrackingNumber()));
@@ -135,6 +188,12 @@ public class ShipmentServiceImpl implements ShipmentService {
         }
         if (request.getShippingFee() != null) {
             shipment.setShippingFee(request.getShippingFee());
+        }
+        if (request.getCarrierCost() != null) {
+            shipment.setCarrierCost(request.getCarrierCost());
+        }
+        if (request.getEstimatedCarrierCost() != null) {
+            shipment.setEstimatedCarrierCost(request.getEstimatedCarrierCost());
         }
         if (request.getNote() != null) {
             shipment.setNote(normalizeOptional(request.getNote()));
@@ -215,7 +274,7 @@ public class ShipmentServiceImpl implements ShipmentService {
 
         Shipment shipment = shipmentRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.SHIPMENT_NOT_FOUND));
-        return shipmentMapper.toResponse(shipment);
+        return shipmentMapper.toCustomerResponse(shipment);
     }
 
     @Override
@@ -223,6 +282,10 @@ public class ShipmentServiceImpl implements ShipmentService {
     public ShipmentResponse syncProviderTracking(UUID shipmentId) {
         Shipment shipment = findByIdOrThrow(shipmentId);
         CarrierProviderContext context = resolveProviderContext(shipment);
+        if (!context.provider().supportsTracking()) {
+            throw new AppException(ErrorCode.CARRIER_PROVIDER_NOT_SUPPORTED,
+                    "Carrier does not support tracking sync");
+        }
         ShipmentTrackingResult result = context.provider().getTracking(shipment, context.config());
         if (result == null) {
             return shipmentMapper.toResponse(findByIdOrThrow(shipmentId));
@@ -244,6 +307,10 @@ public class ShipmentServiceImpl implements ShipmentService {
     public ShipmentResponse cancelProviderShipment(UUID shipmentId, CancelProviderShipmentRequest request) {
         Shipment shipment = findByIdOrThrow(shipmentId);
         CarrierProviderContext context = resolveProviderContext(shipment);
+        if (!context.provider().supportsCancellation()) {
+            throw new AppException(ErrorCode.CARRIER_PROVIDER_NOT_SUPPORTED,
+                    "Carrier does not support shipment cancellation");
+        }
         boolean cancelled = context.provider().cancelShipment(shipment, request.getReason(), context.config());
         if (!cancelled) {
             throw new AppException(ErrorCode.CARRIER_REQUEST_FAILED,
@@ -363,64 +430,6 @@ public class ShipmentServiceImpl implements ShipmentService {
         }
     }
 
-    private void configureCarrier(Shipment shipment, Order order, UUID carrierId,
-                                  String carrierName, boolean createViaProvider) {
-        if (carrierId == null) {
-            if (normalizeOptional(carrierName) == null) {
-                throw new AppException(ErrorCode.VALIDATION_ERROR,
-                        "carrierId or carrier must be provided, or the order must have a selected carrier");
-            }
-            shipment.setCarrier(normalizeRequiredCarrierName(carrierName));
-            shipment.setCarrierEntity(null);
-            shipment.setCarrierShipmentId(null);
-            shipment.setProviderStatus(null);
-            shipment.setProviderTrackingUrl(null);
-            return;
-        }
-
-        Carrier carrier = carrierRepository.findById(carrierId)
-                .orElseThrow(() -> new AppException(ErrorCode.CARRIER_NOT_FOUND));
-        if (carrier.getStatus() != CarrierStatus.ACTIVE) {
-            throw new AppException(ErrorCode.CARRIER_REQUEST_FAILED,
-                    "Carrier is inactive and cannot be assigned to shipments");
-        }
-
-        shipment.setCarrierEntity(carrier);
-        shipment.setCarrier(carrier.getName());
-
-        CarrierProviderContext context = resolveProviderContext(carrier);
-
-        if (!createViaProvider) {
-            return;
-        }
-
-        ShippingOrderResult result;
-        try {
-            result = context.provider().createShipment(shipment, order, context.config());
-        } catch (AppException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new AppException(ErrorCode.CARRIER_REQUEST_FAILED,
-                    "Failed to create shipment with carrier " + carrier.getCode());
-        }
-
-        if (result == null) {
-            return;
-        }
-        if (result.carrierShipmentId() != null && !result.carrierShipmentId().isBlank()) {
-            shipment.setCarrierShipmentId(result.carrierShipmentId());
-        }
-        if (result.trackingNumber() != null && !result.trackingNumber().isBlank()) {
-            shipment.setTrackingNumber(result.trackingNumber());
-        }
-        if (result.trackingUrl() != null && !result.trackingUrl().isBlank()) {
-            shipment.setProviderTrackingUrl(result.trackingUrl());
-        }
-        if (result.rawStatus() != null && !result.rawStatus().isBlank()) {
-            shipment.setProviderStatus(result.rawStatus());
-        }
-    }
-
     private boolean requiresEnabledConfig(CarrierProviderType providerType) {
         return providerType != CarrierProviderType.MANUAL && providerType != CarrierProviderType.MOCK;
     }
@@ -455,14 +464,6 @@ public class ShipmentServiceImpl implements ShipmentService {
                     "Carrier config is missing or disabled for " + carrier.getCode());
         }
         return new CarrierProviderContext(carrier, provider, config);
-    }
-
-    private String normalizeRequiredCarrierName(String value) {
-        String normalized = normalizeOptional(value);
-        if (normalized == null) {
-            throw new AppException(ErrorCode.VALIDATION_ERROR, "carrier must not be blank");
-        }
-        return normalized;
     }
 
     private String normalizeOptional(String value) {

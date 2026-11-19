@@ -751,6 +751,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `events`
   - `createdAt`, `updatedAt`
   - pickup location is provider-internal; it is not exposed to customer shipment responses
+  - internal booking attempt keys, carrier costs, and override audit details are omitted from the customer response
 - `ShipmentEventResponse`
   - `id`, `status`, `location`, `description`, `eventTime`
 
