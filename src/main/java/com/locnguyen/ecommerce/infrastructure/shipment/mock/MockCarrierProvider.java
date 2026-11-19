@@ -3,6 +3,7 @@ package com.locnguyen.ecommerce.infrastructure.shipment.mock;
 import com.locnguyen.ecommerce.domains.carrier.entity.CarrierConfig;
 import com.locnguyen.ecommerce.domains.carrier.enums.CarrierProviderType;
 import com.locnguyen.ecommerce.domains.carrier.provider.CarrierProvider;
+import com.locnguyen.ecommerce.domains.carrier.provider.CarrierProviderCapabilities;
 import com.locnguyen.ecommerce.domains.carrier.provider.ShipmentTrackingResult;
 import com.locnguyen.ecommerce.domains.carrier.provider.ShippingOrderResult;
 import com.locnguyen.ecommerce.domains.carrier.provider.ShippingRateRequest;
@@ -19,6 +20,11 @@ import java.time.LocalDateTime;
 @Component
 @ConditionalOnProperty(name = "app.carrier.mock.enabled", havingValue = "true")
 public class MockCarrierProvider implements CarrierProvider {
+
+    @Override
+    public CarrierProviderCapabilities capabilities() {
+        return new CarrierProviderCapabilities(true, false, true, true);
+    }
 
     @Override
     public String getProviderType() {

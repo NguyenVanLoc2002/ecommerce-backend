@@ -5,6 +5,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import com.locnguyen.ecommerce.domains.shipment.enums.CarrierOverrideReason;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -24,6 +25,8 @@ public class CreateShipmentRequest {
     @Schema(description = "Existing carrier ID. When present, the shipment can be created via the carrier provider.")
     private UUID carrierId;
 
+    private boolean useManualCarrier;
+
     @Size(max = 100)
     @Schema(description = "Carrier name, e.g. GHTK, GHN, VNPOST, J&T. Required only for manual shipments.")
     private String carrier;
@@ -39,6 +42,15 @@ public class CreateShipmentRequest {
     @Digits(integer = 16, fraction = 2)
     @Schema(description = "Shipping fee charged (defaults to 0)")
     private BigDecimal shippingFee;
+
+    @DecimalMin("0")
+    @Digits(integer = 16, fraction = 2)
+    private BigDecimal estimatedCarrierCost;
+
+    private CarrierOverrideReason overrideReasonCode;
+
+    @Size(max = 500)
+    private String overrideNote;
 
     @Size(max = 500)
     private String note;

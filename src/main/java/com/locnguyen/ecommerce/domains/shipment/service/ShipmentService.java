@@ -17,6 +17,8 @@ public interface ShipmentService {
 
     ShipmentResponse createShipment(CreateShipmentRequest request);
 
+    ShipmentResponse reconcileBooking(UUID shipmentId);
+
     ShipmentResponse updateShipment(UUID shipmentId, UpdateShipmentRequest request);
 
     ShipmentResponse updateStatus(UUID shipmentId, UpdateShipmentStatusRequest request);

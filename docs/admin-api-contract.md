@@ -1285,6 +1285,11 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `providerStatus`, `providerTrackingUrl`, `status`
   - `estimatedDeliveryDate`, `deliveredAt`
   - `shippingFee`, `note`
+  - `bookingStatus`, `bookingAttemptKey`
+  - `estimatedCarrierCost`, `carrierCost`
+  - `overrideReasonCode`, `overrideNote`
+  - `overrideFromCarrierId`, `overrideToCarrierId`
+  - `overrideActor`, `overrideAt`
   - `events`
   - `createdAt`, `updatedAt`
   - `shippingFee` is the current legacy shipment field; its historical/business meaning is not established as carrier cost. See the Issue #53 proposal before using it as such.
@@ -1292,6 +1297,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `id`, `status`, `location`, `description`, `eventTime`
 - `CreateShipmentRequest`
   - `orderId`: required
+  - `useManualCarrier`: optional, selects internal-only manual fulfillment instead of reusing the checkout carrier
   - `carrierId`: optional
   - `carrier`: optional, max 100
   - resolution order:
@@ -1305,10 +1311,14 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `trackingNumber`: optional, max 200
   - `estimatedDeliveryDate`: optional
   - `shippingFee`: optional, decimal >= 0
+  - `estimatedCarrierCost`: optional estimate, decimal >= 0; null means not recorded
+  - `overrideReasonCode`: required when changing a saved checkout carrier; ADMIN/SUPER_ADMIN only
+  - `overrideNote`: optional max 500; required when reason is `OTHER`
   - `note`: optional, max 500
 - `UpdateShipmentRequest`
   - partial update version of:
   - `carrierId`, `carrier`, `trackingNumber`, `estimatedDeliveryDate`, `shippingFee`, `note`
+  - `estimatedCarrierCost`, `carrierCost`: optional, decimal >= 0; actual cost is recorded only after confirmation
 - `UpdateShipmentStatusRequest`
   - `status`: required
   - `location`: optional, max 255
@@ -1321,6 +1331,8 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 
 - Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
 - Description: create shipment for an order
+- A provider-backed shipment and its `PENDING` booking attempt are committed before the provider call. Unconfirmed provider outcomes are returned with `bookingStatus=UNKNOWN`; do not submit another shipment for that order.
+- Carrier overrides require an active carrier and a controlled reason; the actor and old/new carrier IDs are audited. STAFF may use the checkout snapshot but cannot override it.
 - Backward compatibility:
   - legacy manual flow using free-text `carrier` remains supported
   - provider-backed flow is enabled by passing `carrierId`
@@ -1393,6 +1405,13 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `CancelProviderShipmentRequest`
 - Response:
   - `ApiResponse<ShipmentResponse>`
+
+### POST `/api/v1/admin/shipments/{id}/booking/reconcile`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: look up an uncertain booking when the provider adapter supports lookup; retry only after confirmed absence and provider idempotency support. Otherwise retain `UNKNOWN` for manual recovery.
+- Response: `ApiResponse<ShipmentResponse>`
+- No current provider adapter declares lookup or idempotency support, so current AhaMove and Mock unknown outcomes require manual reconciliation.
 
 ### AhaMove shipment integration notes
 

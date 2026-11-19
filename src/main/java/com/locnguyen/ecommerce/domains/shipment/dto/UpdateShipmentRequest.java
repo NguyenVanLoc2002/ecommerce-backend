@@ -30,6 +30,14 @@ public class UpdateShipmentRequest {
     @Digits(integer = 16, fraction = 2)
     private BigDecimal shippingFee;
 
+    @DecimalMin("0")
+    @Digits(integer = 16, fraction = 2)
+    private BigDecimal estimatedCarrierCost;
+
+    @DecimalMin("0")
+    @Digits(integer = 16, fraction = 2)
+    private BigDecimal carrierCost;
+
     @Size(max = 500)
     private String note;
 }

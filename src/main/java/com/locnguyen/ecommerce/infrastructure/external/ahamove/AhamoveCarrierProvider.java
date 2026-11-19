@@ -25,6 +25,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AhamoveCarrierProvider implements CarrierProvider {
 
+    @Override
+    public CarrierProviderCapabilities capabilities() {
+        return new CarrierProviderCapabilities(false, false, true, true);
+    }
+
     private final AhamoveClient client;
     private final AhamoveMapper mapper;
     private final AhamoveConfigResolver configResolver;

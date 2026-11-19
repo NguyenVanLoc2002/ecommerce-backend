@@ -10,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -29,6 +30,15 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT o FROM Order o WHERE o.id = :id")
     Optional<Order> findByIdWithLock(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"items", "items.variant"})
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findByIdWithItemsAndLock(@Param("id") UUID id);
+
+    @EntityGraph(attributePaths = {"items", "items.variant"})
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findWithItemsById(@Param("id") UUID id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT o FROM Order o WHERE o.orderCode = :orderCode")

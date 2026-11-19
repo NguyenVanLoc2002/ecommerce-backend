@@ -4,16 +4,20 @@ import com.locnguyen.ecommerce.common.auditing.BaseEntity;
 import com.locnguyen.ecommerce.domains.carrier.entity.Carrier;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
+import com.locnguyen.ecommerce.domains.shipment.enums.BookingAttemptStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Shipment for an order, currently one shipment per order.
@@ -63,6 +67,39 @@ public class Shipment extends BaseEntity {
 
     @Column(name = "shipping_fee", precision = 18, scale = 2, nullable = false)
     private BigDecimal shippingFee = BigDecimal.ZERO;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "booking_status", length = 30)
+    private BookingAttemptStatus bookingStatus;
+
+    @Column(name = "booking_attempt_key", length = 100)
+    private String bookingAttemptKey;
+
+    @Column(name = "carrier_cost", precision = 18, scale = 2)
+    private BigDecimal carrierCost;
+
+    @Column(name = "estimated_carrier_cost", precision = 18, scale = 2)
+    private BigDecimal estimatedCarrierCost;
+
+    @Column(name = "override_reason_code", length = 50)
+    private String overrideReasonCode;
+
+    @Column(name = "override_note", length = 500)
+    private String overrideNote;
+
+    @Column(name = "override_actor", length = 100)
+    private String overrideActor;
+
+    @Column(name = "override_from_carrier_id", length = 36)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    private UUID overrideFromCarrierId;
+
+    @Column(name = "override_to_carrier_id", length = 36)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    private UUID overrideToCarrierId;
+
+    @Column(name = "override_at")
+    private LocalDateTime overrideAt;
 
     @Column(name = "note", length = 500)
     private String note;
