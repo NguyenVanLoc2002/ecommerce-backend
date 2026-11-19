@@ -44,6 +44,10 @@ public interface CarrierProvider {
 
     boolean cancelShipment(Shipment shipment, String reason, CarrierConfig config);
 
+    default boolean interceptShipment(Shipment shipment, String reason, CarrierConfig config) {
+        return false;
+    }
+
     ShipmentTrackingResult getTracking(Shipment shipment, CarrierConfig config);
 
     ShipmentStatus mapStatus(String carrierStatus);

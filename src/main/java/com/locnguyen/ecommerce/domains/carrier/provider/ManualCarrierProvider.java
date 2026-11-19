@@ -15,7 +15,7 @@ public class ManualCarrierProvider implements CarrierProvider {
 
     @Override
     public CarrierProviderCapabilities capabilities() {
-        return new CarrierProviderCapabilities(false, false, true, true);
+        return new CarrierProviderCapabilities(false, false, true, false, true);
     }
 
     @Override

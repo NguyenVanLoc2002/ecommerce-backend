@@ -18,7 +18,6 @@ import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
-import com.locnguyen.ecommerce.domains.shipment.dto.CancelProviderShipmentRequest;
 import com.locnguyen.ecommerce.domains.shipment.dto.CreateShipmentRequest;
 import com.locnguyen.ecommerce.domains.shipment.dto.ShipmentFilter;
 import com.locnguyen.ecommerce.domains.shipment.dto.ShipmentResponse;
@@ -299,31 +298,6 @@ public class ShipmentServiceImpl implements ShipmentService {
                 .location(result.location())
                 .description(result.description())
                 .eventTime(result.eventTime())
-                .build());
-    }
-
-    @Override
-    @Transactional
-    public ShipmentResponse cancelProviderShipment(UUID shipmentId, CancelProviderShipmentRequest request) {
-        Shipment shipment = findByIdOrThrow(shipmentId);
-        CarrierProviderContext context = resolveProviderContext(shipment);
-        if (!context.provider().supportsCancellation()) {
-            throw new AppException(ErrorCode.CARRIER_PROVIDER_NOT_SUPPORTED,
-                    "Carrier does not support shipment cancellation");
-        }
-        boolean cancelled = context.provider().cancelShipment(shipment, request.getReason(), context.config());
-        if (!cancelled) {
-            throw new AppException(ErrorCode.CARRIER_REQUEST_FAILED,
-                    "Carrier provider did not confirm shipment cancellation");
-        }
-        return applyProviderUpdate(ShipmentProviderUpdate.builder()
-                .shipmentId(shipmentId)
-                .status(ShipmentStatus.FAILED)
-                .providerStatus("CANCELLED")
-                .trackingNumber(shipment.getTrackingNumber())
-                .trackingUrl(shipment.getProviderTrackingUrl())
-                .description(request.getReason())
-                .eventTime(LocalDateTime.now())
                 .build());
     }
 

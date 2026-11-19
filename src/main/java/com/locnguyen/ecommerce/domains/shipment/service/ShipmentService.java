@@ -2,7 +2,6 @@ package com.locnguyen.ecommerce.domains.shipment.service;
 
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
-import com.locnguyen.ecommerce.domains.shipment.dto.CancelProviderShipmentRequest;
 import com.locnguyen.ecommerce.domains.shipment.dto.CreateShipmentRequest;
 import com.locnguyen.ecommerce.domains.shipment.dto.ShipmentFilter;
 import com.locnguyen.ecommerce.domains.shipment.dto.ShipmentResponse;
@@ -34,8 +33,6 @@ public interface ShipmentService {
     ShipmentResponse getShipmentForCustomer(UUID orderId, Customer customer);
 
     ShipmentResponse syncProviderTracking(UUID shipmentId);
-
-    ShipmentResponse cancelProviderShipment(UUID shipmentId, CancelProviderShipmentRequest request);
 
     ShipmentResponse applyProviderUpdate(ShipmentProviderUpdate update);
 }

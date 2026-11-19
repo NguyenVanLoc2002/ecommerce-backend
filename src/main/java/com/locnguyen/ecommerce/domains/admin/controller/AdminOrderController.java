@@ -7,6 +7,10 @@ import com.locnguyen.ecommerce.domains.admin.dto.AdminOrderListItemResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderAdminFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
+import com.locnguyen.ecommerce.domains.shipment.dto.CancelOrderRequest;
+import com.locnguyen.ecommerce.domains.shipment.dto.CancellationOperationResponse;
+import com.locnguyen.ecommerce.domains.shipment.dto.ReconcileCancellationRequest;
+import com.locnguyen.ecommerce.domains.shipment.service.OrderCancellationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.UUID;
 /**
@@ -35,6 +40,7 @@ import java.util.UUID;
 public class AdminOrderController {
 
     private final OrderService orderService;
+    private final OrderCancellationService orderCancellationService;
 
     // ─── Read operations ──────────────────────────────────────────────────────
 
@@ -87,13 +93,25 @@ public class AdminOrderController {
         return ApiResponse.success(orderService.completeOrder(id));
     }
 
-    @Operation(
-        summary = "Cancel order — releases reserved stock",
-        description = "Cancellable from PENDING, AWAITING_PAYMENT, or CONFIRMED. Requires ADMIN or above."
-    )
+    @Operation(summary = "Request order and shipment cancellation")
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
-    public ApiResponse<OrderResponse> cancelOrder(@PathVariable UUID id) {
-        return ApiResponse.success(orderService.cancelOrder(id));
+    public ApiResponse<CancellationOperationResponse> cancelOrder(
+            @PathVariable UUID id, @Valid @RequestBody CancelOrderRequest request) {
+        return ApiResponse.success(orderCancellationService.cancelOrder(id, request));
+    }
+
+    @Operation(summary = "Manually reconcile an unknown order cancellation")
+    @PostMapping("/{id}/cancellation/reconcile")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    public ApiResponse<CancellationOperationResponse> reconcileCancellation(
+            @PathVariable UUID id, @Valid @RequestBody ReconcileCancellationRequest request) {
+        return ApiResponse.success(orderCancellationService.reconcile(id, request));
+    }
+
+    @Operation(summary = "Get the cancellation and reconciliation state for an order")
+    @GetMapping("/{id}/cancellation")
+    public ApiResponse<CancellationOperationResponse> getCancellation(@PathVariable UUID id) {
+        return ApiResponse.success(orderCancellationService.getByOrderId(id));
     }
 }

@@ -56,6 +56,8 @@ public enum AuditAction {
     ORDER_SHIPPED,
     ORDER_DELIVERED,
     ORDER_CANCELLED,
+    ORDER_CANCELLATION_REQUESTED,
+    ORDER_CANCELLATION_RECONCILED,
     ORDER_COMPLETED,
 
     // ─── Payment ─────────────────────────────────────────────────────────────

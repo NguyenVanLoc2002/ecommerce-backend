@@ -1089,9 +1089,32 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 ### POST `/api/v1/admin/orders/{id}/cancel`
 
 - Access: `ADMIN`, `SUPER_ADMIN`
-- Description: cancel order and release reservations
+- Description: create or return the durable order/shipment cancellation operation. The operation is idempotent per order and a repeated request never calls the provider again.
+- Request body:
+  - `CancelOrderRequest`: `reason` required, max 500
+- Provider outcomes:
+  - `CONFIRMED`: order becomes `CANCELLED`, shipment records the cancellation event, and reservations are released once
+  - `UNKNOWN` or `PENDING`: order remains active until an admin reconciles the provider outcome
+  - `REJECTED`: order remains active
+- A paid order is not automatically refunded. Delivered orders require a return/refund workflow. In-transit cancellation requires explicit carrier interception capability.
 - Response:
-  - `ApiResponse<OrderResponse>`
+  - `ApiResponse<CancellationOperationResponse>`
+
+### GET `/api/v1/admin/orders/{id}/cancellation`
+
+- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
+- Description: return the persisted cancellation operation or `null` if none exists
+- Response:
+  - `ApiResponse<CancellationOperationResponse>`
+
+### POST `/api/v1/admin/orders/{id}/cancellation/reconcile`
+
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: manually resolve a pending or unknown provider cancellation after verifying the carrier state
+- Request body:
+  - `ReconcileCancellationRequest`: `confirmed` and required `note` (max 500)
+- Response:
+  - `ApiResponse<CancellationOperationResponse>`
 
 ---
 
@@ -1399,12 +1422,12 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 
 ### POST `/api/v1/admin/shipments/{id}/provider/cancel`
 
-- Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
-- Description: cancel the provider shipment/order when the carrier still allows cancellation; records a shipment event and stores the provider status returned by the carrier flow
+- Access: `ADMIN`, `SUPER_ADMIN`
+- Description: requests cancellation of the order and shipment through the durable cancellation workflow; it does not retry an existing pending or unknown operation
 - Request body:
   - `CancelProviderShipmentRequest`
 - Response:
-  - `ApiResponse<ShipmentResponse>`
+  - `ApiResponse<CancellationOperationResponse>`
 
 ### POST `/api/v1/admin/shipments/{id}/booking/reconcile`
 

@@ -5,6 +5,7 @@ import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.shipment.dto.*;
 import com.locnguyen.ecommerce.domains.shipment.service.ShipmentService;
+import com.locnguyen.ecommerce.domains.shipment.service.OrderCancellationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class AdminShipmentController {
 
     private final ShipmentService shipmentService;
+    private final OrderCancellationService orderCancellationService;
 
     @Operation(
             summary = "Create a shipment for an order",
@@ -91,9 +93,12 @@ public class AdminShipmentController {
 
     @Operation(summary = "Cancel the provider shipment/order")
     @PostMapping("/{id}/provider/cancel")
-    public ApiResponse<ShipmentResponse> cancelProviderShipment(
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ApiResponse<CancellationOperationResponse> cancelProviderShipment(
             @PathVariable UUID id,
             @Valid @RequestBody CancelProviderShipmentRequest request) {
-        return ApiResponse.success(shipmentService.cancelProviderShipment(id, request));
+        CancelOrderRequest cancellation = new CancelOrderRequest();
+        cancellation.setReason(request.getReason());
+        return ApiResponse.success(orderCancellationService.cancelShipment(id, cancellation));
     }
 }
