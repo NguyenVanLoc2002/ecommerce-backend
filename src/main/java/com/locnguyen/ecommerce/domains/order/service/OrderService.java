@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.admin.dto.AdminOrderListItemResponse;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
 import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
+import com.locnguyen.ecommerce.domains.order.dto.CancellationOrderContext;
 import com.locnguyen.ecommerce.domains.order.dto.OrderAdminFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderListItemResponse;
@@ -40,4 +41,10 @@ public interface OrderService {
     OrderResponse processOrder(UUID orderId);
 
     OrderResponse deliverOrder(UUID orderId);
+
+    CancellationOrderContext getCancellationContext(UUID orderId);
+
+    CancellationOrderContext lockCancellationOrder(UUID orderId);
+
+    CancellationOrderContext finalizeCancellation(UUID orderId, String actor, String reason);
 }

@@ -1,0 +1,23 @@
+CREATE TABLE shipment_cancellation_operations (
+    id CHAR(36) NOT NULL,
+    order_id CHAR(36) NOT NULL,
+    shipment_id CHAR(36) NULL,
+    idempotency_key VARCHAR(36) NOT NULL,
+    reason VARCHAR(500) NOT NULL,
+    requested_by VARCHAR(100) NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    last_error_code VARCHAR(100) NULL,
+    completed_at DATETIME NULL,
+    version BIGINT NOT NULL DEFAULT 0,
+    created_at DATETIME(6) NOT NULL,
+    created_by VARCHAR(100) NULL,
+    updated_at DATETIME(6) NOT NULL,
+    updated_by VARCHAR(100) NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_cancellation_order UNIQUE (order_id),
+    CONSTRAINT uq_cancellation_shipment UNIQUE (shipment_id),
+    CONSTRAINT uq_cancellation_idempotency_key UNIQUE (idempotency_key),
+    CONSTRAINT fk_cancellation_order FOREIGN KEY (order_id) REFERENCES orders (id),
+    CONSTRAINT fk_cancellation_shipment FOREIGN KEY (shipment_id) REFERENCES shipments (id),
+    INDEX idx_cancellation_status_created (status, created_at)
+);

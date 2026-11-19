@@ -23,7 +23,7 @@ public class MockCarrierProvider implements CarrierProvider {
 
     @Override
     public CarrierProviderCapabilities capabilities() {
-        return new CarrierProviderCapabilities(true, false, true, true);
+        return new CarrierProviderCapabilities(true, false, true, false, true);
     }
 
     @Override

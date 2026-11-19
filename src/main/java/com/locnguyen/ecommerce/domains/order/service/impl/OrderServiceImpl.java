@@ -30,6 +30,7 @@ import com.locnguyen.ecommerce.domains.inventory.service.InventoryService;
 import com.locnguyen.ecommerce.domains.notification.enums.NotificationType;
 import com.locnguyen.ecommerce.domains.notification.service.NotificationService;
 import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
+import com.locnguyen.ecommerce.domains.order.dto.CancellationOrderContext;
 import com.locnguyen.ecommerce.domains.order.dto.OrderAdminFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderListItemResponse;
@@ -304,6 +305,43 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse cancelOrder(UUID orderId) {
         Order order = findForUpdateOrThrow(orderId);
         return doCancelOrder(order);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CancellationOrderContext getCancellationContext(UUID orderId) {
+        Order order = findOrThrow(orderId);
+        return cancellationContext(order);
+    }
+
+    @Override
+    @Transactional
+    public CancellationOrderContext lockCancellationOrder(UUID orderId) {
+        return cancellationContext(findForUpdateOrThrow(orderId));
+    }
+
+    @Override
+    @Transactional
+    public CancellationOrderContext finalizeCancellation(UUID orderId, String actor, String reason) {
+        Order order = findForUpdateOrThrow(orderId);
+        if (order.getStatus() == OrderStatus.DELIVERED || order.getStatus() == OrderStatus.COMPLETED
+                || order.getStatus() == OrderStatus.REFUNDED || order.getStatus() == OrderStatus.CANCELLED) {
+            throw new AppException(ErrorCode.ORDER_CANNOT_CANCEL,
+                    "Delivered or terminal orders require a return or refund workflow");
+        }
+        order.setStatus(OrderStatus.CANCELLED);
+        orderRepository.save(order);
+        inventoryService.releaseStock("ORDER", order.getOrderCode());
+        notificationService.send(order.getCustomer(), NotificationType.ORDER_CANCELLED,
+                "Order cancelled", "Your order " + order.getOrderCode() + " has been cancelled.",
+                order.getId(), "ORDER");
+        auditLogService.logWithActor(AuditAction.ORDER_CANCELLED, "ORDER", order.getOrderCode(), actor,
+                "Cancellation confirmed; reason=" + reason);
+        return cancellationContext(order);
+    }
+
+    private CancellationOrderContext cancellationContext(Order order) {
+        return new CancellationOrderContext(order.getId(), order.getOrderCode(), order.getStatus());
     }
 
     @Override
@@ -744,7 +782,8 @@ public class OrderServiceImpl implements OrderService {
 
     private String resolveOrderAttention(Order order, ShipmentListSummary shipment) {
         if (order.getPaymentStatus() == PaymentStatus.FAILED) return "PAYMENT_FAILED";
-        if (shipment != null && shipment.status() == ShipmentStatus.FAILED) return "DELIVERY_FAILED";
+        if (order.getStatus() != OrderStatus.CANCELLED && shipment != null
+                && shipment.status() == ShipmentStatus.FAILED) return "DELIVERY_FAILED";
         if (shipment != null && shipment.status() == ShipmentStatus.RETURNED) return "RETURNED_HANDLING";
         if (order.getStatus() == OrderStatus.DELIVERED) return "DELIVERED_AWAITING_COMPLETION";
         if ((order.getStatus() == OrderStatus.CONFIRMED || order.getStatus() == OrderStatus.PROCESSING)
