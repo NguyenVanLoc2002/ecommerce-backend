@@ -26,6 +26,11 @@ class OrderStatusTest {
         }
 
         @Test
+        void pending_can_go_to_confirmed_for_cod() {
+            assertThat(OrderStatus.PENDING.canTransitionTo(OrderStatus.CONFIRMED)).isTrue();
+        }
+
+        @Test
         void pending_can_be_cancelled() {
             assertThat(OrderStatus.PENDING.canTransitionTo(OrderStatus.CANCELLED)).isTrue();
         }
@@ -75,11 +80,6 @@ class OrderStatusTest {
 
     @Nested
     class InvalidTransitions {
-
-        @Test
-        void pending_cannot_go_directly_to_confirmed() {
-            assertThat(OrderStatus.PENDING.canTransitionTo(OrderStatus.CONFIRMED)).isFalse();
-        }
 
         @Test
         void pending_cannot_skip_to_shipped() {

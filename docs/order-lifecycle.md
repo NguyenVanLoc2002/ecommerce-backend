@@ -31,8 +31,8 @@ Dưới đây là bảng chuyển trạng thái hợp lệ:
 
 | Trạng thái hiện tại  | Trạng thái chuyển tiếp hợp lệ               | Ai thực hiện         |
 |----------------------|---------------------------------------------|----------------------|
-| **PENDING**          | AWAITING_PAYMENT, CANCELLED                 | System / Customer    |
-| **AWAITING_PAYMENT** | CONFIRMED, CANCELLED                        | System (webhook)     |
+| **PENDING**          | AWAITING_PAYMENT, CONFIRMED (COD), CANCELLED | System / Customer / Admin (COD confirmation only) |
+| **AWAITING_PAYMENT** | CONFIRMED, CANCELLED                        | Webhook / Admin (online payment paid) |
 | **CONFIRMED**        | PROCESSING, CANCELLED                       | Admin / Staff        |
 | **PROCESSING**       | SHIPPED                                     | Admin / Staff        |
 | **SHIPPED**          | DELIVERED                                   | Admin / Staff        |
@@ -83,7 +83,7 @@ Quy tắc này áp dụng cho mọi request backend có thể đưa đơn online
 ## 6. COD Payment Flow
 
 1. Customer chọn COD → tạo order `PENDING`
-2. Hệ thống confirm ngay → `CONFIRMED`
+2. Admin/Staff xác nhận đơn → `CONFIRMED` (payment vẫn `PENDING`)
 3. Staff đóng hàng → `PROCESSING`
 4. Giao hàng → `SHIPPED`
 5. Giao thành công → `DELIVERED`
@@ -94,10 +94,12 @@ Quy tắc này áp dụng cho mọi request backend có thể đưa đơn online
 
 ## 7. Online Payment Flow
 
-1. Customer checkout → tạo order `PENDING` + tạo payment `INITIATED`
-2. Chuyển hướng payment gateway → order `AWAITING_PAYMENT`
+1. Customer checkout online → tạo order `AWAITING_PAYMENT` + tạo payment `INITIATED`
+2. Chuyển hướng payment gateway
 3. Gateway callback success → payment `PAID` → order `CONFIRMED`
 4. Gateway callback fail / timeout → payment `FAILED` → order `CANCELLED`, release stock
+
+Admin chỉ xác nhận trực tiếp đơn COD `PENDING`. Đơn online phải ở `AWAITING_PAYMENT` và có `paymentStatus=PAID` mới được xác nhận; online chưa thanh toán không thể confirm hoặc fulfillment. Xác nhận đơn COD không đánh dấu payment thành `PAID`; thu tiền vẫn là thao tác riêng.
 
 ---
 

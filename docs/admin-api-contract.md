@@ -1053,9 +1053,9 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 - Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
 - Description: confirm order
 - Status transition note:
-  - `PENDING -> CONFIRMED`
-  - `AWAITING_PAYMENT -> CONFIRMED`
-  - online orders must already be paid
+  - COD: `PENDING -> CONFIRMED`; payment remains `PENDING` until explicit collection
+  - Online: `AWAITING_PAYMENT -> CONFIRMED` only when `paymentStatus=PAID`
+  - Online unpaid orders cannot be confirmed or fulfilled
 - Response:
   - `ApiResponse<OrderResponse>`
 
