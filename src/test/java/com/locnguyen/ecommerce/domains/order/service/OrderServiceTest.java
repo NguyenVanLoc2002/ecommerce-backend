@@ -931,18 +931,35 @@ class OrderServiceTest {
         }
 
         @Test
-        void throws_ORDER_STATUS_INVALID_when_COD_order_is_in_PENDING_state() {
-            // State machine: PENDING → {AWAITING_PAYMENT, CANCELLED}
-            // PENDING → CONFIRMED is NOT a valid transition; COD must go through AWAITING_PAYMENT first
+        void throws_ORDER_STATUS_INVALID_when_online_order_is_PENDING_even_if_paid() {
             Customer cust = customer(uuid(1));
-            Order order = savedOrder(uuid(1), cust, OrderStatus.PENDING, PaymentMethod.COD,
-                    new BigDecimal("100000"));
+            Order order = savedOrder(uuid(1), cust, OrderStatus.PENDING,
+                    PaymentMethod.ONLINE, new BigDecimal("100000"));
+            order.setPaymentStatus(PaymentStatus.PAID);
             when(orderRepository.findById(uuid(1))).thenReturn(Optional.of(order));
 
             assertThatThrownBy(() -> orderService.confirmOrder(uuid(1)))
                     .isInstanceOf(AppException.class)
                     .extracting(e -> ((AppException) e).getErrorCode())
                     .isEqualTo(ErrorCode.ORDER_STATUS_INVALID);
+            verify(orderRepository, never()).save(any());
+        }
+
+        @Test
+        void cod_PENDING_order_can_be_confirmed_without_marking_payment_paid() {
+            Customer cust = customer(uuid(1));
+            Order order = savedOrder(uuid(1), cust, OrderStatus.PENDING, PaymentMethod.COD,
+                    new BigDecimal("100000"));
+            when(orderRepository.findById(uuid(1))).thenReturn(Optional.of(order));
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(orderItemRepository.findByOrderIdOrderByCreatedAtAsc(any(UUID.class))).thenReturn(List.of());
+
+            orderService.confirmOrder(uuid(1));
+
+            ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+            verify(orderRepository).save(captor.capture());
+            assertThat(captor.getValue().getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+            assertThat(captor.getValue().getPaymentStatus()).isEqualTo(PaymentStatus.PENDING);
         }
 
         @Test
@@ -977,6 +994,23 @@ class OrderServiceTest {
             ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
             verify(orderRepository).save(captor.capture());
             assertThat(captor.getValue().getStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        }
+
+        @Test
+        void repeated_confirmation_rejects_stale_status_without_duplicate_save() {
+            Customer cust = customer(uuid(1));
+            Order order = savedOrder(uuid(1), cust, OrderStatus.PENDING, PaymentMethod.COD,
+                    new BigDecimal("100000"));
+            when(orderRepository.findById(uuid(1))).thenReturn(Optional.of(order));
+            when(orderItemRepository.findByOrderIdOrderByCreatedAtAsc(any(UUID.class))).thenReturn(List.of());
+
+            orderService.confirmOrder(uuid(1));
+
+            assertThatThrownBy(() -> orderService.confirmOrder(uuid(1)))
+                    .isInstanceOf(AppException.class)
+                    .extracting(e -> ((AppException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.ORDER_STATUS_INVALID);
+            verify(orderRepository, times(1)).save(any());
         }
     }
 

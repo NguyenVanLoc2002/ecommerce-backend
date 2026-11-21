@@ -275,6 +275,11 @@ public class OrderServiceImpl implements OrderService {
         OrderStatus current = order.getStatus();
         OrderStatus target = OrderStatus.CONFIRMED;
 
+        if (current == OrderStatus.PENDING && order.getPaymentMethod() != PaymentMethod.COD) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID,
+                    "Only COD orders can be confirmed directly from PENDING");
+        }
+
         if (!current.canTransitionTo(target)) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID,
                     "Cannot transition from " + current + " to " + target);

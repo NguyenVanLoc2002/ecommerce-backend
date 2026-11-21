@@ -11,7 +11,7 @@ import static com.locnguyen.ecommerce.domains.order.enums.OrderStatus.*;
  *
  * <p>Valid transitions:
  * <pre>
- *   PENDING          → AWAITING_PAYMENT, CANCELLED
+ *   PENDING          → AWAITING_PAYMENT, CONFIRMED (COD), CANCELLED
  *   AWAITING_PAYMENT → CONFIRMED, CANCELLED
  *   CONFIRMED        → PROCESSING, CANCELLED
  *   PROCESSING       → SHIPPED
@@ -33,7 +33,7 @@ public enum OrderStatus {
     REFUNDED;
 
     private static final Map<OrderStatus, Set<OrderStatus>> TRANSITIONS = Map.of(
-            PENDING,          EnumSet.of(AWAITING_PAYMENT, CANCELLED),
+            PENDING,          EnumSet.of(AWAITING_PAYMENT, CONFIRMED, CANCELLED),
             AWAITING_PAYMENT, EnumSet.of(CONFIRMED, CANCELLED),
             CONFIRMED,        EnumSet.of(PROCESSING, CANCELLED),
             PROCESSING,       EnumSet.of(SHIPPED),
