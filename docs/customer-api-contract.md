@@ -502,6 +502,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `id`, `orderCode`, `customerId`
   - `customerNameSnapshot`, `customerEmailSnapshot`, `customerSnapshotAvailable` (identity snapshot for the authenticated order owner; legacy orders may have null values)
   - `status`, `paymentMethod`, `paymentStatus`
+  - `paymentStatus` may be `PARTIALLY_REFUNDED` after a confirmed partial refund
   - `receiverName`, `receiverPhone`
   - `shippingStreet`, `shippingWard`, `shippingDistrict`, `shippingCity`, `shippingPostalCode`
   - `carrierId`, `carrierCode`, `carrierName`, `carrierProviderType`

@@ -19,6 +19,9 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID>,
 
     Optional<Payment> findByOrderId(UUID orderId);
 
+    @Query("SELECT p.order.id FROM Payment p WHERE p.id = :paymentId")
+    Optional<UUID> findOrderIdByPaymentId(@Param("paymentId") UUID paymentId);
+
     Optional<Payment> findByPaymentCode(String paymentCode);
 
     Optional<Payment> findByProviderOrderId(String providerOrderId);
@@ -35,6 +38,15 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID>,
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Payment p WHERE p.order.id = :orderId")
     Optional<Payment> findByOrderIdWithLock(@Param("orderId") UUID orderId);
+
+    /**
+     * Load a payment with a PESSIMISTIC_WRITE lock. Refund flows acquire the
+     * owning Order lock first, then this Payment lock, matching other payment
+     * mutations.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Payment p WHERE p.id = :paymentId")
+    Optional<Payment> findByIdWithLock(@Param("paymentId") UUID paymentId);
 
     /**
      * Find online payments that have passed their expiry deadline and are still

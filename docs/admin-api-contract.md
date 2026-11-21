@@ -992,6 +992,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `customerId`, `customerNameSnapshot`, `customerEmailSnapshot`, `customerSnapshotAvailable`
   - `customerName`, `customerEmail`, `currentCustomerProfileAvailable` (active profile summary only)
   - `status`, `paymentMethod`, `paymentStatus`
+  - `paymentStatus` may be `PARTIALLY_REFUNDED` after a confirmed partial refund
   - `shipmentStatus`, `carrier`, `trackingNumber`, `attention`, `attentionReason`
   - `totalItems`, `totalAmount`
   - `createdAt`
@@ -999,6 +1000,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `id`, `orderCode`, `customerId`, `customerNameSnapshot`, `customerEmailSnapshot`, `customerSnapshotAvailable`
   - `currentCustomerName`, `currentCustomerEmail`, `currentCustomerProfileAvailable` (Admin detail; profile values are null and availability false when profile is unavailable)
   - `status`, `paymentMethod`, `paymentStatus`
+  - `paymentStatus` may be `PARTIALLY_REFUNDED` after a confirmed partial refund
   - `receiverName`, `receiverPhone`
   - `shippingStreet`, `shippingWard`, `shippingDistrict`, `shippingCity`, `shippingPostalCode`
   - `carrierId`, `carrierCode`, `carrierName`, `carrierProviderType`
