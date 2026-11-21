@@ -1488,18 +1488,19 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `items`
   - `subTotal`, `discountAmount`, `shippingFee`, `totalAmount`, `voucherCode`
   - `createdAt`
+  - `status`: `ISSUED`, `PAID`, `PARTIALLY_REFUNDED`, `REFUNDED`, `VOIDED`
 - `InvoiceItemResponse`
   - `variantId`, `productName`, `variantName`, `sku`
   - `unitPrice`, `salePrice`, `effectivePrice`
   - `quantity`, `lineTotal`
 - `UpdateInvoiceStatusRequest`
-  - `status`: required
-  - `notes`: optional, max 1000
+  - `status`: `VOIDED` only; payment/refund statuses are set by confirmed settlement events
+  - `notes`: required void reason, max 1000
 
 ### POST `/api/v1/admin/invoices/order/{orderId}/generate`
 
 - Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
-- Description: generate invoice for an order
+- Description: generate an invoice for an order. The initial status reflects the current confirmed payment state.
 - Current HTTP status:
   - `201 Created`
 - Response:
@@ -1543,7 +1544,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 ### PATCH `/api/v1/admin/invoices/{id}/status`
 
 - Access: `STAFF`, `ADMIN`, `SUPER_ADMIN`
-- Description: update invoice status
+- Description: void an `ISSUED` invoice with a reason. `PAID`, refund, and `VOIDED` states are not manually writable.
 - Request body:
   - `UpdateInvoiceStatusRequest`
 - Response:

@@ -19,6 +19,7 @@ import com.locnguyen.ecommerce.domains.payment.repository.PaymentRefundRepositor
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentRepository;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentTransactionRepository;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentRefundService;
+import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +45,7 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
     private final OrderRepository orderRepository;
     private final PaymentRefundMapper refundMapper;
     private final EntityManager entityManager;
+    private final InvoiceService invoiceService;
 
     @Override
     @Transactional
@@ -155,6 +157,7 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
         }
         orderRepository.save(lockedOrder);
         paymentRepository.save(payment);
+        invoiceService.recordRefundByOrderId(orderId, completedAmount, payment.getAmount());
 
         PaymentTransaction txn = new PaymentTransaction();
         txn.setPayment(payment);

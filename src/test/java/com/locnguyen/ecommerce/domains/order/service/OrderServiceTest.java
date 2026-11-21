@@ -35,6 +35,7 @@ import com.locnguyen.ecommerce.domains.shipment.service.ShipmentService;
 import com.locnguyen.ecommerce.domains.shipment.service.ShipmentListSummary;
 import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import com.locnguyen.ecommerce.domains.order.service.impl.OrderServiceImpl;
+import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import com.locnguyen.ecommerce.domains.idempotency.entity.IdempotencyKey;
 import com.locnguyen.ecommerce.domains.idempotency.enums.IdempotencyStatus;
 import com.locnguyen.ecommerce.domains.idempotency.service.IdempotencyService;
@@ -104,6 +105,7 @@ class OrderServiceTest {
     @Mock ProductMediaRepository productMediaRepository;
     @Mock VoucherService voucherService;
     @Mock ShipmentService shipmentService;
+    @Mock InvoiceService invoiceService;
 
     @InjectMocks OrderServiceImpl orderService;
 
@@ -1067,6 +1069,8 @@ class OrderServiceTest {
 
             verify(orderRepository).save(argThat(o -> o.getStatus() == OrderStatus.CANCELLED));
             verify(inventoryService).releaseStock("ORDER", order.getOrderCode());
+            verify(invoiceService).voidByOrderId(uuid(1),
+                    "Invoice voided because order " + order.getOrderCode() + " was cancelled");
         }
 
         @Test

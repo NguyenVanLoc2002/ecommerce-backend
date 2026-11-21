@@ -18,6 +18,7 @@ import com.locnguyen.ecommerce.domains.payment.repository.PaymentTransactionRepo
 import jakarta.persistence.EntityManager;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.payment.service.impl.PaymentRefundServiceImpl;
+import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,6 +54,7 @@ class PaymentRefundServiceTest {
     @Mock OrderRepository orderRepository;
     @Mock PaymentRefundMapper refundMapper;
     @Mock EntityManager entityManager;
+    @Mock InvoiceService invoiceService;
 
     @InjectMocks PaymentRefundServiceImpl refundService;
 
@@ -220,6 +222,8 @@ class PaymentRefundServiceTest {
             assertThat(refund.getPayment().getOrder().getPaymentStatus())
                     .isEqualTo(com.locnguyen.ecommerce.domains.order.enums.PaymentStatus.REFUNDED);
             verify(orderRepository).save(refund.getPayment().getOrder());
+            verify(invoiceService).recordRefundByOrderId(
+                    uuid(20), new BigDecimal("200000"), new BigDecimal("200000"));
         }
     }
 

@@ -69,8 +69,7 @@ public class AdminInvoiceController {
 
     @Operation(
             summary = "Update invoice status",
-            description = "Allowed transitions from ISSUED: → PAID, → VOIDED. " +
-                    "PAID and VOIDED are terminal."
+            description = "Only ISSUED invoices can be manually voided with a reason. Payment and refund statuses are synchronized from confirmed events."
     )
     @PatchMapping("/{id}/status")
     public ApiResponse<InvoiceResponse> updateStatus(

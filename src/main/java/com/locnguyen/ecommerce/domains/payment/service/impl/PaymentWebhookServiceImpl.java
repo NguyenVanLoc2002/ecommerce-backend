@@ -23,6 +23,7 @@ import com.locnguyen.ecommerce.domains.payment.repository.PaymentRepository;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentTransactionRepository;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentWebhookLogRepository;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentWebhookService;
+import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,7 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
     private final PaymentRepository paymentRepository;
     private final PaymentTransactionRepository transactionRepository;
     private final PaymentMapper paymentMapper;
+    private final InvoiceService invoiceService;
 
     // ─── Public API ──────────────────────────────────────────────────────────
 
@@ -162,6 +164,7 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
         if (payment.getStatus() == PaymentRecordStatus.PAID) {
             log.warn("Webhook ignored — payment already PAID: code={}", payment.getPaymentCode());
             updateLog(webhookLog, WebhookLogStatus.IGNORED, "Payment already PAID");
+            invoiceService.markPaidByOrderId(order.getId());
             return paymentMapper.toResponse(payment);
         }
 
@@ -189,6 +192,7 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
         }
         payment = paymentRepository.save(payment);
         orderRepository.save(order);
+        if (success) invoiceService.markPaidByOrderId(order.getId());
 
         // Append immutable transaction record to the payment audit trail
         PaymentTransaction txn = new PaymentTransaction();

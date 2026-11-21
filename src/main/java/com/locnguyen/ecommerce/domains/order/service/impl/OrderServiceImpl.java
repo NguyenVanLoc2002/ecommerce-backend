@@ -46,6 +46,7 @@ import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.order.repository.OrderItemCountProjection;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
+import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import com.locnguyen.ecommerce.domains.shipment.service.ShipmentService;
 import com.locnguyen.ecommerce.domains.shipment.service.ShipmentListSummary;
@@ -95,6 +96,7 @@ public class OrderServiceImpl implements OrderService {
     private final ProductMediaRepository productMediaRepository;
     private final VoucherService voucherService;
     private final ShipmentService shipmentService;
+    private final InvoiceService invoiceService;
 
     private static final Set<String> ADMIN_ORDER_SORT_FIELDS = Set.of("orderCode", "status", "createdAt", "totalAmount");
 
@@ -336,6 +338,7 @@ public class OrderServiceImpl implements OrderService {
         }
         order.setStatus(OrderStatus.CANCELLED);
         orderRepository.save(order);
+        invoiceService.voidByOrderId(order.getId(), "Invoice voided because order " + order.getOrderCode() + " was cancelled: " + reason);
         inventoryService.releaseStock("ORDER", order.getOrderCode());
         notificationService.send(order.getCustomer(), NotificationType.ORDER_CANCELLED,
                 "Order cancelled", "Your order " + order.getOrderCode() + " has been cancelled.",
@@ -384,6 +387,7 @@ public class OrderServiceImpl implements OrderService {
 
         order.setStatus(target);
         order = orderRepository.save(order);
+        invoiceService.voidByOrderId(order.getId(), "Invoice voided because order " + order.getOrderCode() + " was cancelled");
 
         inventoryService.releaseStock("ORDER", order.getOrderCode());
 

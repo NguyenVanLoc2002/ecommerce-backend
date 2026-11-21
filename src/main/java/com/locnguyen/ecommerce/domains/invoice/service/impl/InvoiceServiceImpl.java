@@ -15,6 +15,7 @@ import com.locnguyen.ecommerce.domains.invoice.repository.InvoiceRepository;
 import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import com.locnguyen.ecommerce.domains.invoice.specification.InvoiceSpecification;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.user.entity.User;
@@ -25,6 +26,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Set;
 
@@ -78,7 +80,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         Invoice invoice = new Invoice();
         invoice.setOrder(order);
         invoice.setInvoiceCode(CodeGenerator.generateInvoiceCode());
-        invoice.setStatus(InvoiceStatus.ISSUED);
+        invoice.setStatus(statusForPayment(order.getPaymentStatus()));
         invoice.setIssuedAt(LocalDateTime.now());
 
         // Customer snapshot
@@ -126,9 +128,13 @@ public class InvoiceServiceImpl implements InvoiceService {
         }
 
         InvoiceStatus requested = request.getStatus();
-        if (requested != InvoiceStatus.PAID && requested != InvoiceStatus.VOIDED) {
+        if (requested != InvoiceStatus.VOIDED) {
             throw new AppException(ErrorCode.INVOICE_STATUS_INVALID,
-                    "Invoice can only be updated to PAID or VOIDED");
+                    "Invoice can only be voided manually; payment statuses are synchronized from confirmed payment events");
+        }
+        if (request.getNotes() == null || request.getNotes().isBlank()) {
+            throw new AppException(ErrorCode.INVOICE_STATUS_INVALID,
+                    "A reason is required when voiding an invoice");
         }
 
         invoice.setStatus(requested);
@@ -199,6 +205,50 @@ public class InvoiceServiceImpl implements InvoiceService {
                 log.info("Invoice auto-marked as PAID: code={}", invoice.getInvoiceCode());
             }
         });
+    }
+
+    @Override
+    @Transactional
+    public void recordRefundByOrderId(UUID orderId, BigDecimal refundedAmount, BigDecimal paymentAmount) {
+        invoiceRepository.findByOrderId(orderId).ifPresent(invoice -> {
+            if (invoice.getStatus() == InvoiceStatus.VOIDED) {
+                return;
+            }
+            InvoiceStatus refundedStatus = refundedAmount.compareTo(paymentAmount) >= 0
+                    ? InvoiceStatus.REFUNDED : InvoiceStatus.PARTIALLY_REFUNDED;
+            if (invoice.getStatus() != refundedStatus) {
+                invoice.setStatus(refundedStatus);
+                invoiceRepository.save(invoice);
+            }
+        });
+    }
+
+    @Override
+    @Transactional
+    public void voidByOrderId(UUID orderId, String reason) {
+        invoiceRepository.findByOrderId(orderId).ifPresent(invoice -> {
+            if (invoice.getStatus() == InvoiceStatus.ISSUED) {
+                invoice.setStatus(InvoiceStatus.VOIDED);
+                invoice.setNotes(appendNote(invoice.getNotes(), reason));
+                invoiceRepository.save(invoice);
+            }
+        });
+    }
+
+    private InvoiceStatus statusForPayment(PaymentStatus status) {
+        if (status == null) return InvoiceStatus.ISSUED;
+        return switch (status) {
+            case PAID -> InvoiceStatus.PAID;
+            case PARTIALLY_REFUNDED -> InvoiceStatus.PARTIALLY_REFUNDED;
+            case REFUNDED -> InvoiceStatus.REFUNDED;
+            default -> InvoiceStatus.ISSUED;
+        };
+    }
+
+    private String appendNote(String current, String addition) {
+        if (current == null || current.isBlank()) return addition;
+        if (current.length() + addition.length() + 1 > 1000) return current;
+        return current + "\n" + addition;
     }
 
     // ─── Internal helpers ─────────────────────────────────────────────────────
