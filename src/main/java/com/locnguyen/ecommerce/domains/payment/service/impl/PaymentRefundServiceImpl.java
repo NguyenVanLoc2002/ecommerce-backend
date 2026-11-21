@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.utils.CodeGenerator;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
+import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.payment.dto.RefundRequest;
 import com.locnguyen.ecommerce.domains.payment.dto.RefundResponse;
@@ -18,6 +19,8 @@ import com.locnguyen.ecommerce.domains.payment.repository.PaymentRefundRepositor
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentRepository;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentTransactionRepository;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentRefundService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -40,12 +43,18 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
     private final PaymentTransactionRepository transactionRepository;
     private final OrderRepository orderRepository;
     private final PaymentRefundMapper refundMapper;
+    private final EntityManager entityManager;
 
     @Override
     @Transactional
     public RefundResponse initiateRefund(UUID paymentId, RefundRequest request) {
-        Payment payment = paymentRepository.findById(paymentId)
+        UUID orderId = paymentRepository.findOrderIdByPaymentId(paymentId)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        Order lockedOrder = orderRepository.findByIdWithLock(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        Payment payment = paymentRepository.findByIdWithLock(paymentId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        payment.setOrder(lockedOrder);
 
         if (payment.getStatus() != PaymentRecordStatus.PAID
                 && payment.getStatus() != PaymentRecordStatus.PARTIALLY_REFUNDED) {
@@ -54,17 +63,17 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
                             + payment.getStatus());
         }
 
-        // Sum existing COMPLETED refunds to guard against over-refunding
-        List<PaymentRefund> existingRefunds = refundRepository.findByPaymentIdOrderByCreatedAtDesc(paymentId);
-        BigDecimal alreadyRefunded = existingRefunds.stream()
-                .filter(r -> r.getStatus() == RefundStatus.COMPLETED)
+        // Pending and processing refunds reserve their amount against concurrent requests.
+        List<PaymentRefund> reservingRefunds = refundRepository.findByPaymentIdAndStatusIn(
+                paymentId, List.of(RefundStatus.COMPLETED, RefundStatus.PENDING, RefundStatus.PROCESSING));
+        BigDecimal reservedAmount = reservingRefunds.stream()
                 .map(PaymentRefund::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        if (alreadyRefunded.add(request.amount()).compareTo(payment.getAmount()) > 0) {
+        if (reservedAmount.add(request.amount()).compareTo(payment.getAmount()) > 0) {
             throw new AppException(ErrorCode.PAYMENT_REFUND_AMOUNT_EXCEEDED,
                     "Refund of " + request.amount() + " would exceed the remaining refundable amount of "
-                            + payment.getAmount().subtract(alreadyRefunded));
+                            + payment.getAmount().subtract(reservedAmount));
         }
 
         PaymentRefund refund = new PaymentRefund();
@@ -77,27 +86,16 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
         refund.setRequestedBy(resolveRequestedBy());
         refund = refundRepository.save(refund);
 
-        // Update payment status based on whether this refund covers the full amount
-        BigDecimal totalRefunded = alreadyRefunded.add(request.amount());
-        if (totalRefunded.compareTo(payment.getAmount()) == 0) {
-            payment.setStatus(PaymentRecordStatus.REFUNDED);
-            payment.getOrder().setPaymentStatus(PaymentStatus.REFUNDED);
-            orderRepository.save(payment.getOrder());
-        } else {
-            payment.setStatus(PaymentRecordStatus.PARTIALLY_REFUNDED);
-        }
-        paymentRepository.save(payment);
-
-        // Record as an immutable transaction entry
+        // Initiation is only a request; record it as pending without changing settled payment state.
         PaymentTransaction txn = new PaymentTransaction();
         txn.setPayment(payment);
         txn.setTransactionCode(CodeGenerator.generatePaymentTransactionCode());
-        txn.setStatus(TransactionStatus.REFUNDED);
+        txn.setStatus(TransactionStatus.INITIATED);
         txn.setAmount(request.amount());
         txn.setMethod(payment.getMethod());
         txn.setReferenceType("REFUND");
         txn.setReferenceId(refund.getRefundCode());
-        txn.setNote("Refund initiated: " + refund.getRefundCode());
+        txn.setNote("Refund requested: " + refund.getRefundCode());
         transactionRepository.save(txn);
 
         log.info("Refund initiated: refundCode={} paymentCode={} amount={} requestedBy={}",
@@ -110,6 +108,18 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
     @Transactional
     public RefundResponse completeRefund(String refundCode, String providerRefundId) {
         PaymentRefund refund = refundRepository.findByRefundCode(refundCode)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_REFUND_NOT_FOUND));
+
+        UUID paymentId = refund.getPayment().getId();
+        UUID orderId = paymentRepository.findOrderIdByPaymentId(paymentId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        Order lockedOrder = orderRepository.findByIdWithLock(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        Payment payment = paymentRepository.findByIdWithLock(paymentId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        payment.setOrder(lockedOrder);
+        entityManager.refresh(refund, LockModeType.PESSIMISTIC_WRITE);
+        refund = refundRepository.findByRefundCode(refundCode)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_REFUND_NOT_FOUND));
 
         // Idempotent: already completed
@@ -127,6 +137,36 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
         refund.setProviderRefundId(providerRefundId);
         refund.setRefundedAt(LocalDateTime.now());
         refund = refundRepository.save(refund);
+
+        List<PaymentRefund> completedRefunds = refundRepository.findByPaymentIdAndStatusIn(
+                payment.getId(), List.of(RefundStatus.COMPLETED));
+        BigDecimal completedAmount = completedRefunds.stream()
+                .map(PaymentRefund::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (completedAmount.compareTo(payment.getAmount()) >= 0) {
+            payment.setStatus(PaymentRecordStatus.REFUNDED);
+            lockedOrder.setPaymentStatus(PaymentStatus.REFUNDED);
+        } else if (completedAmount.signum() > 0) {
+            payment.setStatus(PaymentRecordStatus.PARTIALLY_REFUNDED);
+            lockedOrder.setPaymentStatus(PaymentStatus.PARTIALLY_REFUNDED);
+        } else {
+            payment.setStatus(PaymentRecordStatus.PAID);
+            lockedOrder.setPaymentStatus(PaymentStatus.PAID);
+        }
+        orderRepository.save(lockedOrder);
+        paymentRepository.save(payment);
+
+        PaymentTransaction txn = new PaymentTransaction();
+        txn.setPayment(payment);
+        txn.setTransactionCode(CodeGenerator.generatePaymentTransactionCode());
+        txn.setStatus(TransactionStatus.REFUNDED);
+        txn.setAmount(refund.getAmount());
+        txn.setMethod(payment.getMethod());
+        txn.setReferenceType("REFUND");
+        txn.setReferenceId(refund.getRefundCode());
+        txn.setProviderTxnId(providerRefundId);
+        txn.setNote("Refund confirmed: " + refund.getRefundCode());
+        transactionRepository.save(txn);
 
         log.info("Refund completed: refundCode={} providerRefundId={}", refundCode, providerRefundId);
         return refundMapper.toResponse(refund);

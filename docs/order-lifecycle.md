@@ -108,9 +108,9 @@ Admin chỉ xác nhận trực tiếp đơn COD `PENDING`. Đơn online phải �
 1. Customer yêu cầu trả hàng → order `RETURN_REQUESTED`
 2. Admin duyệt → `RETURNING` (gửi hướng dẫn trả hàng cho customer)
 3. Nhận hàng trả về → `RETURNED`
-4. Xử lý hoàn tiền → `REFUNDED`, tạo `Refund` record
+4. Tạo yêu cầu hoàn tiền → refund `PENDING`; chỉ sau xác nhận chuyển tiền mới cập nhật payment summary.
 
-**Partial refund**: Có thể refund một phần nếu chỉ trả một số item. Lúc đó `Refund.refund_amount` < `Payment.paid_amount`.
+**Partial refund**: Khi đã xác nhận hoàn một phần, payment và order payment summary là `PARTIALLY_REFUNDED`; khi xác nhận hoàn đủ mới là `REFUNDED`. Refund đang chờ vẫn giữ chỗ số dư nhưng không được tính là tiền đã hoàn.
 
 ---
 

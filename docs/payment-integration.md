@@ -361,6 +361,13 @@ POST /api/v1/webhooks/payment/PAYPAL
 | `POST` | `/api/v1/webhooks/payment/PAYPAL` | None (public) | PayPal webhook. Returns 200. |
 | `POST` | `/api/v1/webhooks/payment/{provider}` | None (public) | Generic provider webhook (VNPay, ZaloPay, etc.). Returns 204. |
 
+### Refund settlement
+
+- Initiating a refund creates a `PENDING` refund and an `INITIATED` audit transaction. It reserves refundable balance but does not change Payment or Order payment status.
+- `PENDING` and `PROCESSING` refund amounts count against the remaining refundable balance. Refund requests serialize by Order and Payment, and read the current refund rows under a database lock.
+- Admin completion is allowed only after transfer confirmation. Completion records a `REFUNDED` transaction and derives Payment and Order payment status from confirmed refunds: `PAID`, `PARTIALLY_REFUNDED`, or `REFUNDED`.
+- Repeating completion for an already completed refund is idempotent. Failed or pending provider outcomes must remain uncompleted.
+
 ---
 
 ## 7. Security Mechanisms
