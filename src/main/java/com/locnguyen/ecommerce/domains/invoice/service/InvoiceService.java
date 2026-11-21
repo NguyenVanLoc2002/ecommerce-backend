@@ -7,6 +7,7 @@ import com.locnguyen.ecommerce.domains.invoice.dto.InvoiceResponse;
 import com.locnguyen.ecommerce.domains.invoice.dto.UpdateInvoiceStatusRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public interface InvoiceService {
@@ -26,4 +27,8 @@ public interface InvoiceService {
     InvoiceResponse getInvoiceForCustomer(UUID orderId, Customer customer);
 
     void markPaidByOrderId(UUID orderId);
+
+    void recordRefundByOrderId(UUID orderId, BigDecimal refundedAmount, BigDecimal paymentAmount);
+
+    void voidByOrderId(UUID orderId, String reason);
 }

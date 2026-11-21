@@ -22,6 +22,7 @@ import com.locnguyen.ecommerce.domains.payment.provider.PaymentProviderCreateRes
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentRepository;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentTransactionRepository;
 import com.locnguyen.ecommerce.domains.payment.service.impl.PaymentServiceImpl;
+import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import com.locnguyen.ecommerce.domains.idempotency.entity.IdempotencyKey;
 import com.locnguyen.ecommerce.domains.idempotency.enums.IdempotencyStatus;
 import com.locnguyen.ecommerce.domains.idempotency.service.IdempotencyService;
@@ -68,6 +69,7 @@ class PaymentServiceTest {
     @Mock IdempotencyService idempotencyService;
     @Mock PaymentProviderRegistry providerRegistry;
     @Mock PaymentProperties paymentProperties;
+    @Mock InvoiceService invoiceService;
 
     @InjectMocks PaymentServiceImpl paymentService;
 
@@ -220,6 +222,7 @@ class PaymentServiceTest {
             // Order must also be updated
             verify(orderRepository).save(argThat(order ->
                     order.getPaymentStatus() == PaymentStatus.PAID));
+            verify(invoiceService).markPaidByOrderId(uuid(1));
         }
 
         @Test
@@ -557,6 +560,7 @@ class PaymentServiceTest {
                              && saved.getPaidAt() != null));
             verify(orderRepository).save(argThat(
                     saved -> saved.getPaymentStatus() == PaymentStatus.PAID));
+            verify(invoiceService).markPaidByOrderId(uuid(1));
         }
 
         @Test

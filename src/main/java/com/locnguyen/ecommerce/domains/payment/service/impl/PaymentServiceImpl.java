@@ -31,6 +31,7 @@ import com.locnguyen.ecommerce.domains.payment.repository.PaymentRepository;
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentTransactionRepository;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import com.locnguyen.ecommerce.domains.payment.specification.PaymentSpecification;
+import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -54,6 +55,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final IdempotencyService idempotencyService;
     private final PaymentProviderRegistry providerRegistry;
     private final PaymentProperties paymentProperties;
+    private final InvoiceService invoiceService;
 
     // ─── COD payment ────────────────────────────────────────────────────────
 
@@ -89,7 +91,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
-     * Mark a COD payment as paid — admin calls this on delivery confirmation.
+     * Mark a COD payment as paid after explicit collection confirmation.
      *
      * <p>Idempotent: if the payment is already PAID, returns the existing record silently.
      * Throws {@code PAYMENT_ALREADY_PROCESSED} for non-PENDING statuses (e.g., REFUNDED).
@@ -108,6 +110,7 @@ public class PaymentServiceImpl implements PaymentService {
         // Idempotent: already paid → return silently
         if (payment.getStatus() == PaymentRecordStatus.PAID) {
             log.warn("COD payment already marked as paid: code={}", payment.getPaymentCode());
+            invoiceService.markPaidByOrderId(orderId);
             return paymentMapper.toResponse(payment);
         }
 
@@ -124,6 +127,7 @@ public class PaymentServiceImpl implements PaymentService {
         order.setPaymentStatus(PaymentStatus.PAID);
         order.setPaidAt(LocalDateTime.now());
         orderRepository.save(order);
+        invoiceService.markPaidByOrderId(orderId);
 
         recordTransaction(payment, TransactionStatus.SUCCESS,
                 PaymentMethod.COD, null, null,
@@ -223,6 +227,7 @@ public class PaymentServiceImpl implements PaymentService {
         // Idempotent: already PAID
         if (payment.getStatus() == PaymentRecordStatus.PAID) {
             log.info("Capture skipped — payment already PAID: code={}", payment.getPaymentCode());
+            invoiceService.markPaidByOrderId(orderId);
             return paymentMapper.toResponse(payment);
         }
 
@@ -265,6 +270,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         payment = paymentRepository.save(payment);
         orderRepository.save(order);
+        if (success) invoiceService.markPaidByOrderId(orderId);
 
         PaymentTransaction txn = new PaymentTransaction();
         txn.setPayment(payment);
@@ -448,6 +454,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (payment.getStatus() == PaymentRecordStatus.PAID) {
             log.warn("Gateway callback ignored — payment already PAID: code={}",
                     payment.getPaymentCode());
+            invoiceService.markPaidByOrderId(order.getId());
             return paymentMapper.toResponse(payment);
         }
 
@@ -481,6 +488,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         payment = paymentRepository.save(payment);
         orderRepository.save(order);
+        if (success) invoiceService.markPaidByOrderId(order.getId());
 
         // Record the callback as a transaction entry (immutable audit)
         PaymentTransaction txn = new PaymentTransaction();

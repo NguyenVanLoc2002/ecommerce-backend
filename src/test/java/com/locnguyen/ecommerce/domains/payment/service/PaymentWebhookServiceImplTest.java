@@ -20,6 +20,7 @@ import com.locnguyen.ecommerce.domains.payment.repository.PaymentTransactionRepo
 import com.locnguyen.ecommerce.domains.payment.repository.PaymentWebhookLogRepository;
 import com.locnguyen.ecommerce.domains.payment.service.impl.PaymentWebhookLogPersister;
 import com.locnguyen.ecommerce.domains.payment.service.impl.PaymentWebhookServiceImpl;
+import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -46,6 +47,7 @@ class PaymentWebhookServiceImplTest {
     @Mock PaymentRepository paymentRepository;
     @Mock PaymentTransactionRepository transactionRepository;
     @Mock PaymentMapper paymentMapper;
+    @Mock InvoiceService invoiceService;
     @Mock PaymentProvider paymentProvider;
 
     @InjectMocks PaymentWebhookServiceImpl paymentWebhookService;

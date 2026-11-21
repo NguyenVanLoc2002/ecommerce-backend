@@ -796,6 +796,9 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 
 - Access: authenticated customer flow
 - Description: get invoice for an owned order
+- Returns `INVOICE_NOT_FOUND` when the owned order has no issued invoice yet.
+- Invoice `status` values: `ISSUED`, `PAID`, `PARTIALLY_REFUNDED`, `REFUNDED`, `VOIDED`.
+- This endpoint returns invoice data for a browser print view; it does not generate a PDF download.
 - Response:
   - `ApiResponse<InvoiceResponse>`
 
