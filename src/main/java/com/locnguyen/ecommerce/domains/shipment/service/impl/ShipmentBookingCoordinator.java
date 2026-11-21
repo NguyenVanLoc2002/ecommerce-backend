@@ -144,7 +144,9 @@ public class ShipmentBookingCoordinator {
             shipment.setBookingStatus(BookingAttemptStatus.INTERNAL_ONLY);
             shipmentRepository.save(shipment);
             recordEvent(shipment, "Manual shipment created. Fulfillment is managed internally.");
-            transitionOrderStatus(order);
+            auditLogService.logWithActor(AuditAction.SHIPMENT_CREATED, "SHIPMENT", shipment.getId().toString(),
+                    SecurityUtils.getCurrentUsernameOrSystem(), "source=MANUAL; status=PENDING");
+
             return new PreparedBooking(shipment.getId(), null, null, null, null, shipment);
         }
 
@@ -181,7 +183,7 @@ public class ShipmentBookingCoordinator {
         shipmentRepository.save(shipment);
         attemptRepository.save(attempt);
         recordEvent(shipment, "Carrier booking confirmed.");
-        transitionOrderStatus(shipment.getOrder());
+
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -245,16 +247,6 @@ public class ShipmentBookingCoordinator {
     private void ensureOnlinePaymentReceived(Order order) {
         if (order.getPaymentMethod() == PaymentMethod.ONLINE && order.getPaymentStatus() != PaymentStatus.PAID) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID, "Cannot create shipment for online order: payment not received");
-        }
-    }
-
-    private void transitionOrderStatus(Order order) {
-        if (order.getPaymentMethod() == PaymentMethod.ONLINE && order.getPaymentStatus() != PaymentStatus.PAID) {
-            throw new AppException(ErrorCode.ORDER_STATUS_INVALID, "Cannot fulfill online order: payment not received");
-        }
-        if (order.getStatus().canTransitionTo(OrderStatus.SHIPPED)) {
-            order.setStatus(OrderStatus.SHIPPED);
-            orderRepository.save(order);
         }
     }
 

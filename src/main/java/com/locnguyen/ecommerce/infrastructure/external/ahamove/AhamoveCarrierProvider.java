@@ -91,9 +91,9 @@ public class AhamoveCarrierProvider implements CarrierProvider {
                 payload,
                 trackingUrl,
                 status,
-                buildDescription(payload, status),
-                extractLocation(payload, status),
-                extractEventTime(payload, status));
+                status != null ? buildDescription(payload, status) : "Unknown carrier status; reconciliation required",
+                status != null ? extractLocation(payload, status) : null,
+                status != null ? extractEventTime(payload, status) : LocalDateTime.now());
     }
 
     @Override
@@ -109,10 +109,11 @@ public class AhamoveCarrierProvider implements CarrierProvider {
             case "COMPLETING" -> ShipmentStatus.OUT_FOR_DELIVERY;
             case "COMPLETED" -> ShipmentStatus.DELIVERED;
             case "CANCELLED", "FAILED" -> ShipmentStatus.FAILED;
-            case "RETURNED", "IN_RETURN" -> ShipmentStatus.RETURNED;
+            case "RETURNED" -> ShipmentStatus.RETURNED;
+            case "IN_RETURN" -> ShipmentStatus.FAILED;
             default -> {
                 log.warn("Unknown AhaMove status received: status={}", carrierStatus);
-                yield ShipmentStatus.PENDING;
+                yield null;
             }
         };
     }
@@ -126,7 +127,8 @@ public class AhamoveCarrierProvider implements CarrierProvider {
             String subStatus = normalizeStatus(payload.getSubStatus());
             AhamovePathPointSelection selection = selectDropoffPath(payload.getPath());
             String pathStatus = selection.point() != null ? normalizeStatus(selection.point().getStatus()) : null;
-            if ("RETURNED".equals(subStatus) || "IN_RETURN".equals(subStatus)) {
+            if ("IN_RETURN".equals(subStatus)) return ShipmentStatus.FAILED;
+            if ("RETURNED".equals(subStatus)) {
                 return ShipmentStatus.RETURNED;
             }
             if ("FAILED".equals(pathStatus)) {

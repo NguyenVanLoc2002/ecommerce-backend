@@ -914,3 +914,11 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - Description: mark all notifications as read
 - Response:
   - `ApiResponse<Void>`
+
+
+### Shipment milestone reconciliation (Issue #67)
+
+See [carrier lifecycle and exception contract](carrier-integration-flow.md#shipment-milestone-reconciliation-issue-67).
+Shipment responses add nullable `attention` (DELIVERY_FAILED, CARRIER_CANCELLED,
+RETURNED_HANDLING), available to Admin and the owning Customer. Booking does not
+mark the order SHIPPED; pickup does. COD collection remains a separate action.

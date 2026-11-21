@@ -66,13 +66,14 @@ public class AhamoveWebhookService {
         String eventType = trimToNull(payload.getStatus()) != null ? payload.getStatus() : "UNKNOWN";
         String eventKey = buildEventKey(payload, providerOrderId, trackingNumber);
 
-        if (carrierWebhookLogRepository.existsByEventKey(eventKey)) {
+        CarrierWebhookLog existing = carrierWebhookLogRepository.findByEventKey(eventKey).orElse(null);
+        if (existing != null && existing.isProcessed()) {
             log.info("Skipping duplicate AhaMove webhook: providerOrderId={} eventType={}",
                     providerOrderId, eventType);
             return;
         }
 
-        CarrierWebhookLog webhookLog = carrierWebhookLogPersister.createInitialLog(
+        CarrierWebhookLog webhookLog = existing != null ? existing : carrierWebhookLogPersister.createInitialLog(
                 carrier.getCode(), providerOrderId, trackingNumber, eventType, eventKey,
                 sanitizePayload(rawBody), sanitizeHeaders(headers));
         webhookLog.setSignatureValid(true);
@@ -99,8 +100,10 @@ public class AhamoveWebhookService {
 
             if (!isKnownStatus(payload)) {
                 webhookLog.setErrorMessage("Unknown provider status: " + payload.getStatus());
+                log.warn("AhaMove status requires reconciliation: shipmentId={} eventKey={}", shipment.getId(), eventKey);
             }
-            webhookLog.setProcessed(true);
+            webhookLog.setProcessed(mappedStatus != null);
+            if (mappedStatus != null) webhookLog.setErrorMessage(null);
             webhookLog.setProcessedAt(LocalDateTime.now());
             carrierWebhookLogRepository.save(webhookLog);
         } catch (AppException ex) {
@@ -239,7 +242,11 @@ public class AhamoveWebhookService {
                 || status.equals("IN_PROCESS")
                 || status.equals("COMPLETED")
                 || status.equals("CANCELLED")
-                || status.equals("FAILED");
+                || status.equals("FAILED")
+                || status.equals("BOARDED")
+                || status.equals("COMPLETING")
+                || status.equals("IN_RETURN")
+                || status.equals("RETURNED");
     }
 
     private String extractTrackingNumber(AhamoveOrderPayload payload) {

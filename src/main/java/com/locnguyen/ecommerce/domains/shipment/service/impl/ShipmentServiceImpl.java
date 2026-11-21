@@ -34,6 +34,9 @@ import com.locnguyen.ecommerce.domains.shipment.service.ShipmentService;
 import com.locnguyen.ecommerce.domains.shipment.service.ShipmentListSummary;
 import com.locnguyen.ecommerce.domains.shipment.service.ShipmentProviderUpdate;
 import com.locnguyen.ecommerce.domains.shipment.specification.ShipmentSpecification;
+import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
+import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
+import com.locnguyen.ecommerce.common.utils.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -57,6 +60,7 @@ public class ShipmentServiceImpl implements ShipmentService {
     private final CarrierConfigRepository carrierConfigRepository;
     private final CarrierProviderRegistry carrierProviderRegistry;
     private final ShipmentBookingCoordinator bookingCoordinator;
+    private final AuditLogService auditLogService;
 
     @Override
     @Transactional(readOnly = true)
@@ -224,6 +228,12 @@ public class ShipmentServiceImpl implements ShipmentService {
                 ? request.getEventTime()
                 : LocalDateTime.now();
 
+        alignOrderMilestone(order, request.getStatus());
+        auditLogService.logWithActor(
+                AuditAction.SHIPMENT_STATUS_UPDATED,
+                "SHIPMENT", shipmentId.toString(),
+                SecurityUtils.getCurrentUsernameOrSystem(),
+                "source=MANUAL; previous=" + previousStatus + "; status=" + request.getStatus());
         if (request.getStatus() == ShipmentStatus.DELIVERED) {
             shipment.setDeliveredAt(eventTime);
             transitionOrderStatus(order, OrderStatus.DELIVERED);
@@ -308,7 +318,9 @@ public class ShipmentServiceImpl implements ShipmentService {
         Order order = orderRepository.findByIdWithLock(shipment.getOrder().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
-        if (update.providerStatus() != null && !update.providerStatus().isBlank()) {
+        if (update.providerStatus() != null && !update.providerStatus().isBlank()
+                && (update.status() == null || shipment.getStatus() == update.status()
+                || shouldTransition(shipment, update.status()))) {
             shipment.setProviderStatus(update.providerStatus().trim());
         }
         if (update.trackingNumber() != null && !update.trackingNumber().isBlank()) {
@@ -328,6 +340,7 @@ public class ShipmentServiceImpl implements ShipmentService {
         }
         if (nextStatus != null && shouldTransition(shipment, nextStatus)) {
             shipment.setStatus(nextStatus);
+            alignOrderMilestone(order, nextStatus);
             if (nextStatus == ShipmentStatus.DELIVERED) {
                 shipment.setDeliveredAt(eventTime);
                 transitionOrderStatus(order, OrderStatus.DELIVERED);
@@ -339,7 +352,8 @@ public class ShipmentServiceImpl implements ShipmentService {
 
         shipmentRepository.save(shipment);
 
-        if (nextStatus != null && description != null) {
+        if (nextStatus != null) {
+            if (description == null) description = "Carrier status: " + nextStatus;
             recordEventIfAbsent(shipment, nextStatus, location, description, eventTime);
         }
 
@@ -372,6 +386,13 @@ public class ShipmentServiceImpl implements ShipmentService {
             return null;
         }
         return recordEvent(shipment, status, location, description, eventTime);
+    }
+
+    private void alignOrderMilestone(Order order, ShipmentStatus status) {
+        if (status == ShipmentStatus.IN_TRANSIT || status == ShipmentStatus.OUT_FOR_DELIVERY
+                || status == ShipmentStatus.DELIVERED) {
+            if (order.getStatus() == OrderStatus.PROCESSING) transitionOrderStatus(order, OrderStatus.SHIPPED);
+        }
     }
 
     private void transitionOrderStatus(Order order, OrderStatus target) {
@@ -415,7 +436,14 @@ public class ShipmentServiceImpl implements ShipmentService {
         if (shipment.getStatus() == nextStatus) {
             return false;
         }
-        return shipment.getStatus().canTransitionTo(nextStatus);
+        if (shipment.getStatus().isTerminal()) return false;
+        if (nextStatus == ShipmentStatus.RETURNED) return true;
+        if (shipment.getStatus() == ShipmentStatus.FAILED) return false;
+        return shipment.getStatus().canTransitionTo(nextStatus)
+                || (List.of(ShipmentStatus.PENDING, ShipmentStatus.PICKING, ShipmentStatus.IN_TRANSIT,
+                        ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.DELIVERED).indexOf(nextStatus)
+                        > List.of(ShipmentStatus.PENDING, ShipmentStatus.PICKING, ShipmentStatus.IN_TRANSIT,
+                        ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.DELIVERED).indexOf(shipment.getStatus()));
     }
 
     private CarrierProviderContext resolveProviderContext(Shipment shipment) {

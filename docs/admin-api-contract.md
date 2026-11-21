@@ -2161,3 +2161,11 @@ is intentionally outside the surface of this module.
 - Response:
   - `ApiResponse<Void>` with `data = null`
 
+
+
+### Shipment milestone reconciliation (Issue #67)
+
+See [carrier lifecycle and exception contract](carrier-integration-flow.md#shipment-milestone-reconciliation-issue-67).
+Shipment responses add nullable `attention` (DELIVERY_FAILED, CARRIER_CANCELLED,
+RETURNED_HANDLING), available to Admin and the owning Customer. Booking does not
+mark the order SHIPPED; pickup does. COD collection remains a separate action.

@@ -211,3 +211,11 @@ These actions are idempotent via the **state machine** — sending the same stat
 - Sử dụng Event-driven architecture (Kafka)
 - Áp dụng Saga pattern cho payment + inventory
 - Tự động gửi thông báo theo từng bước chuyển trạng thái
+
+
+### Shipment milestone reconciliation (Issue #67)
+
+See [carrier lifecycle and exception contract](carrier-integration-flow.md#shipment-milestone-reconciliation-issue-67).
+Shipment responses add nullable `attention` (DELIVERY_FAILED, CARRIER_CANCELLED,
+RETURNED_HANDLING), available to Admin and the owning Customer. Booking does not
+mark the order SHIPPED; pickup does. COD collection remains a separate action.

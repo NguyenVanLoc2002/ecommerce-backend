@@ -45,6 +45,7 @@ class ShipmentBookingFlowTest {
     @Mock private CarrierProviderRegistry providerRegistry;
     @Mock private ShipmentBookingCoordinator bookingCoordinator;
     @Mock private CarrierProvider provider;
+    @Mock private com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService auditLogService;
 
     private ShipmentServiceImpl service;
     private final UUID shipmentId = UUID.randomUUID();
@@ -56,10 +57,58 @@ class ShipmentBookingFlowTest {
     private final CreateShipmentRequest request = new CreateShipmentRequest();
     private final ShipmentResponse response = ShipmentResponse.builder().id(shipmentId).build();
 
+    @Test
+    void providerMilestones_skipMissingScansWithoutRegressingOrCollectingCod() {
+        org.springframework.test.util.ReflectionTestUtils.setField(order, "id", UUID.randomUUID());
+        order.setStatus(com.locnguyen.ecommerce.domains.order.enums.OrderStatus.PROCESSING);
+        order.setPaymentMethod(com.locnguyen.ecommerce.domains.order.enums.PaymentMethod.COD);
+        order.setPaymentStatus(com.locnguyen.ecommerce.domains.order.enums.PaymentStatus.PENDING);
+        shipment.setStatus(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.PENDING);
+        when(shipmentRepository.findById(any())).thenReturn(java.util.Optional.of(shipment));
+        when(orderRepository.findByIdWithLock(any())).thenReturn(java.util.Optional.of(order));
+        service.applyProviderUpdate(ShipmentProviderUpdate.builder().shipmentId(shipmentId)
+                .status(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.IN_TRANSIT).build());
+        assertThat(order.getStatus()).isEqualTo(com.locnguyen.ecommerce.domains.order.enums.OrderStatus.SHIPPED);
+        service.applyProviderUpdate(ShipmentProviderUpdate.builder().shipmentId(shipmentId)
+                .status(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.PICKING).build());
+        assertThat(shipment.getStatus()).isEqualTo(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.IN_TRANSIT);
+        service.applyProviderUpdate(ShipmentProviderUpdate.builder().shipmentId(shipmentId)
+                .status(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.DELIVERED).build());
+        assertThat(order.getStatus()).isEqualTo(com.locnguyen.ecommerce.domains.order.enums.OrderStatus.DELIVERED);
+        assertThat(order.getPaymentStatus()).isEqualTo(com.locnguyen.ecommerce.domains.order.enums.PaymentStatus.PENDING);
+    }
+
+    @Test
+    void manualPickup_advancesOrderAndAuditsSource() {
+        org.springframework.test.util.ReflectionTestUtils.setField(order, "id", UUID.randomUUID());
+        order.setStatus(com.locnguyen.ecommerce.domains.order.enums.OrderStatus.PROCESSING);
+        shipment.setStatus(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.PICKING);
+        when(shipmentRepository.findById(any())).thenReturn(java.util.Optional.of(shipment));
+        when(orderRepository.findByIdWithLock(any())).thenReturn(java.util.Optional.of(order));
+        var update = new com.locnguyen.ecommerce.domains.shipment.dto.UpdateShipmentStatusRequest();
+        update.setStatus(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.IN_TRANSIT);
+        service.updateStatus(shipmentId, update);
+        assertThat(order.getStatus()).isEqualTo(com.locnguyen.ecommerce.domains.order.enums.OrderStatus.SHIPPED);
+        verify(auditLogService).logWithActor(
+                org.mockito.ArgumentMatchers.eq(com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction.SHIPMENT_STATUS_UPDATED),
+                org.mockito.ArgumentMatchers.eq("SHIPMENT"), org.mockito.ArgumentMatchers.eq(shipmentId.toString()),
+                any(), org.mockito.ArgumentMatchers.contains("source=MANUAL"));
+    }
+
+    @Test
+    void exceptionAttention_distinguishesCancellationAndPhysicalReturn() {
+        assertThat(ShipmentResponse.builder()
+                .status(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.FAILED)
+                .providerStatus("CANCELLED").build().getAttention()).isEqualTo("CARRIER_CANCELLED");
+        assertThat(ShipmentResponse.builder()
+                .status(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.RETURNED)
+                .build().getAttention()).isEqualTo("RETURNED_HANDLING");
+    }
+
     @BeforeEach
     void setUp() {
         service = new ShipmentServiceImpl(shipmentRepository, eventRepository, orderRepository, shipmentMapper,
-                carrierConfigRepository, providerRegistry, bookingCoordinator);
+                carrierConfigRepository, providerRegistry, bookingCoordinator, auditLogService);
         shipment.setOrder(order);
     }
 

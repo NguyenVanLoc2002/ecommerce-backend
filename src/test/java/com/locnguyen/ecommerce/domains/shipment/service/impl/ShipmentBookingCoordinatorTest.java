@@ -98,6 +98,34 @@ class ShipmentBookingCoordinatorTest {
         lenient().when(carrierConfigRepository.findByCarrierId(carrierId)).thenReturn(Optional.of(config));
     }
 
+    @Test
+    void prepare_manualShipmentRemainsProcessingAndRecordsActorSource() {
+        request.setCarrierId(null);
+        request.setCarrier("Local carrier");
+        var prepared = coordinator.prepare(request);
+        assertThat(prepared.attemptId()).isNull();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PROCESSING);
+        verify(auditLogService).logWithActor(
+                org.mockito.ArgumentMatchers.eq(com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction.SHIPMENT_CREATED),
+                org.mockito.ArgumentMatchers.eq("SHIPMENT"), any(), any(),
+                org.mockito.ArgumentMatchers.contains("source=MANUAL"));
+    }
+
+    @Test
+    void complete_bookingDoesNotMarkOrderShipped() {
+        var prepared = coordinator.prepare(request);
+        ShipmentBookingAttempt attempt = new ShipmentBookingAttempt();
+        attempt.setShipment(prepared.shipment());
+        attempt.setStatus(BookingAttemptStatus.PENDING);
+        when(attemptRepository.findById(prepared.attemptId())).thenReturn(Optional.of(attempt));
+        coordinator.complete(prepared.attemptId(),
+                com.locnguyen.ecommerce.domains.carrier.provider.ShippingOrderResult.builder()
+                        .carrierShipmentId("carrier-booked").build());
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PROCESSING);
+        assertThat(prepared.shipment().getStatus()).isEqualTo(
+                com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.PENDING);
+    }
+
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
