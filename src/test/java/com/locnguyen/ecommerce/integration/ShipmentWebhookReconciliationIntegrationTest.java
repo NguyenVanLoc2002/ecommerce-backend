@@ -14,6 +14,7 @@ import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
 import com.locnguyen.ecommerce.domains.shipment.entity.CarrierWebhookLog;
 import com.locnguyen.ecommerce.domains.shipment.entity.Shipment;
 import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
@@ -83,6 +84,7 @@ class ShipmentWebhookReconciliationIntegrationTest {
     @Autowired private CarrierWebhookLogRepository logRepository;
     @Autowired private ShipmentService shipmentService;
     @Autowired private AhamoveWebhookService webhookService;
+    @MockBean private OrderHoldService orderHoldService;
     @MockBean private AhamoveConfigResolver configResolver;
 
     @BeforeEach
@@ -219,12 +221,16 @@ class ShipmentWebhookReconciliationIntegrationTest {
         assertThat(response.getStatus()).isEqualTo(ShipmentStatus.FAILED);
         assertThat(response.getProviderStatus()).isEqualTo("CANCELLED");
         assertThat(response.getAttention()).isEqualTo("CARRIER_CANCELLED");
+        Customer owner = orderRepository.findAdminByIdWithCurrentCustomer(shipment.getOrder().getId())
+                .orElseThrow().getCustomer();
         var customerResponse = shipmentService.getShipmentForCustomer(
-                shipment.getOrder().getId(), shipment.getOrder().getCustomer());
+                shipment.getOrder().getId(), owner);
         assertThat(customerResponse.getAttention()).isEqualTo("CARRIER_CANCELLED");
         Shipment foreignShipment = createShipment(PaymentMethod.COD, PaymentStatus.PENDING);
+        Customer foreignCustomer = orderRepository.findAdminByIdWithCurrentCustomer(
+                foreignShipment.getOrder().getId()).orElseThrow().getCustomer();
         assertThatThrownBy(() -> shipmentService.getShipmentForCustomer(
-                shipment.getOrder().getId(), foreignShipment.getOrder().getCustomer()))
+                shipment.getOrder().getId(), foreignCustomer))
                 .isInstanceOf(AppException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.ORDER_NOT_FOUND);
         assertThat(eventRepository.findByShipmentIdOrderByEventTimeAsc(shipment.getId())).hasSize(2);

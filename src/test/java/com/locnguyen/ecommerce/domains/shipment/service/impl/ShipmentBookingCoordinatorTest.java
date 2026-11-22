@@ -14,6 +14,7 @@ import com.locnguyen.ecommerce.domains.carrier.repository.CarrierRepository;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
 import com.locnguyen.ecommerce.domains.shipment.dto.CreateShipmentRequest;
 import com.locnguyen.ecommerce.domains.shipment.entity.Shipment;
 import com.locnguyen.ecommerce.domains.shipment.entity.ShipmentBookingAttempt;
@@ -54,6 +55,7 @@ class ShipmentBookingCoordinatorTest {
     @Mock private ShipmentEventRepository shipmentEventRepository;
     @Mock private ShipmentBookingAttemptRepository attemptRepository;
     @Mock private OrderRepository orderRepository;
+    @Mock private OrderHoldService orderHoldService;
     @Mock private CarrierRepository carrierRepository;
     @Mock private CarrierConfigRepository carrierConfigRepository;
     @Mock private CarrierProviderRegistry providerRegistry;

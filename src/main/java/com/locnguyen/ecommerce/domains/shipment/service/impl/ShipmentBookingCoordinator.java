@@ -20,6 +20,7 @@ import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
 import com.locnguyen.ecommerce.domains.shipment.dto.CreateShipmentRequest;
 import com.locnguyen.ecommerce.domains.shipment.entity.Shipment;
 import com.locnguyen.ecommerce.domains.shipment.entity.ShipmentBookingAttempt;
@@ -53,6 +54,7 @@ public class ShipmentBookingCoordinator {
     private final ShipmentEventRepository shipmentEventRepository;
     private final ShipmentBookingAttemptRepository attemptRepository;
     private final OrderRepository orderRepository;
+    private final OrderHoldService orderHoldService;
     private final CarrierRepository carrierRepository;
     private final CarrierConfigRepository carrierConfigRepository;
     private final CarrierProviderRegistry providerRegistry;
@@ -248,6 +250,7 @@ public class ShipmentBookingCoordinator {
         if (order.getPaymentMethod() == PaymentMethod.ONLINE && order.getPaymentStatus() != PaymentStatus.PAID) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID, "Cannot create shipment for online order: payment not received");
         }
+        orderHoldService.requireFulfillmentHold(order);
     }
 
     private void recordEvent(Shipment shipment, String description) {

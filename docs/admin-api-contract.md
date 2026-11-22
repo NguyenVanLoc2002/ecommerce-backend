@@ -1030,7 +1030,7 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
   - `ApiResponse<PagedResponse<AdminOrderListItemResponse>>`
   - Snapshot fields describe checkout time. `customerName` and `customerEmail` describe the current active profile only; they are null when it is soft-deleted. Legacy orders return `customerSnapshotAvailable: false` and null snapshot values. The list keeps deleted customers' order history visible and does not call the Customer API per row.
   - Shipment summaries and item totals are loaded in page-sized batch queries; no per-order endpoint calls are required.
-  - `attention` is derived from existing payment/order/shipment state and may be `PAYMENT_FAILED`, `READY_TO_SHIP`, `DELIVERY_FAILED`, `RETURNED_HANDLING`, or `DELIVERED_AWAITING_COMPLETION`. `attentionReason` is a display explanation. These fields do not persist or mutate order state.
+  - `attention` is derived from existing payment/order/shipment state and may be `REFUND_REQUIRED`, `PAYMENT_FAILED`, `READY_TO_SHIP`, `DELIVERY_FAILED`, `RETURNED_HANDLING`, or `DELIVERED_AWAITING_COMPLETION`. `REFUND_REQUIRED` means a cancelled order has received payment and Admin must reconcile and refund it manually. `attentionReason` is a display explanation. These fields do not persist or mutate order state.
   - `trackingNumber` and carrier details are available to STAFF, ADMIN, and SUPER_ADMIN through this existing admin-only endpoint; no additional customer PII is included.
 
 ### GET `/api/v1/admin/orders/{id}`

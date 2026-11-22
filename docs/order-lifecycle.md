@@ -152,11 +152,25 @@ Service phải đảm bảo **3 thao tác** nằm trong cùng một transaction:
 
 ## 12. Order expiry / Auto-cancel
 
-Đơn hàng `AWAITING_PAYMENT` không thanh toán sau X phút (ví dụ: 30 phút) phải tự động:
-- chuyển về `CANCELLED`
-- release inventory reservation
+Đơn online `AWAITING_PAYMENT` giữ hàng tối đa **30 phút** kể từ khi checkout tạo reservation.
+Đơn COD `PENDING` có **24 giờ** để Admin xác nhận. Hết thời hạn chờ tương ứng,
+job hủy đơn chưa thanh toán/chưa xác nhận, chuyển payment chưa thu sang `CANCELLED`
+và release toàn bộ reservation trong
+cùng giao dịch theo từng Order. Callback, webhook và job cùng khóa Order trước
+khi đổi Payment hoặc reservation.
 
-Thực hiện qua Scheduled Job hoặc Redis TTL + event.
+Thanh toán online được xác nhận trước hạn giữ nguyên reservation cho fulfillment;
+thời hạn checkout không còn áp dụng sau đó. Đơn COD được xác nhận cũng giữ nguyên
+reservation, không tự nhả theo thời hạn chờ Admin. Mọi đường fulfillment phải
+kiểm tra đủ reservation trước khi tiến hành.
+
+Nếu tiền đến sau hạn hoặc sau khi đơn bị hủy, ghi Payment `PAID` cùng giao dịch
+`LATE_SUCCESS_AFTER_CANCEL`, giữ Order `CANCELLED` và báo Admin đối soát, hoàn tiền
+thủ công. Không tự mở lại đơn hoặc tự giữ hàng. Hoàn tiền tự động cần một quy trình
+riêng sau khi cổng thanh toán và nghiệp vụ đối soát hỗ trợ.
+
+Scheduled job quét định kỳ; tại biên 30 phút, callback kiểm tra trực tiếp
+reservation để không phụ thuộc độ trễ của job.
 
 ---
 

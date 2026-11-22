@@ -7,7 +7,6 @@ import com.locnguyen.ecommerce.domains.inventory.dto.InventoryFilter;
 import com.locnguyen.ecommerce.domains.inventory.dto.InventoryListItemResponse;
 import com.locnguyen.ecommerce.domains.inventory.entity.Inventory;
 import com.locnguyen.ecommerce.domains.inventory.entity.InventoryReservation;
-import com.locnguyen.ecommerce.domains.inventory.entity.StockMovement;
 import com.locnguyen.ecommerce.domains.inventory.entity.Warehouse;
 import com.locnguyen.ecommerce.domains.inventory.enums.ReservationStatus;
 import com.locnguyen.ecommerce.domains.inventory.enums.StockMovementType;
@@ -21,7 +20,6 @@ import com.locnguyen.ecommerce.domains.productvariant.repository.ProductVariantR
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -31,6 +29,7 @@ import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -391,12 +390,13 @@ class InventoryServiceTest {
     class CompleteOrder {
 
         @Test
-        void no_op_when_no_pending_reservations() {
+        void rejects_completion_without_pending_reservations() {
             when(reservationRepository.findByReferenceTypeAndReferenceIdAndStatus(
                     "ORDER", "ORD202604060001", ReservationStatus.PENDING))
                     .thenReturn(List.of());
 
-            inventoryService.completeOrder("ORDER", "ORD202604060001");
+            assertThatThrownBy(() -> inventoryService.completeOrder("ORDER", "ORD202604060001"))
+                    .isInstanceOf(AppException.class);
 
             verify(inventoryRepository, never()).decreaseOnHandAndReserved(any(UUID.class), anyInt());
         }
@@ -578,16 +578,18 @@ class InventoryServiceTest {
 
             InventoryReservation r1 = pendingReservation(uuid(1), v1, w, 3);
             InventoryReservation r2 = pendingReservation(uuid(2), v2, w, 2);
+            r1.setReferenceType("MANUAL");
+            r2.setReferenceType("MANUAL");
 
             when(reservationRepository.findExpiredReservations(any()))
                     .thenReturn(List.of(r1, r2));
 
             // For each releaseStockForVariant call, stub the inner reservation lookup
             when(reservationRepository.findByReferenceTypeAndReferenceIdAndVariantIdAndStatus(
-                    eq("ORDER"), eq("ORD202604060001"), eq(uuid(1)), eq(ReservationStatus.PENDING)))
+                    eq("MANUAL"), eq("ORD202604060001"), eq(uuid(1)), eq(ReservationStatus.PENDING)))
                     .thenReturn(Optional.of(r1));
             when(reservationRepository.findByReferenceTypeAndReferenceIdAndVariantIdAndStatus(
-                    eq("ORDER"), eq("ORD202604060001"), eq(uuid(2)), eq(ReservationStatus.PENDING)))
+                    eq("MANUAL"), eq("ORD202604060001"), eq(uuid(2)), eq(ReservationStatus.PENDING)))
                     .thenReturn(Optional.of(r2));
 
             Inventory inv1 = inventory(uuid(10), v1, w, 10, 3);
@@ -611,5 +613,17 @@ class InventoryServiceTest {
             assertThat(released).isEqualTo(2);
         }
     }
-}
 
+    @Test
+    void orderHoldRequiresEveryLineEvenWhenStockIsReservedForAnotherOrder() {
+        ProductVariant first = variant(uuid(1));
+        ProductVariant second = variant(uuid(2));
+        Warehouse warehouse = warehouse(uuid(1));
+        InventoryReservation own = pendingReservation(uuid(1), first, warehouse, 1);
+        when(reservationRepository.findByReferenceTypeAndReferenceIdAndStatus(
+                "ORDER", "ORD202604060001", ReservationStatus.PENDING)).thenReturn(List.of(own));
+
+        assertThat(inventoryService.hasCompleteOrderHold("ORD202604060001",
+                Map.of(uuid(1), 1, uuid(2), 1), LocalDateTime.now())).isFalse();
+    }
+}

@@ -16,6 +16,7 @@ import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
 import com.locnguyen.ecommerce.domains.payment.dto.*;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
 import com.locnguyen.ecommerce.domains.payment.entity.PaymentTransaction;
@@ -51,6 +52,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentRepository paymentRepository;
     private final PaymentTransactionRepository transactionRepository;
     private final OrderRepository orderRepository;
+    private final OrderHoldService orderHoldService;
     private final PaymentMapper paymentMapper;
     private final IdempotencyService idempotencyService;
     private final PaymentProviderRegistry providerRegistry;
@@ -106,6 +108,10 @@ public class PaymentServiceImpl implements PaymentService {
         if (payment.getMethod() != PaymentMethod.COD) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Only COD payments can be completed manually");
         }
+        if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.REFUNDED) {
+            throw new AppException(ErrorCode.PAYMENT_ALREADY_PROCESSED, "Cannot collect COD for a cancelled order");
+        }
+        if (order.getStatus() == OrderStatus.PENDING) orderHoldService.requireFulfillmentHold(order);
 
         // Idempotent: already paid → return silently
         if (payment.getStatus() == PaymentRecordStatus.PAID) {
@@ -219,6 +225,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.PAYMENT_ALREADY_PROCESSED,
                     "Cannot capture payment for a cancelled or refunded order");
         }
+        orderHoldService.requireFulfillmentHold(order);
 
         // Acquire row-level lock to serialize concurrent capture attempts
         Payment payment = paymentRepository.findByOrderIdWithLock(order.getId())
@@ -258,6 +265,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         boolean success = captureResult.isSuccess();
 
+        boolean lateSuccess = success && !orderHoldService.acceptOnlineSuccess(order);
         if (success) {
             payment.setStatus(PaymentRecordStatus.PAID);
             payment.setPaidAt(LocalDateTime.now());
@@ -270,7 +278,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         payment = paymentRepository.save(payment);
         orderRepository.save(order);
-        if (success) invoiceService.markPaidByOrderId(orderId);
+        if (success && !lateSuccess) invoiceService.markPaidByOrderId(orderId);
 
         PaymentTransaction txn = new PaymentTransaction();
         txn.setPayment(payment);
@@ -280,10 +288,11 @@ public class PaymentServiceImpl implements PaymentService {
         txn.setMethod(PaymentMethod.ONLINE);
         txn.setProvider(PaymentProviderType.fromValue(providerName));
         txn.setProviderTxnId(captureResult.getProviderTxnId());
-        txn.setReferenceType("CAPTURE");
+        txn.setReferenceType(lateSuccess ? "LATE_SUCCESS_AFTER_CANCEL" : "CAPTURE");
         txn.setReferenceId(order.getOrderCode());
-        txn.setNote(success
-                ? "Payment captured successfully"
+        txn.setNote(lateSuccess
+                ? "Payment captured after hold expiry; Admin refund required"
+                : success ? "Payment captured successfully"
                 : "Payment capture failed: " + captureResult.getStatus());
         transactionRepository.save(txn);
 
@@ -296,7 +305,7 @@ public class PaymentServiceImpl implements PaymentService {
     private PaymentResponse executeInitiateOnlinePayment(UUID orderId, Customer customer,
                                                          InitPaymentRequest request,
                                                          IdempotencyKey idem) {
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdWithLock(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
         // Ownership check — don't reveal the order exists to other customers
@@ -308,6 +317,11 @@ public class PaymentServiceImpl implements PaymentService {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Order payment method is not ONLINE");
         }
+        if (order.getStatus() != OrderStatus.AWAITING_PAYMENT) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID, "Order is no longer awaiting payment");
+        }
+        orderHoldService.requireFulfillmentHold(order);
+        LocalDateTime holdExpiry = orderHoldService.getCheckoutExpiry(order);
 
         Payment resultPayment;
 
@@ -328,7 +342,7 @@ public class PaymentServiceImpl implements PaymentService {
                 case FAILED -> {
                     // Allow retry — reset to INITIATED and append a new transaction
                     existing.setStatus(PaymentRecordStatus.INITIATED);
-                    existing.setExpiredAt(LocalDateTime.now().plusHours(24));
+                    existing.setExpiredAt(holdExpiry);
                     existing = paymentRepository.save(existing);
 
                     log.info("Online payment re-initiated after FAILED: code={}",
@@ -346,7 +360,7 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setMethod(PaymentMethod.ONLINE);
             payment.setStatus(PaymentRecordStatus.INITIATED);
             payment.setAmount(order.getTotalAmount());
-            payment.setExpiredAt(LocalDateTime.now().plusHours(24));
+            payment.setExpiredAt(holdExpiry);
 
             payment = paymentRepository.save(payment);
 
@@ -474,7 +488,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         boolean success = "SUCCESS".equalsIgnoreCase(request.getStatus());
-        boolean lateSuccessAfterCancellation = success && order.getStatus() == OrderStatus.CANCELLED;
+        boolean lateSuccessAfterCancellation = success && !orderHoldService.acceptOnlineSuccess(order);
 
         if (success) {
             payment.setStatus(PaymentRecordStatus.PAID);
@@ -488,7 +502,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         payment = paymentRepository.save(payment);
         orderRepository.save(order);
-        if (success) invoiceService.markPaidByOrderId(order.getId());
+        if (success && !lateSuccessAfterCancellation) invoiceService.markPaidByOrderId(order.getId());
 
         // Record the callback as a transaction entry (immutable audit)
         PaymentTransaction txn = new PaymentTransaction();
@@ -507,7 +521,7 @@ public class PaymentServiceImpl implements PaymentService {
         txn.setReferenceId(request.getOrderCode());
         txn.setPayload(request.getPayload());
         txn.setNote(lateSuccessAfterCancellation
-                ? "Payment received after order cancellation; reconciliation required"
+                ? "Payment received after cancellation or hold expiry; reconciliation required; Admin refund required"
                 : success ? "Payment confirmed by gateway" : "Payment rejected by gateway");
         transactionRepository.save(txn);
 

@@ -8,6 +8,8 @@ import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
+import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.payment.dto.InitPaymentRequest;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentCallbackRequest;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentResponse;
@@ -65,6 +67,7 @@ class PaymentServiceTest {
     @Mock PaymentRepository paymentRepository;
     @Mock PaymentTransactionRepository transactionRepository;
     @Mock OrderRepository orderRepository;
+    @Mock OrderHoldService orderHoldService;
     @Mock PaymentMapper paymentMapper;
     @Mock IdempotencyService idempotencyService;
     @Mock PaymentProviderRegistry providerRegistry;
@@ -75,6 +78,10 @@ class PaymentServiceTest {
 
     @BeforeEach
     void stubIdempotency() {
+        lenient().when(orderHoldService.acceptOnlineSuccess(any(Order.class)))
+                .thenAnswer(invocation -> ((Order) invocation.getArgument(0)).getStatus() != OrderStatus.CANCELLED);
+        lenient().when(orderHoldService.getCheckoutExpiry(any(Order.class)))
+                .thenReturn(java.time.LocalDateTime.now().plusMinutes(30));
         lenient().when(orderRepository.findByIdWithLock(any()))
                 .thenAnswer(invocation -> orderRepository.findById(invocation.getArgument(0)));
         lenient().when(orderRepository.findByOrderCodeWithLock(anyString()))
@@ -104,6 +111,7 @@ class PaymentServiceTest {
         o.setCustomer(customer);
         o.setOrderCode("ORD202604060001");
         o.setPaymentMethod(method);
+        o.setStatus(method == PaymentMethod.ONLINE ? OrderStatus.AWAITING_PAYMENT : OrderStatus.PENDING);
         o.setPaymentStatus(PaymentStatus.PENDING);
         o.setTotalAmount(total);
         return o;

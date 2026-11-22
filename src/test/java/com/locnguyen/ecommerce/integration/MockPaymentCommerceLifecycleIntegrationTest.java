@@ -11,6 +11,10 @@ import com.locnguyen.ecommerce.domains.customer.repository.CustomerRepository;
 import com.locnguyen.ecommerce.domains.inventory.entity.Inventory;
 import com.locnguyen.ecommerce.domains.inventory.entity.Warehouse;
 import com.locnguyen.ecommerce.domains.inventory.repository.InventoryRepository;
+import com.locnguyen.ecommerce.domains.inventory.repository.InventoryReservationRepository;
+import com.locnguyen.ecommerce.domains.inventory.service.InventoryScheduler;
+import com.locnguyen.ecommerce.domains.inventory.service.InventoryService;
+import com.locnguyen.ecommerce.domains.inventory.dto.ReserveStockRequest;
 import com.locnguyen.ecommerce.domains.inventory.repository.WarehouseRepository;
 import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
 import com.locnguyen.ecommerce.domains.order.dto.OrderFilter;
@@ -49,6 +53,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -88,6 +93,9 @@ class MockPaymentCommerceLifecycleIntegrationTest {
     @Autowired private ProductVariantRepository productVariantRepository;
     @Autowired private WarehouseRepository warehouseRepository;
     @Autowired private InventoryRepository inventoryRepository;
+    @Autowired private InventoryReservationRepository reservationRepository;
+    @Autowired private InventoryScheduler inventoryScheduler;
+    @Autowired private InventoryService inventoryService;
     @Autowired private CartRepository cartRepository;
     @Autowired private PaymentRepository paymentRepository;
     @Autowired private PaymentTransactionRepository paymentTransactionRepository;
@@ -177,16 +185,112 @@ class MockPaymentCommerceLifecycleIntegrationTest {
                 .hasSize(1);
     }
 
+    @Test
+    void expiredUnpaidOrderReleasesStockAndLateSuccessRequiresRefund() {
+        CommerceFixture fixture = createFixture();
+        addProductToCart(fixture);
+        OrderResponse order = checkout(fixture);
+        initiateMockPayment(order, fixture);
+        var reservation = reservationRepository.findExpiredReservations(LocalDateTime.now().plusYears(1)).stream()
+                .filter(row -> order.getOrderCode().equals(row.getReferenceId()))
+                .findFirst().orElseThrow();
+        reservation.setExpiresAt(LocalDateTime.now().minusSeconds(1));
+        reservationRepository.saveAndFlush(reservation);
+
+        inventoryScheduler.releaseExpiredReservations();
+        inventoryScheduler.releaseExpiredReservations();
+        entityManager.clear();
+        assertThat(orderService.getOrderById(order.getId(), fixture.customer()).getStatus())
+                .isEqualTo(OrderStatus.CANCELLED);
+        assertThat(paymentRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentRecordStatus.CANCELLED);
+        assertInventory(fixture.inventoryId(), INITIAL_ON_HAND, 0);
+
+        Inventory stock = inventoryRepository.findById(fixture.inventoryId()).orElseThrow();
+        ReserveStockRequest anotherOrder = new ReserveStockRequest();
+        anotherOrder.setVariantId(fixture.variantId());
+        anotherOrder.setWarehouseId(stock.getWarehouse().getId());
+        anotherOrder.setQuantity(INITIAL_ON_HAND);
+        anotherOrder.setReferenceType("ORDER");
+        anotherOrder.setReferenceId("OTHER-ORDER-" + UUID.randomUUID());
+        inventoryService.reserveStock(anotherOrder);
+
+        PaymentCallbackRequest callback = new PaymentCallbackRequest();
+        callback.setOrderCode(order.getOrderCode());
+        callback.setStatus("SUCCESS");
+        callback.setProvider("VNPAY");
+        callback.setProviderTxnId("LATE-" + UUID.randomUUID());
+        paymentService.processCallback(callback);
+
+        entityManager.clear();
+        assertThat(orderService.getOrderById(order.getId(), fixture.customer()).getStatus())
+                .isEqualTo(OrderStatus.CANCELLED);
+        assertThat(paymentRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentRecordStatus.PAID);
+        assertThat(paymentTransactionRepository.findByPaymentIdOrderByCreatedAtDesc(
+                paymentRepository.findByOrderId(order.getId()).orElseThrow().getId()))
+                .anySatisfy(transaction -> assertThat(transaction.getReferenceType())
+                        .isEqualTo("LATE_SUCCESS_AFTER_CANCEL"));
+        assertInventory(fixture.inventoryId(), INITIAL_ON_HAND, INITIAL_ON_HAND);
+    }
+
+    @Test
+    void concurrentExpiryAndCallbackNeverFulfillWithoutStock() throws Exception {
+        CommerceFixture fixture = createFixture();
+        addProductToCart(fixture);
+        OrderResponse order = checkout(fixture);
+        initiateMockPayment(order, fixture);
+        var reservation = reservationRepository.findExpiredReservations(LocalDateTime.now().plusYears(1)).stream()
+                .filter(row -> order.getOrderCode().equals(row.getReferenceId()))
+                .findFirst().orElseThrow();
+        reservation.setExpiresAt(LocalDateTime.now().minusSeconds(1));
+        reservationRepository.saveAndFlush(reservation);
+
+        PaymentCallbackRequest callback = new PaymentCallbackRequest();
+        callback.setOrderCode(order.getOrderCode());
+        callback.setStatus("SUCCESS");
+        callback.setProvider("VNPAY");
+        callback.setProviderTxnId("EXPIRY-RACE-" + UUID.randomUUID());
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        CompletableFuture<Void> expiry = CompletableFuture.runAsync(() -> {
+            ready.countDown();
+            awaitStart(start);
+            inventoryScheduler.releaseExpiredReservations();
+        });
+        CompletableFuture<Void> success = CompletableFuture.runAsync(() -> runCallback(ready, start, callback));
+        ready.await();
+        start.countDown();
+        CompletableFuture.allOf(expiry, success).join();
+
+        entityManager.clear();
+        OrderResponse current = orderService.getOrderById(order.getId(), fixture.customer());
+        assertThat(current.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(current.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
+        assertInventory(fixture.inventoryId(), INITIAL_ON_HAND, 0);
+    }
+
     private void runCallback(CountDownLatch ready, CountDownLatch start,
                              PaymentCallbackRequest callback) {
         ready.countDown();
+        awaitStart(start);
+        paymentService.processCallback(callback);
+    }
+
+    private void awaitStart(CountDownLatch start) {
         try {
             start.await();
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while starting concurrent callback", exception);
         }
-        paymentService.processCallback(callback);
+    }
+
+    private void initiateMockPayment(OrderResponse order, CommerceFixture fixture) {
+        InitPaymentRequest request = new InitPaymentRequest();
+        request.setProvider("MOCK");
+        paymentService.initiateOnlinePayment(order.getId(), fixture.customer(), request,
+                UUID.randomUUID().toString());
     }
 
     private CommerceFixture createFixture() {

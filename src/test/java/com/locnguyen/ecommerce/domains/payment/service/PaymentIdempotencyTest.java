@@ -11,6 +11,8 @@ import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
+import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.payment.dto.InitPaymentRequest;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentResponse;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
@@ -58,6 +60,7 @@ class PaymentIdempotencyTest {
     @Mock PaymentRepository paymentRepository;
     @Mock PaymentTransactionRepository transactionRepository;
     @Mock OrderRepository orderRepository;
+    @Mock OrderHoldService orderHoldService;
     @Mock PaymentMapper paymentMapper;
     @Mock IdempotencyService idempotencyService;
     @Mock PaymentProviderRegistry providerRegistry;
@@ -71,6 +74,8 @@ class PaymentIdempotencyTest {
     void setUp() {
         customer = mock(Customer.class);
         when(customer.getId()).thenReturn(uuid(1));
+        lenient().when(orderRepository.findByIdWithLock(any()))
+                .thenAnswer(invocation -> orderRepository.findById(invocation.getArgument(0)));
     }
 
     private IdempotencyKey processingRecord() {
@@ -94,6 +99,7 @@ class PaymentIdempotencyTest {
         o.setCustomer(customer);
         o.setOrderCode("ORD-TEST");
         o.setPaymentMethod(PaymentMethod.ONLINE);
+        o.setStatus(OrderStatus.AWAITING_PAYMENT);
         o.setPaymentStatus(PaymentStatus.PENDING);
         o.setTotalAmount(new BigDecimal("200000"));
         return o;

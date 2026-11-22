@@ -12,7 +12,9 @@ import com.locnguyen.ecommerce.domains.inventory.entity.InventoryReservation;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 public interface InventoryService {
 
@@ -43,4 +45,12 @@ public interface InventoryService {
     void completeOrder(String referenceType, String referenceId);
 
     int releaseExpiredReservations();
+
+    List<String> findExpiredOrderReferences(LocalDateTime now);
+
+    boolean hasCompleteOrderHold(String orderCode, Map<UUID, Integer> quantities, LocalDateTime now);
+
+    boolean makeOrderHoldDurable(String orderCode, Map<UUID, Integer> quantities, LocalDateTime now);
+
+    LocalDateTime getOrderHoldExpiry(String orderCode);
 }

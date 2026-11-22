@@ -29,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import java.util.UUID;
 @Slf4j
@@ -296,7 +298,6 @@ public class InventoryServiceImpl implements InventoryService {
                 .findByReferenceTypeAndReferenceIdAndStatus(referenceType, referenceId, ReservationStatus.PENDING);
 
         if (reservations.isEmpty()) {
-            log.warn("No pending reservations found for ref={}:{}", referenceType, referenceId);
             return;
         }
 
@@ -315,8 +316,8 @@ public class InventoryServiceImpl implements InventoryService {
 
             int updated = inventoryRepository.decreaseReserved(inventory.getId(), reservation.getQuantity());
             if (updated == 0) {
-                log.error("Failed to release reservation: id={} qty={}", reservation.getId(), reservation.getQuantity());
-                continue;
+                throw new AppException(ErrorCode.STOCK_RESERVATION_FAILED,
+                        "Failed to release reservation " + reservation.getId());
             }
             inventoryRepository.flush();
 
@@ -396,8 +397,8 @@ public class InventoryServiceImpl implements InventoryService {
                 .findByReferenceTypeAndReferenceIdAndStatus(referenceType, referenceId, ReservationStatus.PENDING);
 
         if (reservations.isEmpty()) {
-            log.warn("No pending reservations found for ref={}:{}", referenceType, referenceId);
-            return;
+            throw new AppException(ErrorCode.STOCK_RESERVATION_FAILED,
+                    "No pending reservations for " + referenceId);
         }
 
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
@@ -416,9 +417,8 @@ public class InventoryServiceImpl implements InventoryService {
             int updated = inventoryRepository.decreaseOnHandAndReserved(
                     inventory.getId(), reservation.getQuantity());
             if (updated == 0) {
-                log.error("Failed to complete order stock: reservationId={} qty={}",
-                        reservation.getId(), reservation.getQuantity());
-                continue;
+                throw new AppException(ErrorCode.STOCK_RESERVATION_FAILED,
+                        "Failed to complete reservation " + reservation.getId());
             }
             inventoryRepository.flush();
 
@@ -445,10 +445,45 @@ public class InventoryServiceImpl implements InventoryService {
      * Scheduled task to auto-release expired reservations.
      * Called by a @Scheduled method or on application startup.
      */
+    @Transactional(readOnly = true)
+    public List<String> findExpiredOrderReferences(LocalDateTime now) {
+        return reservationRepository.findExpiredOrderReferences(now);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasCompleteOrderHold(String orderCode, Map<UUID, Integer> quantities, LocalDateTime now) {
+        List<InventoryReservation> reservations = reservationRepository
+                .findByReferenceTypeAndReferenceIdAndStatus("ORDER", orderCode, ReservationStatus.PENDING);
+        return !quantities.isEmpty() && reservations.stream()
+                .allMatch(r -> now == null || r.getExpiresAt() == null || r.getExpiresAt().isAfter(now))
+                && quantities.equals(reservations.stream().collect(Collectors.groupingBy(
+                        r -> r.getVariant().getId(), Collectors.summingInt(InventoryReservation::getQuantity))));
+    }
+
+    @Transactional
+    public boolean makeOrderHoldDurable(String orderCode, Map<UUID, Integer> quantities, LocalDateTime now) {
+        if (!hasCompleteOrderHold(orderCode, quantities, now)) return false;
+        List<InventoryReservation> reservations = reservationRepository
+                .findByReferenceTypeAndReferenceIdAndStatus("ORDER", orderCode, ReservationStatus.PENDING);
+        reservations.forEach(r -> r.setExpiresAt(null));
+        reservationRepository.saveAll(reservations);
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    public LocalDateTime getOrderHoldExpiry(String orderCode) {
+        return reservationRepository.findByReferenceTypeAndReferenceIdAndStatus(
+                "ORDER", orderCode, ReservationStatus.PENDING).stream()
+                .map(InventoryReservation::getExpiresAt)
+                .filter(java.util.Objects::nonNull)
+                .min(LocalDateTime::compareTo).orElse(null);
+    }
+
     @Transactional
     public int releaseExpiredReservations() {
         List<InventoryReservation> expired = reservationRepository
-                .findExpiredReservations(LocalDateTime.now());
+                .findExpiredReservations(LocalDateTime.now()).stream()
+                .filter(r -> !"ORDER".equals(r.getReferenceType())).toList();
 
         if (expired.isEmpty()) {
             return 0;
