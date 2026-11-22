@@ -10,6 +10,7 @@ import com.locnguyen.ecommerce.domains.carrier.repository.CarrierConfigRepositor
 import com.locnguyen.ecommerce.domains.carrier.provider.CarrierProviderRegistry;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
 import com.locnguyen.ecommerce.domains.shipment.dto.CreateShipmentRequest;
 import com.locnguyen.ecommerce.domains.shipment.dto.ShipmentResponse;
 import com.locnguyen.ecommerce.domains.shipment.entity.Shipment;
@@ -44,6 +45,7 @@ class ShipmentBookingFlowTest {
     @Mock private CarrierConfigRepository carrierConfigRepository;
     @Mock private CarrierProviderRegistry providerRegistry;
     @Mock private ShipmentBookingCoordinator bookingCoordinator;
+    @Mock private OrderHoldService orderHoldService;
     @Mock private CarrierProvider provider;
     @Mock private com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService auditLogService;
 
@@ -122,7 +124,7 @@ class ShipmentBookingFlowTest {
 
     @BeforeEach
     void setUp() {
-        service = new ShipmentServiceImpl(shipmentRepository, eventRepository, orderRepository, shipmentMapper,
+        service = new ShipmentServiceImpl(shipmentRepository, eventRepository, orderRepository, orderHoldService, shipmentMapper,
                 carrierConfigRepository, providerRegistry, bookingCoordinator, auditLogService);
         shipment.setOrder(order);
     }

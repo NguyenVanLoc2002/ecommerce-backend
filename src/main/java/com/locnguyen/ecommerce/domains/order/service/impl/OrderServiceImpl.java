@@ -46,6 +46,8 @@ import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.order.repository.OrderItemCountProjection;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
+import com.locnguyen.ecommerce.domains.order.service.CheckoutHoldPolicy;
 import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import com.locnguyen.ecommerce.domains.shipment.service.ShipmentService;
@@ -87,6 +89,7 @@ public class OrderServiceImpl implements OrderService {
     private final CartItemRepository cartItemRepository;
     private final AddressRepository addressRepository;
     private final InventoryService inventoryService;
+    private final OrderHoldService orderHoldService;
     private final InventoryRepository inventoryRepository;
     private final PaymentService paymentService;
     private final NotificationService notificationService;
@@ -173,7 +176,7 @@ public class OrderServiceImpl implements OrderService {
             reserveRequest.setQuantity(ci.getQuantity());
             reserveRequest.setReferenceType("ORDER");
             reserveRequest.setReferenceId(orderCode);
-            reserveRequest.setExpiresAt(LocalDateTime.now().plusHours(24));
+            reserveRequest.setExpiresAt(LocalDateTime.now().plus(CheckoutHoldPolicy.waitFor(paymentMethod)));
 
             inventoryService.reserveStock(reserveRequest);
         }
@@ -288,6 +291,8 @@ public class OrderServiceImpl implements OrderService {
         }
 
         ensureOnlinePaymentReceived(order, "confirm");
+        if (order.getPaymentMethod() == PaymentMethod.COD) orderHoldService.retainForFulfillment(order);
+        else orderHoldService.requireFulfillmentHold(order);
 
         order.setStatus(target);
         order = orderRepository.save(order);
@@ -412,6 +417,7 @@ public class OrderServiceImpl implements OrderService {
         Order order = findForUpdateOrThrow(orderId);
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
         ensureOnlinePaymentReceived(order, "complete");
+        orderHoldService.requireFulfillmentHold(order);
 
         OrderStatus target = OrderStatus.COMPLETED;
 
@@ -446,6 +452,7 @@ public class OrderServiceImpl implements OrderService {
         Order order = findForUpdateOrThrow(orderId);
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
         ensureOnlinePaymentReceived(order, "process");
+        orderHoldService.requireFulfillmentHold(order);
         applyTransition(order, OrderStatus.PROCESSING, ErrorCode.ORDER_STATUS_INVALID);
         order = orderRepository.save(order);
 
@@ -460,6 +467,7 @@ public class OrderServiceImpl implements OrderService {
         Order order = findForUpdateOrThrow(orderId);
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
         ensureOnlinePaymentReceived(order, "deliver");
+        orderHoldService.requireFulfillmentHold(order);
         applyTransition(order, OrderStatus.DELIVERED, ErrorCode.ORDER_STATUS_INVALID);
         order = orderRepository.save(order);
 
@@ -790,6 +798,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private String resolveOrderAttention(Order order, ShipmentListSummary shipment) {
+        if (order.getStatus() == OrderStatus.CANCELLED
+                && (order.getPaymentStatus() == PaymentStatus.PAID
+                || order.getPaymentStatus() == PaymentStatus.PARTIALLY_REFUNDED))
+            return "REFUND_REQUIRED";
         if (order.getPaymentStatus() == PaymentStatus.FAILED) return "PAYMENT_FAILED";
         if (order.getStatus() != OrderStatus.CANCELLED && shipment != null
                 && shipment.status() == ShipmentStatus.FAILED) return "DELIVERY_FAILED";
@@ -803,6 +815,7 @@ public class OrderServiceImpl implements OrderService {
     private String resolveOrderAttentionReason(Order order, ShipmentListSummary shipment) {
         String attention = resolveOrderAttention(order, shipment);
         return switch (attention == null ? "" : attention) {
+            case "REFUND_REQUIRED" -> "Payment received after cancellation; reconcile and refund";
             case "PAYMENT_FAILED" -> "Payment failed";
             case "DELIVERY_FAILED" -> "Carrier delivery attempt failed";
             case "RETURNED_HANDLING" -> "Return requires handling";

@@ -5,6 +5,8 @@ import com.locnguyen.ecommerce.domains.inventory.enums.ReservationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
@@ -16,9 +18,11 @@ public interface InventoryReservationRepository extends JpaRepository<InventoryR
 
     List<InventoryReservation> findByVariantIdAndStatus(UUID variantId, ReservationStatus status);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<InventoryReservation> findByReferenceTypeAndReferenceIdAndStatus(
             String referenceType, String referenceId, ReservationStatus status);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<InventoryReservation> findByReferenceTypeAndReferenceIdAndVariantIdAndStatus(
             String referenceType, String referenceId, UUID variantId, ReservationStatus status);
 
@@ -28,6 +32,11 @@ public interface InventoryReservationRepository extends JpaRepository<InventoryR
     @Query("SELECT r FROM InventoryReservation r " +
             "WHERE r.status = 'PENDING' AND r.expiresAt IS NOT NULL AND r.expiresAt < :now")
     List<InventoryReservation> findExpiredReservations(@Param("now") LocalDateTime now);
+
+    @Query("SELECT DISTINCT r.referenceId FROM InventoryReservation r " +
+            "WHERE r.referenceType = 'ORDER' AND r.status = 'PENDING' " +
+            "AND r.expiresAt IS NOT NULL AND r.expiresAt <= :now")
+    List<String> findExpiredOrderReferences(@Param("now") LocalDateTime now);
 
     /**
      * Mark expired reservations as EXPIRED.

@@ -18,6 +18,7 @@ import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
 import com.locnguyen.ecommerce.domains.shipment.dto.CreateShipmentRequest;
 import com.locnguyen.ecommerce.domains.shipment.dto.ShipmentFilter;
 import com.locnguyen.ecommerce.domains.shipment.dto.ShipmentResponse;
@@ -56,6 +57,7 @@ public class ShipmentServiceImpl implements ShipmentService {
     private final ShipmentRepository shipmentRepository;
     private final ShipmentEventRepository shipmentEventRepository;
     private final OrderRepository orderRepository;
+    private final OrderHoldService orderHoldService;
     private final ShipmentMapper shipmentMapper;
     private final CarrierConfigRepository carrierConfigRepository;
     private final CarrierProviderRegistry carrierProviderRegistry;
@@ -420,6 +422,7 @@ public class ShipmentServiceImpl implements ShipmentService {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID,
                     "Cannot " + action + " online order: payment not received");
         }
+        orderHoldService.requireFulfillmentHold(order);
     }
 
     private boolean requiresEnabledConfig(CarrierProviderType providerType) {

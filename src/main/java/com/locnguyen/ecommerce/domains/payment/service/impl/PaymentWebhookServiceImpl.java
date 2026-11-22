@@ -4,8 +4,8 @@ import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.common.utils.CodeGenerator;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
-import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
 import com.locnguyen.ecommerce.domains.payment.dto.PaymentResponse;
 import com.locnguyen.ecommerce.domains.payment.dto.WebhookLogResponse;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
@@ -45,6 +45,7 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
     private final PaymentWebhookLogPersister webhookLogPersister;
     private final PaymentProviderRegistry providerRegistry;
     private final OrderRepository orderRepository;
+    private final OrderHoldService orderHoldService;
     private final PaymentRepository paymentRepository;
     private final PaymentTransactionRepository transactionRepository;
     private final PaymentMapper paymentMapper;
@@ -179,7 +180,7 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
         // Determine outcome and mutate payment + order status
         boolean success = paymentProvider.isSuccess(rawBody);
         boolean lateSuccessAfterCancellation = success
-                && order.getStatus() == OrderStatus.CANCELLED;
+                && !orderHoldService.acceptOnlineSuccess(order);
 
         if (success) {
             payment.setStatus(PaymentRecordStatus.PAID);
@@ -192,7 +193,7 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
         }
         payment = paymentRepository.save(payment);
         orderRepository.save(order);
-        if (success) invoiceService.markPaidByOrderId(order.getId());
+        if (success && !lateSuccessAfterCancellation) invoiceService.markPaidByOrderId(order.getId());
 
         // Append immutable transaction record to the payment audit trail
         PaymentTransaction txn = new PaymentTransaction();
@@ -211,7 +212,7 @@ public class PaymentWebhookServiceImpl implements PaymentWebhookService {
         txn.setReferenceId(orderCode);
         txn.setPayload(rawBody);
         txn.setNote(lateSuccessAfterCancellation
-                ? "Payment received after order cancellation; reconciliation required"
+                ? "Payment received after cancellation or hold expiry; reconciliation required; Admin refund required"
                 : success ? "Payment confirmed via webhook" : "Payment rejected via webhook");
         transactionRepository.save(txn);
 

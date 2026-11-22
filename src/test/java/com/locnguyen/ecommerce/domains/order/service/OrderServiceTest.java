@@ -96,6 +96,7 @@ class OrderServiceTest {
     @Mock CartItemRepository cartItemRepository;
     @Mock AddressRepository addressRepository;
     @Mock InventoryService inventoryService;
+    @Mock OrderHoldService orderHoldService;
     @Mock InventoryRepository inventoryRepository;
     @Mock PaymentService paymentService;
     @Mock AuditLogService auditLogService;
@@ -344,9 +345,15 @@ class OrderServiceTest {
         returned.setStatus(OrderStatus.SHIPPED);
         returned.setPaymentStatus(PaymentStatus.PENDING);
         returned.setTotalAmount(BigDecimal.ONE);
+        Order latePaid = new Order();
+        setId(latePaid, uuid(512));
+        latePaid.setOrderCode("ORD-LATE-PAID");
+        latePaid.setStatus(OrderStatus.CANCELLED);
+        latePaid.setPaymentStatus(PaymentStatus.PAID);
+        latePaid.setTotalAmount(BigDecimal.ONE);
 
         when(orderRepository.adminSearch(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new PageImpl<>(List.of(failed, returned), PageRequest.of(0, 20), 2));
+                .thenReturn(new PageImpl<>(List.of(failed, returned, latePaid), PageRequest.of(0, 20), 3));
         when(orderItemRepository.countQuantitiesByOrderIds(anyList())).thenReturn(List.of());
         when(shipmentService.getListSummaries(anyList())).thenReturn(List.of(
                 new ShipmentListSummary(uuid(510), ShipmentStatus.FAILED, "Carrier", "TRACK-1"),
@@ -355,10 +362,11 @@ class OrderServiceTest {
         var result = orderService.getAllOrders(new OrderAdminFilter(), PageRequest.of(0, 20));
 
         assertThat(result.getItems()).extracting("attention")
-                .containsExactly("DELIVERY_FAILED", "RETURNED_HANDLING");
+                .containsExactly("DELIVERY_FAILED", "RETURNED_HANDLING", "REFUND_REQUIRED");
         assertThat(result.getItems().get(0).getTrackingNumber()).isEqualTo("TRACK-1");
         assertThat(failed.getStatus()).isEqualTo(OrderStatus.SHIPPED);
         assertThat(returned.getStatus()).isEqualTo(OrderStatus.SHIPPED);
+        assertThat(latePaid.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         verify(orderItemRepository, times(1)).countQuantitiesByOrderIds(anyList());
         verify(shipmentService, times(1)).getListSummaries(anyList());
     }

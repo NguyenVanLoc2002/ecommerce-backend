@@ -7,6 +7,7 @@ import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentStatus;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
 import com.locnguyen.ecommerce.domains.payment.entity.Payment;
 import com.locnguyen.ecommerce.domains.payment.entity.PaymentTransaction;
 import com.locnguyen.ecommerce.domains.payment.entity.PaymentWebhookLog;
@@ -44,6 +45,7 @@ class PaymentWebhookServiceImplTest {
     @Mock PaymentWebhookLogPersister webhookLogPersister;
     @Mock PaymentProviderRegistry providerRegistry;
     @Mock OrderRepository orderRepository;
+    @Mock OrderHoldService orderHoldService;
     @Mock PaymentRepository paymentRepository;
     @Mock PaymentTransactionRepository transactionRepository;
     @Mock PaymentMapper paymentMapper;
