@@ -105,6 +105,21 @@ class ShipmentBookingFlowTest {
                 .build().getAttention()).isEqualTo("RETURNED_HANDLING");
     }
 
+    @Test
+    void unknownAndSameStatusCallbacks_preserveAppliedCancellationReason() {
+        org.springframework.test.util.ReflectionTestUtils.setField(order, "id", UUID.randomUUID());
+        shipment.setStatus(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.FAILED);
+        shipment.setProviderStatus("CANCELLED");
+        when(shipmentRepository.findById(any())).thenReturn(java.util.Optional.of(shipment));
+        when(orderRepository.findByIdWithLock(any())).thenReturn(java.util.Optional.of(order));
+        service.applyProviderUpdate(ShipmentProviderUpdate.builder().shipmentId(shipmentId)
+                .providerStatus("MYSTERY").build());
+        service.applyProviderUpdate(ShipmentProviderUpdate.builder().shipmentId(shipmentId)
+                .status(com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus.FAILED)
+                .providerStatus("FAILED").build());
+        assertThat(shipment.getProviderStatus()).isEqualTo("CANCELLED");
+    }
+
     @BeforeEach
     void setUp() {
         service = new ShipmentServiceImpl(shipmentRepository, eventRepository, orderRepository, shipmentMapper,

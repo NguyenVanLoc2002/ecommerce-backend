@@ -144,7 +144,7 @@ public class ShipmentBookingCoordinator {
             shipment.setBookingStatus(BookingAttemptStatus.INTERNAL_ONLY);
             shipmentRepository.save(shipment);
             recordEvent(shipment, "Manual shipment created. Fulfillment is managed internally.");
-            auditLogService.logWithActor(AuditAction.SHIPMENT_CREATED, "SHIPMENT", shipment.getId().toString(),
+            ShipmentAuditAfterCommit.log(auditLogService, AuditAction.SHIPMENT_CREATED, shipment.getId(),
                     SecurityUtils.getCurrentUsernameOrSystem(), "source=MANUAL; status=PENDING");
 
             return new PreparedBooking(shipment.getId(), null, null, null, null, shipment);

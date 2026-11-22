@@ -66,16 +66,24 @@ public class AhamoveWebhookService {
         String eventType = trimToNull(payload.getStatus()) != null ? payload.getStatus() : "UNKNOWN";
         String eventKey = buildEventKey(payload, providerOrderId, trackingNumber);
 
-        CarrierWebhookLog existing = carrierWebhookLogRepository.findByEventKey(eventKey).orElse(null);
-        if (existing != null && existing.isProcessed()) {
+        // The initial log survives processing rollback. A concurrent first delivery may
+        // win the unique event-key insert; its committed log is then locked below.
+        try {
+            carrierWebhookLogPersister.createInitialLog(
+                    carrier.getCode(), providerOrderId, trackingNumber, eventType, eventKey,
+                    sanitizePayload(rawBody), sanitizeHeaders(headers));
+        } catch (org.springframework.dao.DataIntegrityViolationException duplicateInsert) {
+            log.debug("Concurrent AhaMove event insert: eventKey={}", eventKey);
+        }
+        CarrierWebhookLog webhookLog = carrierWebhookLogRepository.findByEventKeyWithLock(eventKey)
+                .orElseThrow(() -> new AppException(ErrorCode.CARRIER_REQUEST_FAILED,
+                        "Could not acquire AhaMove event log"));
+        if (webhookLog.isProcessed()) {
             log.info("Skipping duplicate AhaMove webhook: providerOrderId={} eventType={}",
                     providerOrderId, eventType);
             return;
         }
 
-        CarrierWebhookLog webhookLog = existing != null ? existing : carrierWebhookLogPersister.createInitialLog(
-                carrier.getCode(), providerOrderId, trackingNumber, eventType, eventKey,
-                sanitizePayload(rawBody), sanitizeHeaders(headers));
         webhookLog.setSignatureValid(true);
 
         try {

@@ -556,3 +556,11 @@ missing scans; backward events remain in the timeline without reverting state.
 Legacy SHIPPED orders are not rewritten without carrier evidence.
 
 Provider semantics: https://developers.ahamove.com/docs/order-status-flow
+
+Replay processing serializes on the persisted webhook event row. The initial log
+is committed independently so a processing rollback leaves it available to retry;
+concurrent first inserts use the unique event key and then acquire the same row
+lock. Raw providerStatus on the shipment represents the applied state transition:
+unknown, backward and same-state callbacks remain in webhook logs/timeline but do
+not replace an applied exception reason. Manual success audits are emitted only
+after transaction commit, and are suppressed on rollback.

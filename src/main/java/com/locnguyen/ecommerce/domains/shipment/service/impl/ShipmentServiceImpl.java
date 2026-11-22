@@ -229,9 +229,7 @@ public class ShipmentServiceImpl implements ShipmentService {
                 : LocalDateTime.now();
 
         alignOrderMilestone(order, request.getStatus());
-        auditLogService.logWithActor(
-                AuditAction.SHIPMENT_STATUS_UPDATED,
-                "SHIPMENT", shipmentId.toString(),
+        ShipmentAuditAfterCommit.log(auditLogService, AuditAction.SHIPMENT_STATUS_UPDATED, shipmentId,
                 SecurityUtils.getCurrentUsernameOrSystem(),
                 "source=MANUAL; previous=" + previousStatus + "; status=" + request.getStatus());
         if (request.getStatus() == ShipmentStatus.DELIVERED) {
@@ -319,8 +317,7 @@ public class ShipmentServiceImpl implements ShipmentService {
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
 
         if (update.providerStatus() != null && !update.providerStatus().isBlank()
-                && (update.status() == null || shipment.getStatus() == update.status()
-                || shouldTransition(shipment, update.status()))) {
+                && update.status() != null && shouldTransition(shipment, update.status())) {
             shipment.setProviderStatus(update.providerStatus().trim());
         }
         if (update.trackingNumber() != null && !update.trackingNumber().isBlank()) {
