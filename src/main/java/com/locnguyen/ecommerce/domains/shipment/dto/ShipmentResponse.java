@@ -20,6 +20,14 @@ import java.util.UUID;
 @Schema(description = "Shipment details and tracking timeline")
 public class ShipmentResponse {
 
+    public String getAttention() {
+        if (status == ShipmentStatus.RETURNED) return "RETURNED_HANDLING";
+        if (status == ShipmentStatus.FAILED) {
+            return "CANCELLED".equalsIgnoreCase(providerStatus) ? "CARRIER_CANCELLED" : "DELIVERY_FAILED";
+        }
+        return null;
+    }
+
     private final UUID id;
     private final UUID orderId;
     private final String orderCode;

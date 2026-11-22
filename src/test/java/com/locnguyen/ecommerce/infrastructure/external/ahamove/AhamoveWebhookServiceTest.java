@@ -62,6 +62,24 @@ class AhamoveWebhookServiceTest {
         );
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"RETURNED", "IN_RETURN", "BOARDED", "COMPLETING"})
+    void unprocessedWebhook_canBeReplayedAndMapped(String status) {
+        Carrier carrier = buildCarrier();
+        CarrierConfig config = new CarrierConfig();
+        Shipment shipment = buildShipment();
+        CarrierWebhookLog pending = new CarrierWebhookLog();
+        when(carrierRepository.findFirstByProviderType(CarrierProviderType.AHAMOVE)).thenReturn(Optional.of(carrier));
+        when(carrierConfigRepository.findByCarrierId(carrier.getId())).thenReturn(Optional.of(config));
+        when(configResolver.resolve(config)).thenReturn(buildResolvedConfig());
+        when(carrierWebhookLogRepository.findByEventKeyWithLock(any())).thenReturn(Optional.of(pending));
+        when(shipmentRepository.findByCarrierShipmentId("AHA-1")).thenReturn(Optional.of(shipment));
+        when(carrierProvider.mapPayloadStatus(any())).thenReturn(ShipmentStatus.RETURNED);
+        webhookService.receiveWebhook(validPayload(status), Map.of("X-Webhook-Token", "token"));
+        assertThat(pending.isProcessed()).isTrue();
+        verify(shipmentService).applyProviderUpdate(any());
+    }
+
     @Test
     void validWebhook_updatesShipmentStatus() {
         Carrier carrier = buildCarrier();
@@ -73,8 +91,8 @@ class AhamoveWebhookServiceTest {
         when(carrierRepository.findFirstByProviderType(CarrierProviderType.AHAMOVE)).thenReturn(Optional.of(carrier));
         when(carrierConfigRepository.findByCarrierId(carrier.getId())).thenReturn(Optional.of(config));
         when(configResolver.resolve(config)).thenReturn(resolvedConfig);
-        when(carrierWebhookLogRepository.existsByEventKey(any())).thenReturn(false);
-        when(carrierWebhookLogPersister.createInitialLog(any(), any(), any(), any(), any(), any(), any())).thenReturn(log);
+
+        when(carrierWebhookLogRepository.findByEventKeyWithLock(any())).thenReturn(Optional.of(log));
         when(shipmentRepository.findByCarrierShipmentId("AHA-1")).thenReturn(Optional.of(shipment));
         when(carrierProvider.mapPayloadStatus(any())).thenReturn(ShipmentStatus.DELIVERED);
         when(carrierProvider.buildDescription(any(), eq(ShipmentStatus.DELIVERED))).thenReturn("Delivered by AhaMove");
@@ -106,7 +124,7 @@ class AhamoveWebhookServiceTest {
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.CARRIER_WEBHOOK_SIGNATURE_INVALID);
 
-        verify(carrierWebhookLogPersister, never()).createInitialLog(any(), any(), any(), any(), any(), any(), any());
+        verifyNoInteractions(carrierWebhookLogPersister, carrierWebhookLogRepository);
         verify(shipmentService, never()).applyProviderUpdate(any());
     }
 
@@ -123,7 +141,7 @@ class AhamoveWebhookServiceTest {
                 .extracting(ex -> ((AppException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.BAD_REQUEST);
 
-        verify(carrierWebhookLogPersister, never()).createInitialLog(any(), any(), any(), any(), any(), any(), any());
+        verifyNoInteractions(carrierWebhookLogPersister, carrierWebhookLogRepository);
         verify(shipmentService, never()).applyProviderUpdate(any());
     }
 
@@ -134,11 +152,12 @@ class AhamoveWebhookServiceTest {
         when(carrierRepository.findFirstByProviderType(CarrierProviderType.AHAMOVE)).thenReturn(Optional.of(carrier));
         when(carrierConfigRepository.findByCarrierId(carrier.getId())).thenReturn(Optional.of(config));
         when(configResolver.resolve(config)).thenReturn(buildResolvedConfig());
-        when(carrierWebhookLogRepository.existsByEventKey(any())).thenReturn(true);
+        CarrierWebhookLog processed = new CarrierWebhookLog();
+        processed.setProcessed(true);
+        when(carrierWebhookLogRepository.findByEventKeyWithLock(any())).thenReturn(Optional.of(processed));
 
         webhookService.receiveWebhook(validPayload("ASSIGNING"), Map.of("X-Webhook-Token", "token"));
 
-        verify(carrierWebhookLogPersister, never()).createInitialLog(any(), any(), any(), any(), any(), any(), any());
         verify(shipmentService, never()).applyProviderUpdate(any());
     }
 
@@ -152,8 +171,8 @@ class AhamoveWebhookServiceTest {
         when(carrierRepository.findFirstByProviderType(CarrierProviderType.AHAMOVE)).thenReturn(Optional.of(carrier));
         when(carrierConfigRepository.findByCarrierId(carrier.getId())).thenReturn(Optional.of(config));
         when(configResolver.resolve(config)).thenReturn(buildResolvedConfig());
-        when(carrierWebhookLogRepository.existsByEventKey(any())).thenReturn(false);
-        when(carrierWebhookLogPersister.createInitialLog(any(), any(), any(), any(), any(), any(), any())).thenReturn(log);
+
+        when(carrierWebhookLogRepository.findByEventKeyWithLock(any())).thenReturn(Optional.of(log));
         when(shipmentRepository.findByCarrierShipmentId("AHA-1")).thenReturn(Optional.of(shipment));
         when(shipmentService.applyProviderUpdate(any())).thenReturn(null);
 

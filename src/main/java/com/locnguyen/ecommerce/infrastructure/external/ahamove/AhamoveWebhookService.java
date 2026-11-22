@@ -66,15 +66,24 @@ public class AhamoveWebhookService {
         String eventType = trimToNull(payload.getStatus()) != null ? payload.getStatus() : "UNKNOWN";
         String eventKey = buildEventKey(payload, providerOrderId, trackingNumber);
 
-        if (carrierWebhookLogRepository.existsByEventKey(eventKey)) {
+        // The initial log survives processing rollback. A concurrent first delivery may
+        // win the unique event-key insert; its committed log is then locked below.
+        try {
+            carrierWebhookLogPersister.createInitialLog(
+                    carrier.getCode(), providerOrderId, trackingNumber, eventType, eventKey,
+                    sanitizePayload(rawBody), sanitizeHeaders(headers));
+        } catch (org.springframework.dao.DataIntegrityViolationException duplicateInsert) {
+            log.debug("Concurrent AhaMove event insert: eventKey={}", eventKey);
+        }
+        CarrierWebhookLog webhookLog = carrierWebhookLogRepository.findByEventKeyWithLock(eventKey)
+                .orElseThrow(() -> new AppException(ErrorCode.CARRIER_REQUEST_FAILED,
+                        "Could not acquire AhaMove event log"));
+        if (webhookLog.isProcessed()) {
             log.info("Skipping duplicate AhaMove webhook: providerOrderId={} eventType={}",
                     providerOrderId, eventType);
             return;
         }
 
-        CarrierWebhookLog webhookLog = carrierWebhookLogPersister.createInitialLog(
-                carrier.getCode(), providerOrderId, trackingNumber, eventType, eventKey,
-                sanitizePayload(rawBody), sanitizeHeaders(headers));
         webhookLog.setSignatureValid(true);
 
         try {
@@ -99,8 +108,10 @@ public class AhamoveWebhookService {
 
             if (!isKnownStatus(payload)) {
                 webhookLog.setErrorMessage("Unknown provider status: " + payload.getStatus());
+                log.warn("AhaMove status requires reconciliation: shipmentId={} eventKey={}", shipment.getId(), eventKey);
             }
-            webhookLog.setProcessed(true);
+            webhookLog.setProcessed(mappedStatus != null);
+            if (mappedStatus != null) webhookLog.setErrorMessage(null);
             webhookLog.setProcessedAt(LocalDateTime.now());
             carrierWebhookLogRepository.save(webhookLog);
         } catch (AppException ex) {
@@ -239,7 +250,11 @@ public class AhamoveWebhookService {
                 || status.equals("IN_PROCESS")
                 || status.equals("COMPLETED")
                 || status.equals("CANCELLED")
-                || status.equals("FAILED");
+                || status.equals("FAILED")
+                || status.equals("BOARDED")
+                || status.equals("COMPLETING")
+                || status.equals("IN_RETURN")
+                || status.equals("RETURNED");
     }
 
     private String extractTrackingNumber(AhamoveOrderPayload payload) {

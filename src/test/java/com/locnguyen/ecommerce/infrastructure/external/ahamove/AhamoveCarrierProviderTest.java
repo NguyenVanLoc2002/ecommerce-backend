@@ -30,6 +30,16 @@ class AhamoveCarrierProviderTest {
     @InjectMocks AhamoveCarrierProvider provider;
 
     @Test
+    void mapPayloadStatus_returnInProgressDoesNotConfirmPhysicalReturn() {
+        var payload = new com.locnguyen.ecommerce.infrastructure.external.ahamove.dto.AhamoveOrderPayload();
+        payload.setStatus("COMPLETED");
+        payload.setSubStatus("IN_RETURN");
+        assertThat(provider.mapPayloadStatus(payload)).isEqualTo(ShipmentStatus.FAILED);
+        payload.setSubStatus("RETURNED");
+        assertThat(provider.mapPayloadStatus(payload)).isEqualTo(ShipmentStatus.RETURNED);
+    }
+
+    @Test
     void mapStatus_mapsKnownStatuses() {
         assertThat(provider.mapStatus("IDLE")).isEqualTo(ShipmentStatus.PENDING);
         assertThat(provider.mapStatus("ASSIGNING")).isEqualTo(ShipmentStatus.PENDING);
@@ -42,8 +52,8 @@ class AhamoveCarrierProviderTest {
     }
 
     @Test
-    void mapStatus_unknownStatus_returnsPending() {
-        assertThat(provider.mapStatus("MYSTERY")).isEqualTo(ShipmentStatus.PENDING);
+    void mapStatus_unknownStatus_requiresReconciliation() {
+        assertThat(provider.mapStatus("MYSTERY")).isNull();
     }
 
     @Test

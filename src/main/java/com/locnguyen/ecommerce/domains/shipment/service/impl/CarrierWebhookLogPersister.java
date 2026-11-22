@@ -22,6 +22,8 @@ public class CarrierWebhookLogPersister {
             String eventKey,
             String payload,
             String headers) {
+        CarrierWebhookLog existing = carrierWebhookLogRepository.findByEventKey(eventKey).orElse(null);
+        if (existing != null) return existing;
         CarrierWebhookLog log = new CarrierWebhookLog();
         log.setCarrierCode(carrierCode);
         log.setProviderOrderId(providerOrderId);

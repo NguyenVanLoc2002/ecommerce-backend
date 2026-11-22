@@ -425,7 +425,7 @@ Mapping hien tai:
 | `COMPLETED` | `DELIVERED` |
 | `CANCELLED` | `FAILED` |
 | `FAILED` | `FAILED` |
-| `IN_RETURN` | `RETURNED` |
+| `IN_RETURN` | `FAILED` (return in progress; not yet received) |
 | `RETURNED` | `RETURNED` |
 
 Rules:
@@ -532,3 +532,35 @@ Truoc khi bat production flow cho AhaMove:
 8. Da test duplicate webhook.
 9. Da test timeout/5xx cua provider.
 10. Da test manual shipment flow cu khong bi anh huong.
+
+
+### Shipment milestone reconciliation (Issue #67)
+
+Booking success and manual shipment creation leave the order PROCESSING. PICKING
+means the carrier accepted the job; IN_TRANSIT confirms pickup and advances the
+order to SHIPPED. A later DELIVERED scan advances it to DELIVERED, including when
+intermediate provider scans were missed. Manual updates use the same milestones
+and record the authenticated actor with source MANUAL in the audit log.
+
+Shipment responses expose nullable `attention`: DELIVERY_FAILED,
+CARRIER_CANCELLED, or RETURNED_HANDLING. These require operator reconciliation;
+they do not cancel the order, release inventory, collect COD, or issue refunds.
+AhaMove COMPLETED with sub_status IN_RETURN remains FAILED until RETURNED confirms
+physical return. Order, shipment and payment statuses must be presented separately.
+
+Unknown callbacks remain unprocessed with a warning and retained webhook log.
+Resending the same authenticated callback retries unprocessed events after mapping
+or processing errors are corrected; processed duplicates are ignored. Provider
+sync is also available for reconciliation. Forward provider snapshots can skip
+missing scans; backward events remain in the timeline without reverting state.
+Legacy SHIPPED orders are not rewritten without carrier evidence.
+
+Provider semantics: https://developers.ahamove.com/docs/order-status-flow
+
+Replay processing serializes on the persisted webhook event row. The initial log
+is committed independently so a processing rollback leaves it available to retry;
+concurrent first inserts use the unique event key and then acquire the same row
+lock. Raw providerStatus on the shipment represents the applied state transition:
+unknown, backward and same-state callbacks remain in webhook logs/timeline but do
+not replace an applied exception reason. Manual success audits are emitted only
+after transaction commit, and are suppressed on rollback.
