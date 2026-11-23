@@ -14,6 +14,9 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
     @EntityGraph(attributePaths = {"variant", "variant.product", "variant.product.brand"})
     List<OrderItem> findByOrderIdOrderByCreatedAtAsc(UUID orderId);
 
+    @EntityGraph(attributePaths = {"variant", "variant.product", "variant.product.brand"})
+    List<OrderItem> findByOrderIdInOrderByCreatedAtAscIdAsc(List<UUID> orderIds);
+
     @Query("SELECT oi.order.id AS orderId, SUM(oi.quantity) AS totalQuantity " +
             "FROM OrderItem oi WHERE oi.order.id IN :orderIds GROUP BY oi.order.id")
     List<OrderItemCountProjection> countQuantitiesByOrderIds(@Param("orderIds") List<UUID> orderIds);
