@@ -23,6 +23,8 @@ import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
 import com.locnguyen.ecommerce.domains.order.dto.OrderPreviewResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderAdminFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
+import com.locnguyen.ecommerce.domains.order.dto.OrderFilter;
+import com.locnguyen.ecommerce.domains.order.dto.OrderItemResponse;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.entity.OrderItem;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
@@ -121,6 +123,42 @@ class OrderServiceTest {
         user.setEmail("lan@example.com");
         when(c.getUser()).thenReturn(user);
         return c;
+    }
+
+    @Test
+    void customerOrderHistoryLoadsPreviewInOneBatchAndPreservesUnitCount() {
+        Customer owner = customer(uuid(20));
+        Order order = new Order();
+        setId(order, uuid(21));
+        Order secondOrder = new Order();
+        setId(secondOrder, uuid(22));
+        var pageable = PageRequest.of(0, 2);
+        when(orderRepository.filter(owner.getId(), null, pageable))
+                .thenReturn(new PageImpl<>(List.of(order, secondOrder), pageable, 7));
+        List<OrderItem> items = new ArrayList<>();
+        for (int index = 0; index < 4; index++) {
+            OrderItem item = new OrderItem();
+            item.setOrder(order);
+            item.setQuantity(2);
+            items.add(item);
+        }
+        when(orderItemRepository.findByOrderIdInOrderByCreatedAtAscIdAsc(List.of(order.getId(), secondOrder.getId())))
+                .thenReturn(items);
+        List<OrderItemResponse> preview = List.of(
+                OrderItemResponse.builder().productName("Blazer").build(),
+                OrderItemResponse.builder().productName("Trousers").build(),
+                OrderItemResponse.builder().productName("Shirt").build());
+        when(orderMapper.toItemResponses(items.subList(0, 3))).thenReturn(preview);
+
+        var history = orderService.getMyOrders(owner, new OrderFilter(), pageable);
+
+        assertThat(history.getTotalItems()).isEqualTo(7);
+        assertThat(history.getItems().get(0).getItemsPreview()).isEqualTo(preview);
+        assertThat(history.getItems().get(0).getRemainingItemLines()).isEqualTo(1);
+        assertThat(history.getItems().get(0).getTotalItems()).isEqualTo(8);
+        assertThat(history.getItems().get(1).getRemainingItemLines()).isZero();
+        verify(orderItemRepository).findByOrderIdInOrderByCreatedAtAscIdAsc(List.of(order.getId(), secondOrder.getId()));
+        verifyNoMoreInteractions(orderItemRepository);
     }
 
     private Cart activeCart(UUID cartId, Customer customer) {

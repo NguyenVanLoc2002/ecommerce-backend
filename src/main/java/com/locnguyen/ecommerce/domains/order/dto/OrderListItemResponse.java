@@ -11,9 +11,10 @@ import lombok.Getter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import java.util.List;
 import java.util.UUID;
 /**
- * Lightweight order summary for list views — no item details included.
+ * Lightweight order summary with a bounded item preview.
  */
 @Getter
 @Builder
@@ -27,6 +28,8 @@ public class OrderListItemResponse {
     private final PaymentMethod paymentMethod;
     private final PaymentStatus paymentStatus;
     private final int totalItems;
+    private final List<OrderItemResponse> itemsPreview;
+    private final int remainingItemLines;
     private final BigDecimal totalAmount;
     private final LocalDateTime createdAt;
 }

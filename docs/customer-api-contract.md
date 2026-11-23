@@ -586,6 +586,8 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - repository query orders by `createdAt DESC`
 - Response:
   - `ApiResponse<PagedResponse<OrderListItemResponse>>`
+  - `itemsPreview` contains up to three order item representations in stable creation order.
+  - `remainingItemLines` counts product lines omitted from the preview. `totalItems` continues to count units across the entire order.
 
 ### GET `/api/v1/orders/{id}`
 

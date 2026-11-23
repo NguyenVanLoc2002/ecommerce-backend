@@ -101,6 +101,7 @@ public class OrderServiceImpl implements OrderService {
     private final ShipmentService shipmentService;
     private final InvoiceService invoiceService;
 
+    private static final int CUSTOMER_ORDER_ITEM_PREVIEW_LIMIT = 3;
     private static final Set<String> ADMIN_ORDER_SORT_FIELDS = Set.of("orderCode", "status", "createdAt", "totalAmount");
 
     @Override
@@ -202,8 +203,17 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public PagedResponse<OrderListItemResponse> getMyOrders(Customer customer, OrderFilter filter, Pageable pageable) {
         Page<Order> page = orderRepository.filter(customer.getId(), filter.getStatus(), pageable);
+        if (page.isEmpty()) {
+            return PagedResponse.of(List.of(), page);
+        }
+
+        List<UUID> orderIds = page.getContent().stream().map(Order::getId).toList();
+        Map<UUID, List<OrderItem>> itemsByOrder = orderItemRepository
+                .findByOrderIdInOrderByCreatedAtAscIdAsc(orderIds).stream()
+                .collect(Collectors.groupingBy(item -> item.getOrder().getId()));
+
         List<OrderListItemResponse> items = page.getContent().stream()
-                .map(this::buildListItemResponse)
+                .map(order -> buildListItemResponse(order, itemsByOrder.getOrDefault(order.getId(), List.of())))
                 .toList();
         return PagedResponse.of(items, page);
     }
@@ -756,14 +766,16 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    private OrderListItemResponse buildListItemResponse(Order order) {
+    private OrderListItemResponse buildListItemResponse(Order order, List<OrderItem> items) {
         return OrderListItemResponse.builder()
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
                 .status(order.getStatus())
                 .paymentMethod(order.getPaymentMethod())
                 .paymentStatus(order.getPaymentStatus())
-                .totalItems(order.getItems().stream().mapToInt(OrderItem::getQuantity).sum())
+                .totalItems(items.stream().mapToInt(OrderItem::getQuantity).sum())
+                .itemsPreview(orderMapper.toItemResponses(items.stream().limit(CUSTOMER_ORDER_ITEM_PREVIEW_LIMIT).toList()))
+                .remainingItemLines(Math.max(0, items.size() - CUSTOMER_ORDER_ITEM_PREVIEW_LIMIT))
                 .totalAmount(order.getTotalAmount())
                 .createdAt(order.getCreatedAt())
                 .build();

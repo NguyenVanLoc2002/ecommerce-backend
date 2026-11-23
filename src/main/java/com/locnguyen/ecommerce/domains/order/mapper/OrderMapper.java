@@ -28,6 +28,8 @@ public interface OrderMapper {
     List<OrderItemResponse> toItemResponses(List<OrderItem> items);
 
     @Mapping(target = "totalItems", expression = "java(calculateTotalItems(order))")
+    @Mapping(target = "itemsPreview", ignore = true)
+    @Mapping(target = "remainingItemLines", ignore = true)
     OrderListItemResponse toListItemResponse(Order order);
 
     List<OrderListItemResponse> toListItemResponses(List<Order> orders);
