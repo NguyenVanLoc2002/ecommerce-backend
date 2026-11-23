@@ -10,11 +10,14 @@ import com.locnguyen.ecommerce.domains.order.dto.OrderFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderListItemResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderPreviewResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
+import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherResponse;
 import org.springframework.data.domain.Pageable;
 
 import java.util.UUID;
 
 public interface OrderService {
+
+    ValidateVoucherResponse quoteCartVoucher(Customer customer, String voucherCode);
 
     OrderPreviewResponse previewOrder(Customer customer, CreateOrderRequest request);
 

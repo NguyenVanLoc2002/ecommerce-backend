@@ -2,7 +2,9 @@ package com.locnguyen.ecommerce.domains.promotion.service;
 
 import com.locnguyen.ecommerce.common.response.PagedResponse;
 import com.locnguyen.ecommerce.domains.customer.entity.Customer;
+import com.locnguyen.ecommerce.domains.promotion.dto.CheckoutVoucher;
 import com.locnguyen.ecommerce.domains.promotion.dto.CreateVoucherRequest;
+import com.locnguyen.ecommerce.domains.promotion.dto.VoucherLine;
 import com.locnguyen.ecommerce.domains.promotion.dto.UpdateVoucherRequest;
 import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherRequest;
 import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherResponse;
@@ -34,6 +36,10 @@ public interface VoucherService {
     ValidateVoucherResponse validateVoucher(String code, Customer customer, ValidateVoucherRequest request);
 
     BigDecimal applyVoucher(String voucherCode, Customer customer, UUID orderId, BigDecimal orderAmount, List<UUID> productIds, List<UUID> categoryIds, List<UUID> brandIds);
+
+    CheckoutVoucher quoteCheckoutVoucher(String code, Customer customer, List<VoucherLine> lines);
+
+    CheckoutVoucher redeemCheckoutVoucher(String code, Customer customer, UUID orderId, List<VoucherLine> lines);
 
     void releaseVoucher(String voucherCode, UUID orderId);
 }
