@@ -57,7 +57,9 @@ import com.locnguyen.ecommerce.domains.product.entity.ProductMedia;
 import com.locnguyen.ecommerce.domains.product.enums.MediaType;
 import com.locnguyen.ecommerce.domains.product.repository.ProductMediaRepository;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
-import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherRequest;
+import com.locnguyen.ecommerce.domains.promotion.dto.CheckoutVoucher;
+import com.locnguyen.ecommerce.domains.promotion.dto.VoucherLine;
+import com.locnguyen.ecommerce.domains.order.service.OrderVoucherAllocation;
 import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherResponse;
 import com.locnguyen.ecommerce.domains.promotion.service.VoucherService;
 import lombok.RequiredArgsConstructor;
@@ -109,7 +111,7 @@ public class OrderServiceImpl implements OrderService {
     public OrderPreviewResponse previewOrder(Customer customer, CreateOrderRequest request) {
         CheckoutDraft draft = loadCheckoutDraft(customer, request.getShippingAddressId(), false);
         Order order = buildDraftOrder(customer, draft.address(), draft.cartItems(), request, CodeGenerator.generateOrderCode());
-        applyVoucherPreview(order, customer, draft.cartItems(), request.getVoucherCode());
+        applyVoucherPreview(order, customer, request.getVoucherCode());
         CheckoutCarrierQuoteResponse quote = applyShippingSelection(order, request.getCarrierId());
         return buildPreviewResponse(order, quote);
     }
@@ -147,7 +149,7 @@ public class OrderServiceImpl implements OrderService {
 
         Order order = buildDraftOrder(customer, draft.address(), draft.cartItems(), request, orderCode);
         order = orderRepository.save(order);
-        applyVoucherDuringCheckout(order, customer, draft.cartItems(), request.getVoucherCode());
+        applyVoucherDuringCheckout(order, customer, request.getVoucherCode());
         applyShippingSelection(order, request.getCarrierId());
 
         List<UUID> variantIds = draft.cartItems().stream()
@@ -643,66 +645,61 @@ public class OrderServiceImpl implements OrderService {
         return quote;
     }
 
-    private void applyVoucherPreview(Order order, Customer customer, List<CartItem> cartItems, String voucherCode) {
-        ValidateVoucherResponse voucher = validateVoucherForCheckout(order, customer, cartItems, voucherCode);
-        if (voucher == null) {
-            return;
+    @Override
+    @Transactional(readOnly = true)
+    public ValidateVoucherResponse quoteCartVoucher(Customer customer, String voucherCode) {
+        Cart cart = cartRepository.findByCustomerIdAndStatus(customer.getId(), CartStatus.ACTIVE)
+                .orElseThrow(() -> new AppException(ErrorCode.CART_NOT_FOUND));
+        List<CartItem> items = cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId());
+        if (items.isEmpty()) {
+            throw new AppException(ErrorCode.ORDER_EMPTY);
         }
-        order.setVoucherCode(voucher.getVoucherCode());
-        order.setDiscountAmount(voucher.getDiscountAmount());
-        order.setTotalAmount(order.getSubTotal().subtract(voucher.getDiscountAmount()));
+        List<VoucherLine> lines = items.stream().map(item -> voucherLine(item.getVariant(),
+                resolveEffectivePrice(item.getVariant()).multiply(BigDecimal.valueOf(item.getQuantity())))).toList();
+        return voucherService.quoteCheckoutVoucher(voucherCode, customer, lines).quote();
     }
 
-    private void applyVoucherDuringCheckout(Order order, Customer customer, List<CartItem> cartItems, String voucherCode) {
-        ValidateVoucherResponse voucher = validateVoucherForCheckout(order, customer, cartItems, voucherCode);
-        if (voucher == null) {
-            return;
+    private void applyVoucherPreview(Order order, Customer customer, String voucherCode) {
+        if (voucherCode != null && !voucherCode.isBlank()) {
+            applyVoucherTotals(order, voucherService.quoteCheckoutVoucher(voucherCode, customer, voucherLines(order)));
         }
-
-        CheckoutVoucherContext context = checkoutVoucherContext(order, cartItems);
-        BigDecimal discount = voucherService.applyVoucher(
-                voucherCode,
-                customer,
-                order.getId(),
-                context.orderAmount(),
-                context.productIds(),
-                context.categoryIds(),
-                context.brandIds());
-        order.setVoucherCode(voucher.getVoucherCode());
-        order.setDiscountAmount(discount);
-        order.setTotalAmount(order.getSubTotal().subtract(discount));
     }
 
-    private ValidateVoucherResponse validateVoucherForCheckout(
-            Order order, Customer customer, List<CartItem> cartItems, String voucherCode) {
-        if (voucherCode == null || voucherCode.isBlank()) {
-            return null;
+    private void applyVoucherDuringCheckout(Order order, Customer customer, String voucherCode) {
+        java.util.Set<OrderItem> eligible = java.util.Set.of();
+        if (voucherCode != null && !voucherCode.isBlank()) {
+            CheckoutVoucher voucher = voucherService.redeemCheckoutVoucher(
+                    voucherCode, customer, order.getId(), voucherLines(order));
+            applyVoucherTotals(order, voucher);
+            eligible = order.getItems().stream()
+                    .filter(item -> voucher.eligibleVariantIds().contains(item.getVariant().getId()))
+                    .collect(Collectors.toUnmodifiableSet());
         }
-
-        CheckoutVoucherContext context = checkoutVoucherContext(order, cartItems);
-        ValidateVoucherRequest request = new ValidateVoucherRequest();
-        request.setOrderAmount(context.orderAmount());
-        request.setProductIds(context.productIds());
-        request.setCategoryIds(context.categoryIds());
-        request.setBrandIds(context.brandIds());
-        return voucherService.validateVoucher(voucherCode, customer, request);
+        var allocations = OrderVoucherAllocation.resolve(order, eligible);
+        for (OrderItem item : order.getItems()) {
+            BigDecimal discount = allocations.get(item);
+            item.setVoucherDiscountAmount(discount);
+            item.setNetLineAmount(item.getLineTotal().subtract(discount));
+            item.setVoucherEligible(eligible.contains(item));
+            item.setVoucherAllocationVersion(1);
+        }
     }
 
-    private CheckoutVoucherContext checkoutVoucherContext(Order order, List<CartItem> cartItems) {
-        List<ProductVariant> variants = cartItems.stream().map(CartItem::getVariant).toList();
-        List<UUID> productIds = variants.stream().map(variant -> variant.getProduct().getId()).distinct().toList();
-        List<UUID> categoryIds = variants.stream()
-                .flatMap(variant -> variant.getProduct().getCategories().stream())
-                .map(category -> category.getId())
-                .distinct()
-                .toList();
-        List<UUID> brandIds = variants.stream()
-                .map(variant -> variant.getProduct().getBrand())
-                .filter(java.util.Objects::nonNull)
-                .map(brand -> brand.getId())
-                .distinct()
-                .toList();
-        return new CheckoutVoucherContext(order.getSubTotal(), productIds, categoryIds, brandIds);
+    private void applyVoucherTotals(Order order, CheckoutVoucher voucher) {
+        order.setVoucherCode(voucher.quote().getVoucherCode());
+        order.setDiscountAmount(voucher.quote().getDiscountAmount());
+        order.setTotalAmount(order.getSubTotal().subtract(order.getDiscountAmount()));
+    }
+
+    private List<VoucherLine> voucherLines(Order order) {
+        return order.getItems().stream().map(item -> voucherLine(item.getVariant(), item.getLineTotal())).toList();
+    }
+
+    private VoucherLine voucherLine(ProductVariant variant, BigDecimal lineTotal) {
+        var product = variant.getProduct();
+        return new VoucherLine(variant.getId(), product.getId(),
+                product.getCategories().stream().map(category -> category.getId()).collect(Collectors.toSet()),
+                product.getBrand() == null ? null : product.getBrand().getId(), lineTotal);
     }
 
     private OrderPreviewResponse buildPreviewResponse(Order order, CheckoutCarrierQuoteResponse quote) {
@@ -861,10 +858,4 @@ public class OrderServiceImpl implements OrderService {
             Address address
     ) {}
 
-    private record CheckoutVoucherContext(
-            BigDecimal orderAmount,
-            List<UUID> productIds,
-            List<UUID> categoryIds,
-            List<UUID> brandIds
-    ) {}
 }

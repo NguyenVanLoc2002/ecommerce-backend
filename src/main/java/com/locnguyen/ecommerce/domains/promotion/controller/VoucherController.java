@@ -4,7 +4,7 @@ import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherRequest;
 import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherResponse;
-import com.locnguyen.ecommerce.domains.promotion.service.VoucherService;
+import com.locnguyen.ecommerce.domains.order.service.OrderService;
 import com.locnguyen.ecommerce.domains.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping(AppConstants.API_V1 + "/vouchers")
 public class VoucherController {
 
-    private final VoucherService voucherService;
+    private final OrderService orderService;
     private final UserService userService;
 
     @Operation(
@@ -34,6 +34,6 @@ public class VoucherController {
             @PathVariable String code,
             @Valid @RequestBody ValidateVoucherRequest request) {
         return ApiResponse.success(
-                voucherService.validateVoucher(code, userService.getCurrentCustomer(), request));
+                orderService.quoteCartVoucher(userService.getCurrentCustomer(), code));
     }
 }

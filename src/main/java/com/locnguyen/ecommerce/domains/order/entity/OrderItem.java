@@ -62,4 +62,16 @@ public class OrderItem extends BaseEntity {
 
     @Column(name = "line_total", precision = 18, scale = 2, nullable = false)
     private BigDecimal lineTotal;
+
+    @Column(name = "voucher_discount_amount", precision = 18, scale = 2)
+    private BigDecimal voucherDiscountAmount;
+
+    @Column(name = "voucher_eligible")
+    private Boolean voucherEligible;
+
+    @Column(name = "voucher_allocation_version")
+    private Integer voucherAllocationVersion;
+
+    @Column(name = "net_line_amount", precision = 18, scale = 2)
+    private BigDecimal netLineAmount;
 }

@@ -735,7 +735,9 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - Response:
   - `ApiResponse<ValidateVoucherResponse>`
 - Note:
-  - this endpoint previews discount only
+  - the authenticated customer's active cart supplies quantities, prices, and product/category/brand context. Legacy request body amounts and IDs do not determine the quote.
+  - merchandise from eligible lines supplies the minimum spend and discount base. Shipping is excluded. The response order amount and final amount describe all cart merchandise before and after the voucher.
+  - order preview and order creation use the same voucher calculation. Checkout records the eligible lines, discount allocation, and net merchandise amounts for the order.
   - it does not record voucher usage
 
 ---

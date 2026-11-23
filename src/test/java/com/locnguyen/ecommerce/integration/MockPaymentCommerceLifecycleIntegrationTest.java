@@ -38,6 +38,12 @@ import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import com.locnguyen.ecommerce.domains.productvariant.repository.ProductVariantRepository;
 import com.locnguyen.ecommerce.domains.user.entity.User;
 import com.locnguyen.ecommerce.domains.user.repository.UserRepository;
+import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
+import com.locnguyen.ecommerce.domains.promotion.entity.Promotion;
+import com.locnguyen.ecommerce.domains.promotion.entity.Voucher;
+import com.locnguyen.ecommerce.domains.promotion.enums.DiscountType;
+import com.locnguyen.ecommerce.domains.promotion.repository.PromotionRepository;
+import com.locnguyen.ecommerce.domains.promotion.repository.VoucherRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -104,6 +110,58 @@ class MockPaymentCommerceLifecycleIntegrationTest {
     @Autowired private PaymentService paymentService;
     @Autowired private MockMvc mockMvc;
     @Autowired private EntityManager entityManager;
+    @Autowired private OrderItemRepository orderItemRepository;
+    @Autowired private PromotionRepository promotionRepository;
+    @Autowired private VoucherRepository voucherRepository;
+
+    @Test
+    void checkoutVoucher_previewMatchesPersistedLineSnapshotAndPaymentAmount() {
+        CommerceFixture fixture = createFixture();
+        addProductToCart(fixture);
+
+        Promotion promotion = new Promotion();
+        promotion.setName("Checkout snapshot test");
+        promotion.setDiscountType(DiscountType.PERCENTAGE);
+        promotion.setDiscountValue(new BigDecimal("10"));
+        promotion.setActive(true);
+        promotion.setStartDate(java.time.LocalDateTime.now().minusDays(1));
+        promotion.setEndDate(java.time.LocalDateTime.now().plusDays(1));
+        promotion = promotionRepository.saveAndFlush(promotion);
+
+        Voucher voucher = new Voucher();
+        voucher.setCode("SNAP-" + UUID.randomUUID());
+        voucher.setPromotion(promotion);
+        voucher.setStartDate(promotion.getStartDate());
+        voucher.setEndDate(promotion.getEndDate());
+        voucher.setActive(true);
+        voucherRepository.saveAndFlush(voucher);
+
+        CreateOrderRequest request = new CreateOrderRequest();
+        request.setShippingAddressId(fixture.addressId());
+        request.setPaymentMethod(PaymentMethod.ONLINE);
+        request.setVoucherCode(voucher.getCode());
+
+        var voucherQuote = orderService.quoteCartVoucher(fixture.customer(), voucher.getCode());
+        var preview = orderService.previewOrder(fixture.customer(), request);
+        var order = orderService.createOrder(fixture.customer(), request, UUID.randomUUID().toString());
+        initiateMockPayment(order, fixture);
+        entityManager.clear();
+
+        assertThat(order.getDiscountAmount()).isEqualByComparingTo(voucherQuote.getDiscountAmount());
+        assertThat(order.getDiscountAmount()).isEqualByComparingTo(preview.getDiscountAmount());
+        assertThat(order.getTotalAmount()).isEqualByComparingTo(preview.getTotalAmount());
+        assertThat(paymentRepository.findByOrderId(order.getId()).orElseThrow().getAmount())
+                .isEqualByComparingTo(order.getTotalAmount());
+        assertThat(orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId())).singleElement()
+                .satisfies(item -> {
+                    assertThat(item.getQuantity()).isEqualTo(ORDER_QUANTITY);
+                    assertThat(item.getVoucherEligible()).isTrue();
+                    assertThat(item.getVoucherAllocationVersion()).isEqualTo(1);
+                    assertThat(item.getVoucherDiscountAmount()).isEqualByComparingTo(order.getDiscountAmount());
+                    assertThat(item.getNetLineAmount()).isEqualByComparingTo(
+                            item.getLineTotal().subtract(order.getDiscountAmount()));
+                });
+    }
 
     @Test
     void mockPaymentCommerceLifecycle_reservesStockMarksPaymentPaidProcessesOrderAndShowsCustomerHistory()

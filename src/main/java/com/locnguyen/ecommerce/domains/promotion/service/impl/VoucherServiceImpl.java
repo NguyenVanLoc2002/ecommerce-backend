@@ -34,7 +34,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -210,6 +212,96 @@ public class VoucherServiceImpl implements VoucherService {
 
         BigDecimal discount = calculateDiscount(voucher.getPromotion(), orderAmount);
 
+        recordUsage(voucher, customer, orderId, discount);
+        return discount;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CheckoutVoucher quoteCheckoutVoucher(String code, Customer customer, List<VoucherLine> lines) {
+        return quote(findByCodeWithRulesOrThrow(code), customer, lines);
+    }
+
+    @Override
+    @Transactional
+    public CheckoutVoucher redeemCheckoutVoucher(String code, Customer customer, UUID orderId, List<VoucherLine> lines) {
+        Voucher voucher = voucherRepository.findByCodeWithRulesForUpdate(code)
+                .orElseThrow(() -> new AppException(ErrorCode.VOUCHER_NOT_FOUND));
+        CheckoutVoucher checkout = quote(voucher, customer, lines);
+        recordUsage(voucher, customer, orderId, checkout.quote().getDiscountAmount());
+        return checkout;
+    }
+
+    private CheckoutVoucher quote(Voucher voucher, Customer customer, List<VoucherLine> lines) {
+        RuleType requiredRule = switch (voucher.getPromotion().getScope()) {
+            case PRODUCT -> RuleType.SPECIFIC_PRODUCTS;
+            case CATEGORY -> RuleType.SPECIFIC_CATEGORIES;
+            case BRAND -> RuleType.SPECIFIC_BRANDS;
+            case ORDER -> null;
+            case SHIPPING -> throw new AppException(ErrorCode.VOUCHER_NOT_APPLICABLE,
+                    "Shipping vouchers require a shipping discount calculation");
+        };
+        if (requiredRule != null && voucher.getPromotion().getRules().stream()
+                .noneMatch(rule -> rule.getRuleType() == requiredRule)) {
+            throw new AppException(ErrorCode.VOUCHER_NOT_APPLICABLE, "Voucher scope has no eligibility rule");
+        }
+        List<VoucherLine> eligible = lines;
+        for (PromotionRule rule : voucher.getPromotion().getRules()) {
+            switch (rule.getRuleType()) {
+                case SPECIFIC_PRODUCTS -> {
+                    List<UUID> ids = parseIds(rule.getRuleValue().trim());
+                    eligible = eligible.stream().filter(line -> ids.contains(line.productId())).toList();
+                }
+                case SPECIFIC_CATEGORIES -> {
+                    List<UUID> ids = parseIds(rule.getRuleValue().trim());
+                    eligible = eligible.stream()
+                            .filter(line -> line.categoryIds().stream().anyMatch(ids::contains)).toList();
+                }
+                case SPECIFIC_BRANDS -> {
+                    List<UUID> ids = parseIds(rule.getRuleValue().trim());
+                    eligible = eligible.stream().filter(line -> line.brandId() != null && ids.contains(line.brandId())).toList();
+                }
+                default -> { }
+            }
+        }
+        if (eligible.isEmpty()) {
+            throw new AppException(ErrorCode.VOUCHER_NOT_APPLICABLE, "No eligible voucher items");
+        }
+
+        BigDecimal merchandiseTotal = lines.stream().map(VoucherLine::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal eligibleTotal = eligible.stream().map(VoucherLine::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        doValidate(voucher, customer, eligibleTotal,
+                eligible.stream().map(VoucherLine::productId).toList(),
+                eligible.stream().flatMap(line -> line.categoryIds().stream()).toList(),
+                eligible.stream().map(VoucherLine::brandId).filter(java.util.Objects::nonNull).toList());
+        Promotion promotion = voucher.getPromotion();
+        BigDecimal discount = promotion.getDiscountType() == DiscountType.PERCENTAGE
+                ? eligibleTotal.multiply(promotion.getDiscountValue()).movePointLeft(2)
+                : promotion.getDiscountValue();
+        discount = discount.setScale(0, RoundingMode.HALF_UP);
+        BigDecimal maximum = eligible.stream().map(VoucherLine::lineTotal)
+                .map(value -> value.setScale(0, RoundingMode.DOWN)).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (promotion.getDiscountType() == DiscountType.PERCENTAGE && promotion.getMaxDiscountAmount() != null) {
+            maximum = maximum.min(promotion.getMaxDiscountAmount().setScale(0, RoundingMode.DOWN));
+        }
+        discount = discount.min(maximum);
+
+        ValidateVoucherResponse response = ValidateVoucherResponse.builder()
+                .voucherCode(voucher.getCode())
+                .promotionName(voucher.getPromotion().getName())
+                .discountType(voucher.getPromotion().getDiscountType().name())
+                .discountValue(voucher.getPromotion().getDiscountValue())
+                .discountAmount(discount)
+                .orderAmount(merchandiseTotal)
+                .finalAmount(merchandiseTotal.subtract(discount))
+                .build();
+        Set<UUID> eligibleVariants = eligible.stream().map(VoucherLine::variantId).collect(Collectors.toUnmodifiableSet());
+        return new CheckoutVoucher(response, eligibleVariants);
+    }
+
+    private void recordUsage(Voucher voucher, Customer customer, UUID orderId, BigDecimal discount) {
         // Record usage
         VoucherUsage usage = new VoucherUsage();
         usage.setVoucher(voucher);
@@ -226,8 +318,7 @@ public class VoucherServiceImpl implements VoucherService {
 
         // Atomically increment counters — no read-modify-write race
 
-        log.info("Voucher applied: code={} orderId={} discount={}", voucherCode, orderId, discount);
-        return discount;
+        log.info("Voucher applied: code={} orderId={} discount={}", voucher.getCode(), orderId, discount);
     }
 
     /**

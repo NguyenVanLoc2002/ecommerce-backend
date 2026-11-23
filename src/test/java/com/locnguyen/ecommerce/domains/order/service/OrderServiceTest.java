@@ -48,6 +48,7 @@ import com.locnguyen.ecommerce.domains.product.entity.ProductMedia;
 import com.locnguyen.ecommerce.domains.product.enums.MediaType;
 import com.locnguyen.ecommerce.domains.product.repository.ProductMediaRepository;
 import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
+import com.locnguyen.ecommerce.domains.promotion.dto.CheckoutVoucher;
 import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherResponse;
 import com.locnguyen.ecommerce.domains.promotion.service.VoucherService;
 import org.junit.jupiter.api.BeforeEach;
@@ -565,13 +566,11 @@ class OrderServiceTest {
             request.setVoucherCode("SAVE50");
 
             stubSuccessfulCreateOrder(cust, cart, List.of(item), addr, List.of(inventory));
-            when(voucherService.validateVoucher(eq("SAVE50"), eq(cust), any()))
-                    .thenReturn(ValidateVoucherResponse.builder()
+            when(voucherService.redeemCheckoutVoucher(eq("SAVE50"), eq(cust), any(), anyList()))
+                    .thenReturn(new CheckoutVoucher(ValidateVoucherResponse.builder()
                             .voucherCode("SAVE50")
                             .discountAmount(new BigDecimal("50000"))
-                            .build());
-            when(voucherService.applyVoucher(eq("SAVE50"), eq(cust), any(), any(), anyList(), anyList(), anyList()))
-                    .thenReturn(new BigDecimal("50000"));
+                            .build(), java.util.Set.of(variant.getId())));
 
             orderService.createOrder(cust, request, "idem-key");
 
@@ -579,6 +578,8 @@ class OrderServiceTest {
             verify(orderRepository).save(captor.capture());
             assertThat(captor.getValue().getVoucherCode()).isEqualTo("SAVE50");
             assertThat(captor.getValue().getDiscountAmount()).isEqualByComparingTo("50000");
+            assertThat(captor.getValue().getItems().get(0).getVoucherDiscountAmount()).isEqualByComparingTo("50000");
+            assertThat(captor.getValue().getItems().get(0).getNetLineAmount()).isEqualByComparingTo("250000");
             assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("250000");
         }
 
@@ -922,11 +923,11 @@ class OrderServiceTest {
             when(cartRepository.findByCustomerIdAndStatus(cust.getId(), CartStatus.ACTIVE)).thenReturn(Optional.of(cart));
             when(cartItemRepository.findByCartIdOrderByCreatedAtAsc(cart.getId())).thenReturn(List.of(item));
             when(addressRepository.findByIdAndDeletedFalse(addr.getId())).thenReturn(Optional.of(addr));
-            when(voucherService.validateVoucher(eq("SAVE50"), eq(cust), any()))
-                    .thenReturn(ValidateVoucherResponse.builder()
+            when(voucherService.quoteCheckoutVoucher(eq("SAVE50"), eq(cust), anyList()))
+                    .thenReturn(new CheckoutVoucher(ValidateVoucherResponse.builder()
                             .voucherCode("SAVE50")
                             .discountAmount(new BigDecimal("50000"))
-                            .build());
+                            .build(), java.util.Set.of(variant.getId())));
 
             OrderPreviewResponse response = orderService.previewOrder(cust, request);
 

@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -45,6 +46,62 @@ import java.util.UUID;
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class VoucherServiceTest {
+
+    @Test
+    void checkoutVoucher_usesEligibleLinesForProductCategoryAndBrandRules() {
+        Customer customer = customer(uuid(50));
+        List<VoucherLine> lines = List.of(
+                new VoucherLine(uuid(1), uuid(11), Set.of(uuid(21)), uuid(31), new BigDecimal("200")),
+                new VoucherLine(uuid(2), uuid(12), Set.of(uuid(22)), null, new BigDecimal("800")));
+
+        for (RuleType type : List.of(RuleType.SPECIFIC_PRODUCTS, RuleType.SPECIFIC_CATEGORIES, RuleType.SPECIFIC_BRANDS)) {
+            long target = switch (type) {
+                case SPECIFIC_PRODUCTS -> 11;
+                case SPECIFIC_CATEGORIES -> 21;
+                case SPECIFIC_BRANDS -> 31;
+                default -> throw new AssertionError(type);
+            };
+            Promotion promo = promotion(DiscountType.PERCENTAGE, new BigDecimal("50"));
+            promo.setMaxDiscountAmount(new BigDecimal("75"));
+            promo.getRules().add(rule(promo, type, idCsv(target)));
+            Voucher voucher = voucher(promo);
+            when(voucherRepository.findByCodeWithRules("TESTCODE")).thenReturn(Optional.of(voucher));
+            when(voucherRepository.findByCodeWithRulesForUpdate("TESTCODE")).thenReturn(Optional.of(voucher));
+            when(voucherRepository.incrementUsageCountIfAvailable(voucher.getId())).thenReturn(1);
+            when(promotionService.tryIncrementUsageCount(promo.getId())).thenReturn(true);
+
+            CheckoutVoucher preview = voucherService.quoteCheckoutVoucher("TESTCODE", customer, lines);
+            CheckoutVoucher redeemed = voucherService.redeemCheckoutVoucher("TESTCODE", customer, uuid(40), lines);
+            assertThat(preview.quote().getOrderAmount()).isEqualByComparingTo("1000");
+            assertThat(preview.quote().getDiscountAmount()).isEqualByComparingTo("75");
+            assertThat(preview.quote().getFinalAmount()).isEqualByComparingTo("925");
+            assertThat(preview.eligibleVariantIds()).containsExactly(uuid(1));
+            assertThat(redeemed.quote().getDiscountAmount()).isEqualByComparingTo(preview.quote().getDiscountAmount());
+            assertThat(redeemed.eligibleVariantIds()).isEqualTo(preview.eligibleVariantIds());
+
+            promo.setMinimumOrderAmount(new BigDecimal("201"));
+            assertThatThrownBy(() -> voucherService.quoteCheckoutVoucher("TESTCODE", customer, lines))
+                    .isInstanceOf(AppException.class).extracting("errorCode")
+                    .isEqualTo(ErrorCode.VOUCHER_MIN_ORDER_NOT_MET);
+        }
+    }
+
+    @Test
+    void checkoutVoucher_capsFixedAmountAtEligibleMerchandise() {
+        Promotion promo = promotion(DiscountType.FIXED_AMOUNT, new BigDecimal("1000"));
+        Voucher voucher = voucher(promo);
+        when(voucherRepository.findByCodeWithRules("TESTCODE")).thenReturn(Optional.of(voucher));
+        List<VoucherLine> lines = List.of(
+                new VoucherLine(uuid(1), uuid(11), Set.of(), null, new BigDecimal("200")),
+                new VoucherLine(uuid(2), uuid(12), Set.of(), null, new BigDecimal("300")));
+
+        assertThat(voucherService.quoteCheckoutVoucher("TESTCODE", customer(uuid(50)), lines)
+                .quote().getDiscountAmount()).isEqualByComparingTo("500");
+
+        promo.getRules().add(rule(promo, RuleType.SPECIFIC_PRODUCTS, idCsv(11)));
+        assertThat(voucherService.quoteCheckoutVoucher("TESTCODE", customer(uuid(50)), lines)
+                .quote().getDiscountAmount()).isEqualByComparingTo("200");
+    }
 
     private static UUID uuid(long n) { return new UUID(0L, n); }
 
@@ -898,4 +955,3 @@ class VoucherServiceTest {
         }
     }
 }
-
