@@ -1167,6 +1167,28 @@ class OrderServiceTest {
     class CancelMyOrder {
 
         @Test
+        void retry_does_not_release_stock_or_void_invoice_twice() {
+            Customer cust = customer(uuid(1));
+            Order order = savedOrder(uuid(1), cust, OrderStatus.PENDING, PaymentMethod.COD,
+                    new BigDecimal("100000"));
+            order.setReceiverName("Original recipient");
+            when(orderRepository.findById(uuid(1))).thenReturn(Optional.of(order));
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(orderItemRepository.findByOrderIdOrderByCreatedAtAsc(any(UUID.class))).thenReturn(List.of());
+
+            orderService.cancelMyOrder(uuid(1), cust);
+
+            assertThatThrownBy(() -> orderService.cancelMyOrder(uuid(1), cust))
+                    .isInstanceOf(AppException.class)
+                    .extracting(e -> ((AppException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.ORDER_CANNOT_CANCEL);
+            assertThat(order.getReceiverName()).isEqualTo("Original recipient");
+            verify(inventoryService).releaseStock("ORDER", order.getOrderCode());
+            verify(invoiceService).voidByOrderId(eq(order.getId()), anyString());
+        }
+
+
+        @Test
         void customer_can_cancel_PENDING_order() {
             Customer cust = customer(uuid(1));
             Order order = savedOrder(uuid(1), cust, OrderStatus.PENDING, PaymentMethod.COD,
