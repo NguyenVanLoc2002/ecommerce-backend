@@ -44,6 +44,28 @@ import com.locnguyen.ecommerce.domains.promotion.entity.Voucher;
 import com.locnguyen.ecommerce.domains.promotion.enums.DiscountType;
 import com.locnguyen.ecommerce.domains.promotion.repository.PromotionRepository;
 import com.locnguyen.ecommerce.domains.promotion.repository.VoucherRepository;
+import com.locnguyen.ecommerce.common.exception.AppException;
+import com.locnguyen.ecommerce.common.exception.ErrorCode;
+import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
+import com.locnguyen.ecommerce.domains.notification.repository.NotificationRepository;
+import com.locnguyen.ecommerce.domains.returns.dto.CreateReturnRequest;
+import com.locnguyen.ecommerce.domains.returns.dto.ExchangeResponse;
+import com.locnguyen.ecommerce.domains.returns.dto.ExchangeSelection;
+import com.locnguyen.ecommerce.domains.returns.enums.ExchangeStatus;
+import com.locnguyen.ecommerce.domains.returns.repository.ReturnExchangeRepository;
+import com.locnguyen.ecommerce.domains.returns.service.ExchangeService;
+import com.locnguyen.ecommerce.domains.returns.service.ReturnRefundService;
+import com.locnguyen.ecommerce.domains.payment.enums.RefundStatus;
+import com.locnguyen.ecommerce.domains.payment.repository.PaymentRefundRepository;
+import com.locnguyen.ecommerce.domains.payment.service.PaymentRefundService;
+import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
+import com.locnguyen.ecommerce.domains.returns.dto.ReturnDecisionRequest;
+import com.locnguyen.ecommerce.domains.returns.dto.ReturnHandlingRequest;
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnReason;
+import com.locnguyen.ecommerce.domains.returns.repository.ReturnDecisionRepository;
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnStatus;
+import com.locnguyen.ecommerce.domains.returns.service.OrderReturnService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,11 +82,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -113,6 +137,306 @@ class MockPaymentCommerceLifecycleIntegrationTest {
     @Autowired private OrderItemRepository orderItemRepository;
     @Autowired private PromotionRepository promotionRepository;
     @Autowired private VoucherRepository voucherRepository;
+    @Autowired private OrderRepository orderRepository;
+    @Autowired private OrderReturnService returnService;
+    @Autowired private ExchangeService exchangeService;
+    @Autowired private ReturnRefundService returnRefundService;
+    @Autowired private PaymentRefundService paymentRefundService;
+    @Autowired private PaymentRefundRepository paymentRefundRepository;
+
+    @Test
+    void returnRefund_reservesPartialAmountsWithoutLegacyCompletion() throws Exception {
+        CommerceFixture fixture = createFixture();
+        addProductToCart(fixture);
+        Promotion promo = new Promotion();
+        promo.setName("Partial return rounding");
+        promo.setDiscountType(DiscountType.FIXED_AMOUNT);
+        promo.setDiscountValue(BigDecimal.ONE);
+        promo.setActive(true);
+        promo.setStartDate(LocalDateTime.now().minusDays(1));
+        promo.setEndDate(LocalDateTime.now().plusDays(1));
+        promo = promotionRepository.saveAndFlush(promo);
+        Voucher voucher = new Voucher();
+        voucher.setCode("RETURN-" + UUID.randomUUID());
+        voucher.setPromotion(promo);
+        voucher.setStartDate(promo.getStartDate());
+        voucher.setEndDate(promo.getEndDate());
+        voucher.setActive(true);
+        voucherRepository.saveAndFlush(voucher);
+
+        CreateOrderRequest checkout = new CreateOrderRequest();
+        checkout.setShippingAddressId(fixture.addressId());
+        checkout.setPaymentMethod(PaymentMethod.ONLINE);
+        checkout.setVoucherCode(voucher.getCode());
+        var order = orderService.createOrder(fixture.customer(), checkout, UUID.randomUUID().toString());
+        initiateMockPayment(order, fixture);
+        completeMockPayment(order.getOrderCode(), "RETURN-" + UUID.randomUUID());
+        var original = orderRepository.findById(order.getId()).orElseThrow();
+        original.setStatus(OrderStatus.DELIVERED);
+        orderRepository.saveAndFlush(original);
+        var item = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId()).get(0);
+
+        var first = inspectOneDefectiveReturn(fixture, order, item.getId(), "part-1");
+        var second = inspectOneDefectiveReturn(fixture, order, item.getId(), "part-2");
+        var refundOne = returnRefundService.prepare(order.getId(), first.id());
+        var refundTwo = returnRefundService.prepare(order.getId(), second.id());
+        assertThat(refundOne.amount()).isEqualByComparingTo("99999");
+        assertThat(refundTwo.amount()).isEqualByComparingTo("100000");
+        assertThat(refundOne.status()).isEqualTo(RefundStatus.PENDING);
+        assertThat(returnRefundService.prepare(order.getId(), first.id()).refundCode())
+                .isEqualTo(refundOne.refundCode());
+        var ledger = paymentRefundRepository.findByReturnId(first.id()).orElseThrow();
+        assertThat(ledger.getReturnShippingAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(ledger.getReturnLineAllocations()).singleElement().satisfies(line -> {
+            assertThat(line.orderItemId()).isEqualTo(item.getId());
+            assertThat(line.quantity()).isEqualTo(1);
+            assertThat(line.amount()).isEqualByComparingTo(refundOne.amount());
+        });
+        assertThatThrownBy(() -> paymentRefundService.completeRefund(refundOne.refundCode(), "caller-supplied"))
+                .isInstanceOf(AppException.class).extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYMENT_REFUND_INVALID_STATUS);
+        assertThat(paymentRepository.findByOrderId(order.getId()).orElseThrow().getStatus())
+                .isEqualTo(PaymentRecordStatus.PAID);
+    }
+
+    private com.locnguyen.ecommerce.domains.returns.dto.ReturnResponse inspectOneDefectiveReturn(
+            CommerceFixture fixture, OrderResponse order, UUID itemId, String key) {
+        String actor = "returns-admin@example.test";
+        var entry = returnService.create(order.getId(), fixture.customer(), key,
+                new CreateReturnRequest(ReturnReason.DEFECTIVE, "Faulty item",
+                        List.of(new CreateReturnRequest.Item(itemId, 1))));
+        returnService.decide(order.getId(), entry.id(), "verify", actor, ReturnStatus.REQUESTED,
+                new ReturnDecisionRequest("Delivery receipt", LocalDateTime.now(java.time.ZoneOffset.UTC).minusDays(1)));
+        returnService.decide(order.getId(), entry.id(), "approve", actor, ReturnStatus.APPROVED,
+                new ReturnDecisionRequest("Complaint accepted", null));
+        returnService.handle(order.getId(), entry.id(), "receive", actor, ReturnStatus.RECEIVED,
+                new ReturnHandlingRequest("Received", null, null, null, null, null,
+                        List.of(new ReturnHandlingRequest.Line(itemId, 1, 0, 0))));
+        return returnService.handle(order.getId(), entry.id(), "inspect", actor, ReturnStatus.INSPECTED,
+                new ReturnHandlingRequest("Fault confirmed", null, null, null, null, null,
+                        List.of(new ReturnHandlingRequest.Line(itemId, 1, 0, 1))));
+    }
+    @Autowired private InvoiceService invoiceService;
+    @Autowired private ReturnExchangeRepository exchangeRepository;
+
+    @Test
+    void exchangeReservation_usesHistoricalPriceAndReleasesExpiredStock() {
+        CommerceFixture fixture = createFixture();
+        var purchased = productVariantRepository.findById(fixture.variantId()).orElseThrow();
+        var warehouse = inventoryRepository.findById(fixture.inventoryId()).orElseThrow().getWarehouse();
+        var samePrice = saveSibling(purchased, "100000");
+        var differentPrice = saveSibling(purchased, "120000");
+        var emptyStock = saveSibling(purchased, "100000");
+        Inventory alternateInventory = new Inventory();
+        alternateInventory.setVariant(samePrice);
+        alternateInventory.setWarehouse(warehouse);
+        alternateInventory.setOnHand(1);
+        alternateInventory = inventoryRepository.saveAndFlush(alternateInventory);
+
+        addProductToCart(fixture);
+        OrderResponse order = checkout(fixture);
+        var storedOrder = orderRepository.findById(order.getId()).orElseThrow();
+        storedOrder.setStatus(OrderStatus.DELIVERED);
+        orderRepository.saveAndFlush(storedOrder);
+        samePrice.setBasePrice(new BigDecimal("140000"));
+        productVariantRepository.saveAndFlush(samePrice);
+        var noHistory = saveSibling(purchased, "100000");
+        var itemId = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId()).get(0).getId();
+        var request = new CreateReturnRequest(ReturnReason.DEFECTIVE, "Damaged seam",
+                List.of(new CreateReturnRequest.Item(itemId, 1)));
+        var entry = returnService.create(order.getId(), fixture.customer(), "return", request);
+        String actor = "returns-admin@example.test";
+        returnService.decide(order.getId(), entry.id(), "verify", actor, ReturnStatus.REQUESTED,
+                new ReturnDecisionRequest("Delivery receipt", LocalDateTime.now(java.time.ZoneOffset.UTC).minusDays(1)));
+        returnService.decide(order.getId(), entry.id(), "approve", actor, ReturnStatus.APPROVED,
+                new ReturnDecisionRequest("Complaint accepted", null));
+
+        var unknown = new ExchangeSelection(itemId, noHistory.getId(), warehouse.getId(), 1, null);
+        assertThat(exchangeService.reserve(order.getId(), entry.id(), "unknown", actor, unknown).status())
+                .isEqualTo(ExchangeStatus.PRICE_REVIEW_REQUIRED);
+        var unequal = new ExchangeSelection(itemId, differentPrice.getId(), warehouse.getId(), 1, null);
+        assertThat(exchangeService.reserve(order.getId(), entry.id(), "unequal", actor, unequal).status())
+                .isEqualTo(ExchangeStatus.DIFFERENT_PRICE);
+        var unavailable = new ExchangeSelection(itemId, emptyStock.getId(), warehouse.getId(), 1, null);
+        assertThat(exchangeService.reserve(order.getId(), entry.id(), "empty", actor, unavailable).status())
+                .isEqualTo(ExchangeStatus.WAITING_CUSTOMER_CHOICE);
+
+        var selection = new ExchangeSelection(itemId, samePrice.getId(), warehouse.getId(), 1, null);
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        var racingRequests = java.util.stream.Stream.of("hold-a", "hold-b")
+                .map(key -> CompletableFuture.supplyAsync(() -> {
+                    ready.countDown();
+                    awaitStart(start);
+                    try {
+                        return new ExchangeRaceResult(key,
+                                exchangeService.reserve(order.getId(), entry.id(), key, actor, selection), null);
+                    } catch (AppException exception) {
+                        return new ExchangeRaceResult(key, null, exception.getErrorCode());
+                    }
+                })).toList();
+        awaitStart(ready);
+        start.countDown();
+        var results = racingRequests.stream().map(CompletableFuture::join).toList();
+        assertThat(results).filteredOn(result -> result.error() == ErrorCode.RETURN_QUANTITY_UNAVAILABLE)
+                .hasSize(1);
+        var winner = results.stream().filter(result -> result.exchange() != null).findFirst().orElseThrow();
+        var held = winner.exchange();
+        assertThat(held.status()).isEqualTo(ExchangeStatus.RESERVED);
+        assertThat(held.expiresAt()).isBetween(LocalDateTime.now(java.time.ZoneOffset.UTC).plusHours(47),
+                LocalDateTime.now(java.time.ZoneOffset.UTC).plusHours(48));
+        assertThat(exchangeService.reserve(order.getId(), entry.id(), winner.key(), actor, selection)).isEqualTo(held);
+        assertInventory(alternateInventory.getId(), 1, 1);
+
+        LocalDateTime expiredAt = LocalDateTime.now(java.time.ZoneOffset.UTC).minusMinutes(1);
+        var storedExchange = exchangeRepository.findById(held.id()).orElseThrow();
+        storedExchange.setExpiresAt(expiredAt);
+        exchangeRepository.saveAndFlush(storedExchange);
+        var stockHold = reservationRepository.findByVariantIdAndStatus(samePrice.getId(),
+                com.locnguyen.ecommerce.domains.inventory.enums.ReservationStatus.PENDING).get(0);
+        stockHold.setExpiresAt(expiredAt);
+        reservationRepository.saveAndFlush(stockHold);
+        inventoryService.releaseExpiredReservations();
+        assertInventory(alternateInventory.getId(), 1, 0);
+        assertThat(exchangeService.reserve(order.getId(), entry.id(), winner.key(), actor, selection).status())
+                .isEqualTo(ExchangeStatus.HOLD_EXPIRED);
+
+        var retry = exchangeService.reserve(order.getId(), entry.id(), "new-hold", actor, selection);
+        assertThat(retry.status()).isEqualTo(ExchangeStatus.RESERVED);
+        assertThat(exchangeService.cancel(order.getId(), entry.id(), retry.id(), actor).status())
+                .isEqualTo(ExchangeStatus.CANCELLED);
+        exchangeService.cancel(order.getId(), entry.id(), retry.id(), actor);
+        assertInventory(alternateInventory.getId(), 1, 0);
+
+        var nextHold = exchangeService.reserve(order.getId(), entry.id(), "ready-hold", actor, selection);
+        assertThatThrownBy(() -> exchangeService.createReplacement(order.getId(), entry.id(), nextHold.id()))
+                .isInstanceOf(AppException.class).extracting("errorCode").isEqualTo(ErrorCode.RETURN_DECISION_INVALID);
+        returnService.handle(order.getId(), entry.id(), "receive", actor, ReturnStatus.RECEIVED,
+                new ReturnHandlingRequest("Received", null, null, null, null, null,
+                        List.of(new ReturnHandlingRequest.Line(itemId, 1, 0, 0))));
+        returnService.handle(order.getId(), entry.id(), "inspect", actor, ReturnStatus.INSPECTED,
+                new ReturnHandlingRequest("Passed inspection", null, null, null, null, warehouse.getId(),
+                        List.of(new ReturnHandlingRequest.Line(itemId, 1, 1, 0))));
+        assertThat(exchangeService.createReplacement(order.getId(), entry.id(), held.id()).status())
+                .isEqualTo(ExchangeStatus.HOLD_EXPIRED);
+        var replacement = exchangeService.createReplacement(order.getId(), entry.id(), nextHold.id());
+        assertThat(replacement.status()).isEqualTo(ExchangeStatus.REPLACEMENT_CREATED);
+        assertThat(exchangeService.createReplacement(order.getId(), entry.id(), nextHold.id())).isEqualTo(replacement);
+        var child = orderService.getOrderById(replacement.replacementOrderId(), fixture.customer());
+        assertThat(child.getReplacementForOrderId()).isEqualTo(order.getId());
+        assertThat(child.getTotalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(child.getPaymentMethod()).isEqualTo(PaymentMethod.EXCHANGE);
+        assertThat(child.getPaymentStatus()).isEqualTo(PaymentStatus.NOT_REQUIRED);
+        assertThat(paymentRepository.findByOrderId(child.getId())).isEmpty();
+        assertThatThrownBy(() -> invoiceService.generateInvoice(child.getId())).isInstanceOf(AppException.class);
+        assertThat(orderService.processOrder(child.getId()).getStatus()).isEqualTo(OrderStatus.PROCESSING);
+        assertInventory(alternateInventory.getId(), 1, 1);
+    }
+
+    private record ExchangeRaceResult(String key, ExchangeResponse exchange, ErrorCode error) {}
+
+    private ProductVariant saveSibling(ProductVariant purchased, String basePrice) {
+        ProductVariant sibling = new ProductVariant();
+        sibling.setProduct(purchased.getProduct());
+        sibling.setSku("EXCHANGE-" + UUID.randomUUID());
+        sibling.setVariantName("Alternate");
+        sibling.setBasePrice(new BigDecimal(basePrice));
+        return productVariantRepository.saveAndFlush(sibling);
+    }
+    @Autowired private NotificationRepository notificationRepository;
+    @Autowired private ReturnDecisionRepository returnDecisionRepository;
+
+    @Test
+    void returnIntake_checksOwnershipAndSerializesCompetingClaims() {
+        CommerceFixture fixture = createFixture();
+        addProductToCart(fixture);
+        OrderResponse order = checkout(fixture);
+        var storedOrder = orderRepository.findById(order.getId()).orElseThrow();
+        storedOrder.setStatus(OrderStatus.DELIVERED);
+        orderRepository.saveAndFlush(storedOrder);
+        var itemId = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId()).get(0).getId();
+        var request = new CreateReturnRequest(ReturnReason.DEFECTIVE, "Damaged seam",
+                List.of(new CreateReturnRequest.Item(itemId, 1)));
+
+        assertThatThrownBy(() -> returnService.create(order.getId(), createFixture().customer(), "owner", request))
+                .isInstanceOf(AppException.class).extracting("errorCode").isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+        var first = returnService.create(order.getId(), fixture.customer(), "first", request);
+        assertThat(first.status()).isEqualTo(ReturnStatus.PENDING_DELIVERY_VERIFICATION);
+        var discretionary = new CreateReturnRequest(ReturnReason.CHANGED_MIND, "Changed my mind",
+                request.items(), true, true);
+        assertThatThrownBy(() -> returnService.create(order.getId(), fixture.customer(), "policy", discretionary))
+                .isInstanceOf(AppException.class).extracting("errorCode").isEqualTo(ErrorCode.RETURN_NOT_ELIGIBLE);
+        assertThat(returnService.create(order.getId(), fixture.customer(), "first", request).id())
+                .isEqualTo(first.id());
+        var changed = new CreateReturnRequest(ReturnReason.WRONG_ITEM, request.note(), request.items());
+        assertThatThrownBy(() -> returnService.create(order.getId(), fixture.customer(), "first", changed))
+                .isInstanceOf(AppException.class).extracting("errorCode").isEqualTo(ErrorCode.IDEMPOTENCY_KEY_CONFLICT);
+
+        var start = new CountDownLatch(1);
+        var ready = new CountDownLatch(2);
+        var second = CompletableFuture.supplyAsync(() -> submitCompetingReturn(ready, start, order, fixture, "second", request));
+        var third = CompletableFuture.supplyAsync(() -> submitCompetingReturn(ready, start, order, fixture, "third", request));
+        awaitStart(ready);
+        start.countDown();
+        assertThat(List.of(second.join(), third.join())).containsExactlyInAnyOrder("CREATED", "RETURN_QUANTITY_UNAVAILABLE");
+
+        String actor = "returns-admin@example.test";
+        var decision = new ReturnDecisionRequest("Verified against delivery receipt",
+                LocalDateTime.now(java.time.ZoneOffset.UTC).minusDays(1).withNano(0));
+        var verified = returnService.decide(order.getId(), first.id(), "verify", actor, ReturnStatus.REQUESTED, decision);
+        assertThat(verified.status()).isEqualTo(ReturnStatus.REQUESTED);
+        assertThat(returnService.decide(order.getId(), first.id(), "verify", actor, ReturnStatus.REQUESTED, decision))
+                .isEqualTo(verified);
+        var audit = returnDecisionRepository.findByReturnIdAndRequestKey(first.id(), "verify").orElseThrow();
+        assertThat(audit.getActor()).isEqualTo(actor);
+        assertThat(audit.getReason()).isEqualTo(decision.reason());
+        assertThat(audit.getVerifiedDeliveredAt()).isEqualTo(decision.deliveredAt());
+        assertThat(audit.getPreviousStatus()).isEqualTo(ReturnStatus.PENDING_DELIVERY_VERIFICATION);
+
+        var approval = new ReturnDecisionRequest("Approve customer complaint", null);
+        assertThat(returnService.decide(order.getId(), first.id(), "approve", actor, ReturnStatus.APPROVED, approval)
+                .status()).isEqualTo(ReturnStatus.APPROVED);
+        assertThatThrownBy(() -> returnService.decide(
+                order.getId(), first.id(), "approve", actor, ReturnStatus.REJECTED, approval))
+                .isInstanceOf(AppException.class).extracting("errorCode").isEqualTo(ErrorCode.IDEMPOTENCY_KEY_CONFLICT);
+        var receipt = new ReturnHandlingRequest("Parcel received", "Example Carrier", "TRACK-1",
+                LocalDateTime.now(java.time.ZoneOffset.UTC).withNano(0), "receipt-1", null,
+                List.of(new ReturnHandlingRequest.Line(itemId, 1, 0, 0)));
+        assertThat(returnService.handle(order.getId(), first.id(), "receive", actor, ReturnStatus.RECEIVED, receipt)
+                .status()).isEqualTo(ReturnStatus.RECEIVED);
+
+        var invalidWarehouse = new ReturnHandlingRequest("Restock inspected item", null, null, null, "inspection-1",
+                UUID.randomUUID(), List.of(new ReturnHandlingRequest.Line(itemId, 1, 1, 0)));
+        assertThatThrownBy(() -> returnService.handle(
+                order.getId(), first.id(), "inspect", actor, ReturnStatus.INSPECTED, invalidWarehouse))
+                .isInstanceOf(AppException.class);
+        assertInventory(fixture.inventoryId(), INITIAL_ON_HAND, ORDER_QUANTITY);
+
+        UUID warehouseId = inventoryRepository.findById(fixture.inventoryId()).orElseThrow().getWarehouse().getId();
+        var inspection = new ReturnHandlingRequest("Restock inspected item", null, null, null, "inspection-1",
+                warehouseId, List.of(new ReturnHandlingRequest.Line(itemId, 1, 1, 0)));
+        var inspected = returnService.handle(order.getId(), first.id(), "inspect", actor, ReturnStatus.INSPECTED, inspection);
+        assertThat(inspected.status()).isEqualTo(ReturnStatus.INSPECTED);
+        assertThat(returnService.handle(order.getId(), first.id(), "inspect", actor, ReturnStatus.INSPECTED, inspection))
+                .isEqualTo(inspected);
+        assertInventory(fixture.inventoryId(), INITIAL_ON_HAND + 1, ORDER_QUANTITY);
+        assertThat(notificationRepository.findByCustomerIdOrderByCreatedAtDesc(
+                fixture.customer().getId(), PageRequest.of(0, 100)).getContent())
+                .filteredOn(notification -> first.id().equals(notification.getReferenceId())).hasSize(5);
+        assertThat(orderRepository.findById(order.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.DELIVERED);
+    }
+
+    private String submitCompetingReturn(CountDownLatch ready, CountDownLatch start, OrderResponse order,
+                                         CommerceFixture fixture, String key, CreateReturnRequest request) {
+        ready.countDown();
+        awaitStart(start);
+        try {
+            returnService.create(order.getId(), fixture.customer(), key, request);
+            return "CREATED";
+        } catch (AppException exception) {
+            return exception.getErrorCode().name();
+        }
+    }
 
     @Test
     void checkoutVoucher_previewMatchesPersistedLineSnapshotAndPaymentAmount() {
@@ -143,6 +467,8 @@ class MockPaymentCommerceLifecycleIntegrationTest {
 
         var voucherQuote = orderService.quoteCartVoucher(fixture.customer(), voucher.getCode());
         var preview = orderService.previewOrder(fixture.customer(), request);
+        assertThat(preview.getReturnPolicies()).singleElement().satisfies(line ->
+                assertThat(line.policy()).isEqualTo(ReturnPolicy.REVIEW_REQUIRED));
         var order = orderService.createOrder(fixture.customer(), request, UUID.randomUUID().toString());
         initiateMockPayment(order, fixture);
         entityManager.clear();
@@ -156,6 +482,9 @@ class MockPaymentCommerceLifecycleIntegrationTest {
                 .satisfies(item -> {
                     assertThat(item.getQuantity()).isEqualTo(ORDER_QUANTITY);
                     assertThat(item.getVoucherEligible()).isTrue();
+                    assertThat(item.getReturnPolicySnapshot()).isEqualTo(ReturnPolicy.REVIEW_REQUIRED);
+                    assertThat(item.getExchangeBasePrices().get(fixture.variantId()))
+                            .isEqualByComparingTo("100000");
                     assertThat(item.getVoucherAllocationVersion()).isEqualTo(1);
                     assertThat(item.getVoucherDiscountAmount()).isEqualByComparingTo(order.getDiscountAmount());
                     assertThat(item.getNetLineAmount()).isEqualByComparingTo(

@@ -115,6 +115,12 @@ public enum ErrorCode {
             "Cart item quantity must be greater than 0"),
 
     // ─── Order ──────────────────────────────────────────────────────────────
+    RETURN_REFUND_REVIEW_REQUIRED(HttpStatus.CONFLICT, "RETURN_REFUND_REVIEW_REQUIRED", "Refund requires historical reconciliation"),
+    RETURN_NOT_FOUND(HttpStatus.NOT_FOUND, "RETURN_NOT_FOUND", "Return request not found"),
+    RETURN_DECISION_INVALID(HttpStatus.CONFLICT, "RETURN_DECISION_INVALID", "Invalid return decision"),
+    RETURN_NOT_ELIGIBLE(HttpStatus.UNPROCESSABLE_ENTITY, "RETURN_NOT_ELIGIBLE", "The order is not eligible for a return"),
+    RETURN_QUANTITY_UNAVAILABLE(HttpStatus.CONFLICT, "RETURN_QUANTITY_UNAVAILABLE", "The requested quantity is unavailable for return"),
+
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "Order not found"),
     ORDER_STATUS_INVALID(HttpStatus.UNPROCESSABLE_ENTITY, "ORDER_STATUS_INVALID",
             "Invalid order status transition"),

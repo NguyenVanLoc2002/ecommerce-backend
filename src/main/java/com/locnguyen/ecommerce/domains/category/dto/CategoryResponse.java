@@ -1,5 +1,7 @@
 package com.locnguyen.ecommerce.domains.category.dto;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.locnguyen.ecommerce.domains.category.enums.CategoryStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -25,6 +27,7 @@ public class CategoryResponse implements Serializable {
     private final UUID id;
     private final UUID parentId;
     private final String name;
+    private final ReturnPolicy returnPolicy;
     private final String slug;
     private final String description;
     private final String imageUrl;

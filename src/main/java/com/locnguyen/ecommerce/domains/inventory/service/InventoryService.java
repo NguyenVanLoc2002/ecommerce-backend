@@ -9,10 +9,12 @@ import com.locnguyen.ecommerce.domains.inventory.dto.ReserveStockRequest;
 import com.locnguyen.ecommerce.domains.inventory.dto.StockFilter;
 import com.locnguyen.ecommerce.domains.inventory.dto.StockMovementResponse;
 import com.locnguyen.ecommerce.domains.inventory.entity.InventoryReservation;
+import com.locnguyen.ecommerce.domains.productvariant.entity.ProductVariant;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.time.LocalDateTime;
 
@@ -35,6 +37,10 @@ public interface InventoryService {
     StockMovementResponse adjustStock(AdjustStockRequest request);
 
     StockMovementResponse returnStock(UUID variantId, UUID warehouseId, int quantity, String referenceType, String referenceId);
+
+    Optional<LocalDateTime> tryReserveExchangeStock(UUID variantId, UUID warehouseId, int quantity, UUID exchangeId);
+
+    Optional<ProductVariant> transferExchangeStock(UUID exchangeId, UUID variantId, int quantity, String orderCode);
 
     InventoryReservation reserveStock(ReserveStockRequest request);
 

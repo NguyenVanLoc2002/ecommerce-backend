@@ -77,6 +77,10 @@ public class InvoiceServiceImpl implements InvoiceService {
         User user = order.getCustomer().getUser();
         String customerName = buildFullName(user.getFirstName(), user.getLastName());
 
+        if (order.getReplacementForOrderId() != null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Replacement orders do not have a sales invoice");
+        }
+
         Invoice invoice = new Invoice();
         invoice.setOrder(order);
         invoice.setInvoiceCode(CodeGenerator.generateInvoiceCode());

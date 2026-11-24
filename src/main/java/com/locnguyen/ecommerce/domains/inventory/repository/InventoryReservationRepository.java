@@ -33,6 +33,10 @@ public interface InventoryReservationRepository extends JpaRepository<InventoryR
             "WHERE r.status = 'PENDING' AND r.expiresAt IS NOT NULL AND r.expiresAt < :now")
     List<InventoryReservation> findExpiredReservations(@Param("now") LocalDateTime now);
 
+    @Query("SELECT r FROM InventoryReservation r WHERE r.referenceType = 'EXCHANGE' "
+            + "AND r.status = 'PENDING' AND r.expiresAt <= :now")
+    List<InventoryReservation> findExpiredExchangeReservations(@Param("now") LocalDateTime now);
+
     @Query("SELECT DISTINCT r.referenceId FROM InventoryReservation r " +
             "WHERE r.referenceType = 'ORDER' AND r.status = 'PENDING' " +
             "AND r.expiresAt IS NOT NULL AND r.expiresAt <= :now")

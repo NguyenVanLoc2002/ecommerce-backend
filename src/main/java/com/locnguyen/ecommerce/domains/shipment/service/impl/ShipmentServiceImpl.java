@@ -46,6 +46,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.List;
 
@@ -261,6 +262,12 @@ public class ShipmentServiceImpl implements ShipmentService {
         Shipment shipment = shipmentRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.SHIPMENT_NOT_FOUND));
         return shipmentMapper.toResponse(shipment);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<LocalDateTime> findDeliveredAt(UUID orderId) {
+        return shipmentRepository.findByOrderId(orderId).map(Shipment::getDeliveredAt);
     }
 
     @Override

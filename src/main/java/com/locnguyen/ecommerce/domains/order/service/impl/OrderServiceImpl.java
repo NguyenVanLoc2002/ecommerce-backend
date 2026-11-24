@@ -29,6 +29,9 @@ import com.locnguyen.ecommerce.domains.inventory.repository.InventoryRepository;
 import com.locnguyen.ecommerce.domains.inventory.service.InventoryService;
 import com.locnguyen.ecommerce.domains.notification.enums.NotificationType;
 import com.locnguyen.ecommerce.domains.notification.service.NotificationService;
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
+import com.locnguyen.ecommerce.domains.order.dto.ExchangePriceSnapshot;
+import com.locnguyen.ecommerce.domains.order.dto.ReturnFinancialLine;
 import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
 import com.locnguyen.ecommerce.domains.order.dto.CancellationOrderContext;
 import com.locnguyen.ecommerce.domains.order.dto.OrderAdminFilter;
@@ -75,6 +78,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -110,6 +114,9 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public OrderPreviewResponse previewOrder(Customer customer, CreateOrderRequest request) {
         CheckoutDraft draft = loadCheckoutDraft(customer, request.getShippingAddressId(), false);
+        if (request.getPaymentMethod() == PaymentMethod.EXCHANGE) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Replacement orders are created from an approved exchange");
+        }
         Order order = buildDraftOrder(customer, draft.address(), draft.cartItems(), request, CodeGenerator.generateOrderCode());
         applyVoucherPreview(order, customer, request.getVoucherCode());
         CheckoutCarrierQuoteResponse quote = applyShippingSelection(order, request.getCarrierId());
@@ -147,7 +154,11 @@ public class OrderServiceImpl implements OrderService {
                 ? request.getPaymentMethod()
                 : PaymentMethod.COD;
 
+        if (paymentMethod == PaymentMethod.EXCHANGE) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Replacement orders are created from an approved exchange");
+        }
         Order order = buildDraftOrder(customer, draft.address(), draft.cartItems(), request, orderCode);
+        snapshotExchangePrices(order);
         order = orderRepository.save(order);
         applyVoucherDuringCheckout(order, customer, request.getVoucherCode());
         applyShippingSelection(order, request.getCarrierId());
@@ -224,6 +235,87 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public OrderResponse getOrderById(UUID orderId, Customer customer) {
         Order order = findOrThrow(orderId);
+        if (!order.getCustomer().getId().equals(customer.getId())) {
+            throw new AppException(ErrorCode.ORDER_NOT_FOUND);
+        }
+        return buildOrderResponse(order);
+    }
+
+    @Override
+    @Transactional
+    public Optional<UUID> createExchangeReplacement(UUID orderId, UUID itemId, UUID exchangeId, UUID variantId, int quantity) {
+        Order original = findForUpdateOrThrow(orderId);
+        OrderItem purchased = orderItemRepository.findById(itemId)
+                .filter(item -> item.getOrder().getId().equals(orderId))
+                .orElseThrow(() -> new AppException(ErrorCode.RETURN_NOT_ELIGIBLE));
+        String code = CodeGenerator.generateOrderCode();
+        var hold = inventoryService.transferExchangeStock(exchangeId, variantId, quantity, code);
+        if (hold.isEmpty()) {
+            return Optional.empty();
+        }
+
+        ProductVariant alternate = hold.get();
+        Order replacement = new Order();
+        replacement.setOrderCode(code);
+        replacement.setReplacementForOrderId(orderId);
+        replacement.setCustomer(original.getCustomer());
+        replacement.setCustomerNameSnapshot(original.getCustomerNameSnapshot());
+        replacement.setCustomerEmailSnapshot(original.getCustomerEmailSnapshot());
+        replacement.setReceiverName(original.getReceiverName());
+        replacement.setReceiverPhone(original.getReceiverPhone());
+        replacement.setShippingStreet(original.getShippingStreet());
+        replacement.setShippingWard(original.getShippingWard());
+        replacement.setShippingDistrict(original.getShippingDistrict());
+        replacement.setShippingCity(original.getShippingCity());
+        replacement.setShippingPostalCode(original.getShippingPostalCode());
+        replacement.setPaymentMethod(PaymentMethod.EXCHANGE);
+        replacement.setPaymentStatus(PaymentStatus.NOT_REQUIRED);
+        replacement.setStatus(OrderStatus.CONFIRMED);
+        replacement.setSubTotal(BigDecimal.ZERO);
+        replacement.setTotalAmount(BigDecimal.ZERO);
+
+        OrderItem item = new OrderItem();
+        item.setOrder(replacement);
+        item.setVariant(alternate);
+        item.setProductName(purchased.getProductName());
+        item.setVariantName(alternate.getVariantName());
+        item.setSku(alternate.getSku());
+        item.setProductImageUrl(resolveOrderItemImageUrl(alternate));
+        item.setUnitPrice(BigDecimal.ZERO);
+        item.setQuantity(quantity);
+        item.setLineTotal(BigDecimal.ZERO);
+        item.setNetLineAmount(BigDecimal.ZERO);
+        item.setReturnPolicySnapshot(purchased.getReturnPolicySnapshot());
+        replacement.getItems().add(item);
+        return Optional.of(orderRepository.save(replacement).getId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ReturnFinancialLine> getReturnFinancialLines(UUID orderId) {
+        return orderItemRepository.findByOrderIdOrderByCreatedAtAsc(orderId).stream()
+                .map(item -> new ReturnFinancialLine(item.getId(), item.getQuantity(), item.getNetLineAmount())).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ExchangePriceSnapshot getExchangePriceSnapshot(UUID orderId, UUID itemId) {
+        return orderItemRepository.findById(itemId)
+                .filter(item -> item.getOrder().getId().equals(orderId))
+                .map(item -> new ExchangePriceSnapshot(item.getUnitPrice(), item.getExchangeBasePrices()))
+                .orElseThrow(() -> new AppException(ErrorCode.RETURN_NOT_ELIGIBLE));
+    }
+
+    @Override
+    @Transactional
+    public OrderStatus lockOrderForReturn(UUID orderId) {
+        return findForUpdateOrThrow(orderId).getStatus();
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse lockOwnedOrderForReturn(UUID orderId, Customer customer) {
+        Order order = findForUpdateOrThrow(orderId);
         if (!order.getCustomer().getId().equals(customer.getId())) {
             throw new AppException(ErrorCode.ORDER_NOT_FOUND);
         }
@@ -582,6 +674,9 @@ public class OrderServiceImpl implements OrderService {
             item.setSalePrice(variant.getSalePrice());
             item.setQuantity(ci.getQuantity());
             item.setLineTotal(lineTotal);
+            var product = variant.getProduct();
+            item.setReturnPolicySnapshot(ReturnPolicy.resolve(product.getReturnPolicy(), product.getCategories().stream()
+                    .filter(category -> !category.isDeleted()).map(category -> category.getReturnPolicy())));
 
             order.getItems().add(item);
             subTotal = subTotal.add(lineTotal);
@@ -702,8 +797,23 @@ public class OrderServiceImpl implements OrderService {
                 product.getBrand() == null ? null : product.getBrand().getId(), lineTotal);
     }
 
+    private void snapshotExchangePrices(Order order) {
+        for (OrderItem item : order.getItems()) {
+            Map<UUID, BigDecimal> prices = new java.util.HashMap<>();
+            for (ProductVariant candidate : item.getVariant().getProduct().getVariants()) {
+                if (!candidate.isDeleted() && candidate.getId() != null && candidate.getBasePrice() != null) {
+                    prices.put(candidate.getId(), candidate.getBasePrice());
+                }
+            }
+            prices.put(item.getVariant().getId(), item.getUnitPrice());
+            item.setExchangeBasePrices(prices);
+        }
+    }
+
     private OrderPreviewResponse buildPreviewResponse(Order order, CheckoutCarrierQuoteResponse quote) {
         return OrderPreviewResponse.builder()
+                .returnPolicies(order.getItems().stream().map(item -> new OrderPreviewResponse.ReturnPolicyLine(
+                        item.getVariant().getId(), item.getReturnPolicySnapshot())).toList())
                 .carrierId(order.getCarrierId())
                 .carrierCode(order.getCarrierCode())
                 .carrierName(order.getCarrierName())
@@ -722,6 +832,7 @@ public class OrderServiceImpl implements OrderService {
     private OrderResponse buildOrderResponse(Order order) {
         List<OrderItem> items = orderItemRepository.findByOrderIdOrderByCreatedAtAsc(order.getId());
         return OrderResponse.builder()
+                .replacementForOrderId(order.getReplacementForOrderId())
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
                 .customerId(order.getCustomerId())

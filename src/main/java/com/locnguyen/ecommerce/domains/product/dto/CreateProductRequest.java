@@ -1,5 +1,7 @@
 package com.locnguyen.ecommerce.domains.product.dto;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
+
 import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -17,6 +19,8 @@ public class CreateProductRequest {
     @Size(max = 255)
     @Schema(example = "Áo thun basic nam", requiredMode = Schema.RequiredMode.REQUIRED)
     private String name;
+
+    private ReturnPolicy returnPolicy;
 
     @NotBlank(message = "Slug is required")
     @Size(max = 255)

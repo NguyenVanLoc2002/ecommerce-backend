@@ -35,6 +35,19 @@ public class NotificationServiceImpl implements NotificationService {
     private final CustomerRepository customerRepository;
 
     @Override
+    @Transactional
+    public void recordReturnUpdate(UUID customerId, UUID returnId, String message) {
+        Notification notification = new Notification();
+        notification.setCustomer(customerRepository.getReferenceById(customerId));
+        notification.setType(NotificationType.RETURN_UPDATED);
+        notification.setTitle("Return request update");
+        notification.setBody(message);
+        notification.setReferenceId(returnId);
+        notification.setReferenceType("RETURN");
+        notificationRepository.save(notification);
+    }
+
+    @Override
     @Async
     @Transactional
     public void send(Customer customer, NotificationType type, String title, String body) {

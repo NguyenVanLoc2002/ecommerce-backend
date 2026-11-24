@@ -17,6 +17,8 @@ public interface PaymentRefundRepository extends JpaRepository<PaymentRefund, UU
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<PaymentRefund> findByPaymentIdAndStatusIn(UUID paymentId, List<RefundStatus> statuses);
 
+    Optional<PaymentRefund> findByReturnId(UUID returnId);
+
     Optional<PaymentRefund> findByRefundCode(String refundCode);
 
     boolean existsByPaymentIdAndStatus(UUID paymentId, RefundStatus status);

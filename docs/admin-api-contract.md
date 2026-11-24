@@ -1120,6 +1120,32 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 
 ---
 
+### Return policy configuration
+
+Product and category create/update accept optional returnPolicy values STANDARD, SEALED_ONLY, REVIEW_REQUIRED, and CUSTOMIZED_FINAL_SALE. Checkout snapshots the strictest configured policy across the product and its active catalog categories. If no policy is configured, discretionary returns require review. Product faults, missing items, and fulfilment errors may still be submitted.
+
+### Reserve an exchange variant
+
+- POST /api/v1/admin/orders/{orderId}/returns/{returnId}/exchanges accepts orderItemId, variantId, warehouseId, quantity, and optional historicalPriceEvidence. Supply an Idempotency-Key header.
+- The replacement must be another variant of the same product. Checkout snapshots establish historical base-price equality. If the snapshot cannot establish the price, an administrator must supply historical evidence. A known price mismatch returns DIFFERENT_PRICE.
+- A successful inventory hold expires after 48 hours. Insufficient stock returns WAITING_CUSTOMER_CHOICE. Expiration releases inventory without cancelling the return.
+- POST /api/v1/admin/orders/{orderId}/returns/{returnId}/exchanges/{exchangeId}/cancel releases the hold. POST /api/v1/admin/orders/{orderId}/returns/{returnId}/exchanges/{exchangeId}/replacement creates a linked CONFIRMED replacement order after a passing inspection using the locked, unexpired reservation. A retry returns the same replacement. The order has paymentMethod EXCHANGE, paymentStatus NOT_REQUIRED, and a zero sales total.
+
+### Prepare a return refund
+
+POST /api/v1/admin/orders/{orderId}/returns/{returnId}/refund prepares a PENDING refund for an inspected return. It computes the amount from persisted checkout net line amounts and inspected quantities, reserves the amount against the original payment, and returns the same refund on replay. Original shipping is included for a single full-order shop-fault return. Partial returns retain the original shipping fee. A missing checkout snapshot or an unallocated historical refund returns RETURN_REFUND_REVIEW_REQUIRED. Settlement of these linked refunds requires verified confirmation and cannot use the legacy mark-complete endpoint.
+
+### Return decisions
+
+- Requires ADMIN or SUPER_ADMIN and an Idempotency-Key header per action.
+- POST /api/v1/admin/orders/{orderId}/returns/{returnId}/verify-delivery accepts reason and deliveredAt in UTC. It checks the 14-day window against the original request time.
+- POST /api/v1/admin/orders/{orderId}/returns/{returnId}/approve and /reject accept a reason. Approval requires a requested return. Rejection is allowed before approval.
+- A successful decision records the authenticated actor, reason, time, previous status, and resulting status. A retry with the same key and details does not append a second decision.
+- These decisions update only the return record. The forward shipment and original payment remain intact.
+- POST /api/v1/admin/orders/{orderId}/returns/{returnId}/receive records the final receipt quantities for an approved return, a note, and optional carrier, trackingNumber, trackingAt and evidenceReference. Non-received quantities become claimable again.
+- POST /api/v1/admin/orders/{orderId}/returns/{returnId}/inspect records restock and damaged quantities for every received line. Supply warehouseId only when restocking. The inventory changes and inspection record commit together, and a matching retry does not increase stock again.
+
+
 ## 8. Payment
 
 ### DTOs

@@ -78,6 +78,7 @@ public class CategoryServiceImpl implements CategoryService {
 
         Category category = new Category();
         category.setName(request.getName().trim());
+        category.setReturnPolicy(request.getReturnPolicy());
         category.setSlug(request.getSlug().trim());
         category.setDescription(request.getDescription());
         if (hasValue(request.getImageStorageKey()) && hasValue(request.getImageUrl())) {
@@ -113,6 +114,9 @@ public class CategoryServiceImpl implements CategoryService {
     public CategoryResponse updateCategory(UUID id, UpdateCategoryRequest request) {
         Category category = findOrThrow(id);
 
+        if (request.getReturnPolicy() != null) {
+            category.setReturnPolicy(request.getReturnPolicy());
+        }
         if (request.getName() != null) {
             category.setName(request.getName().trim());
         }

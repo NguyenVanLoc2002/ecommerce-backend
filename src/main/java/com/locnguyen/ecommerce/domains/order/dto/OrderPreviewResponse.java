@@ -6,7 +6,9 @@ import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -26,4 +28,7 @@ public class OrderPreviewResponse {
     private final BigDecimal totalAmount;
     private final String voucherCode;
     private final String customerNote;
+    private final List<ReturnPolicyLine> returnPolicies;
+
+    public record ReturnPolicyLine(UUID variantId, ReturnPolicy policy) {}
 }
