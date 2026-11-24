@@ -8,6 +8,11 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
+import com.locnguyen.ecommerce.domains.payment.dto.ReturnRefundAllocation;
+import java.util.List;
+import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -41,6 +46,17 @@ public class PaymentRefund extends BaseEntity {
 
     @Column(name = "amount", precision = 18, scale = 2, nullable = false)
     private BigDecimal amount;
+
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "return_id", updatable = false, length = 36)
+    private UUID returnId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "return_line_allocations", updatable = false)
+    private List<ReturnRefundAllocation> returnLineAllocations;
+
+    @Column(name = "return_shipping_amount", precision = 18, scale = 2, updatable = false)
+    private BigDecimal returnShippingAmount;
 
     @Column(name = "reason", length = 500)
     private String reason;

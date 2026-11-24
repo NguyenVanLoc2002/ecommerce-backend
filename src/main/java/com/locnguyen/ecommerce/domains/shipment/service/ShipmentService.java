@@ -9,6 +9,8 @@ import com.locnguyen.ecommerce.domains.shipment.dto.UpdateShipmentRequest;
 import com.locnguyen.ecommerce.domains.shipment.dto.UpdateShipmentStatusRequest;
 import org.springframework.data.domain.Pageable;
 
+import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.List;
 
@@ -25,6 +27,8 @@ public interface ShipmentService {
     ShipmentResponse getById(UUID shipmentId);
 
     ShipmentResponse getByOrderId(UUID orderId);
+
+    Optional<LocalDateTime> findDeliveredAt(UUID orderId);
 
     List<ShipmentListSummary> getListSummaries(List<UUID> orderIds);
 

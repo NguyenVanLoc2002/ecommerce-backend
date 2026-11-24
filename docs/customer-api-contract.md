@@ -742,6 +742,17 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 
 ---
 
+An exchange replacement can appear in the order history with paymentMethod EXCHANGE, paymentStatus NOT_REQUIRED, and replacementForOrderId on order detail. It has no separate payment, voucher redemption, or sales invoice.
+
+### POST `/api/v1/orders/{orderId}/returns`
+
+- Authenticated customer submits a post-delivery complaint against an owned order.
+- Send an `Idempotency-Key` header and a body with `reason`, `note`, and `items` containing `orderItemId` and `quantity`.
+- Supported reasons are `DEFECTIVE`, `WRONG_ITEM`, `MISSING_ITEM`, `NOT_AS_DESCRIBED`, and `CHANGED_MIND`. A discretionary request includes `originalCondition` and, for sealed-only products, `unopened`. Eligibility uses the order-item policy snapshot.
+- Product detail exposes `returnPolicy`. Checkout preview exposes `returnPolicies[]` with `variantId` and `policy`, so clients can show restrictions before submission.
+- Orders with a delivery timestamp accept requests within 14 days of delivery. Delivered orders with a missing timestamp enter `PENDING_DELIVERY_VERIFICATION`.
+- The response contains the return record and submitted items. Submission reserves claimable quantity and leaves the original delivery history and payment intact.
+
 ## 10. Shipment tracking
 
 ### DTOs

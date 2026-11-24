@@ -158,6 +158,9 @@ public class ProductServiceImpl implements ProductService {
         Product product = findOrThrow(id);
         boolean searchableChanged = false;
 
+        if (request.getReturnPolicy() != null) {
+            product.setReturnPolicy(request.getReturnPolicy());
+        }
         if (request.getName() != null) {
             product.setName(request.getName().trim());
             searchableChanged = true;
@@ -292,6 +295,7 @@ public class ProductServiceImpl implements ProductService {
 
     private void applyProductFields(Product product, CreateProductRequest request) {
         product.setName(request.getName().trim());
+        product.setReturnPolicy(request.getReturnPolicy());
         product.setSlug(request.getSlug().trim());
         product.setShortDescription(request.getShortDescription());
         product.setDescription(request.getDescription());

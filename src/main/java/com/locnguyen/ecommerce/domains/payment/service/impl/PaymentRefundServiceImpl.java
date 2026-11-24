@@ -30,6 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import com.locnguyen.ecommerce.domains.payment.dto.ReturnRefundAllocation;
+import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
 
@@ -50,6 +52,42 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
     @Override
     @Transactional
     public RefundResponse initiateRefund(UUID paymentId, RefundRequest request) {
+        return initiateRefund(paymentId, request, null, null, null);
+    }
+
+    @Override
+    public Optional<RefundResponse> findReturnRefund(UUID returnId) {
+        return refundRepository.findByReturnId(returnId).map(refundMapper::toResponse);
+    }
+
+    @Override
+    @Transactional
+    public List<ReturnRefundAllocation> getReservedReturnAllocations(UUID orderId) {
+        var payment = paymentRepository.findByOrderIdWithLock(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        var reserved = refundRepository.findByPaymentIdAndStatusIn(payment.getId(),
+                List.of(RefundStatus.PENDING, RefundStatus.PROCESSING, RefundStatus.COMPLETED));
+        if (reserved.stream().anyMatch(refund -> refund.getReturnId() == null || refund.getReturnLineAllocations() == null)) {
+            throw new AppException(ErrorCode.RETURN_REFUND_REVIEW_REQUIRED);
+        }
+        return reserved.stream().flatMap(refund -> refund.getReturnLineAllocations().stream()).toList();
+    }
+
+    @Override
+    @Transactional
+    public RefundResponse initiateReturnRefund(UUID orderId, UUID returnId,
+                                                List<ReturnRefundAllocation> lines, BigDecimal shipping) {
+        BigDecimal amount = lines.stream().map(ReturnRefundAllocation::amount).reduce(shipping, BigDecimal::add);
+        if (amount.signum() <= 0) {
+            throw new AppException(ErrorCode.PAYMENT_REFUND_INVALID_STATUS, "No refundable balance on the returned lines");
+        }
+        UUID paymentId = paymentRepository.findByOrderId(orderId).map(Payment::getId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        return initiateRefund(paymentId, new RefundRequest(amount, "Return settlement", null), returnId, lines, shipping);
+    }
+
+    private RefundResponse initiateRefund(UUID paymentId, RefundRequest request, UUID returnId,
+                                          List<ReturnRefundAllocation> lines, BigDecimal shipping) {
         UUID orderId = paymentRepository.findOrderIdByPaymentId(paymentId)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
         Order lockedOrder = orderRepository.findByIdWithLock(orderId)
@@ -82,6 +120,9 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
         refund.setPayment(payment);
         refund.setRefundCode(CodeGenerator.generateRefundCode());
         refund.setAmount(request.amount());
+        refund.setReturnId(returnId);
+        refund.setReturnLineAllocations(lines);
+        refund.setReturnShippingAmount(shipping);
         refund.setReason(request.reason());
         refund.setNote(request.note());
         refund.setStatus(RefundStatus.PENDING);
@@ -123,6 +164,11 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
         entityManager.refresh(refund, LockModeType.PESSIMISTIC_WRITE);
         refund = refundRepository.findByRefundCode(refundCode)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_REFUND_NOT_FOUND));
+
+        if (refund.getReturnId() != null) {
+            throw new AppException(ErrorCode.PAYMENT_REFUND_INVALID_STATUS,
+                    "Return refunds require verified settlement");
+        }
 
         // Idempotent: already completed
         if (refund.getStatus() == RefundStatus.COMPLETED) {

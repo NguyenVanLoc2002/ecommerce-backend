@@ -21,6 +21,7 @@ import java.util.UUID;
 public class OrderResponse {
 
     private final UUID id;
+    private final UUID replacementForOrderId;
     private final String orderCode;
     private final UUID customerId;
     private final String customerNameSnapshot;

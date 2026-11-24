@@ -1,5 +1,7 @@
 package com.locnguyen.ecommerce.domains.category.dto;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -16,6 +18,8 @@ public class CreateCategoryRequest {
     @Size(max = 100, message = "Name must not exceed 100 characters")
     @Schema(example = "Áo nam", requiredMode = Schema.RequiredMode.REQUIRED)
     private String name;
+
+    private ReturnPolicy returnPolicy;
 
     @NotBlank(message = "Slug is required")
     @Size(max = 255)

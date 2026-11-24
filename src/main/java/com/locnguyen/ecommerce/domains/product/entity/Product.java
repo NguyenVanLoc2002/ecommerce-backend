@@ -1,5 +1,7 @@
 package com.locnguyen.ecommerce.domains.product.entity;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
+
 import com.locnguyen.ecommerce.common.auditing.SoftDeleteEntity;
 import com.locnguyen.ecommerce.domains.brand.entity.Brand;
 import com.locnguyen.ecommerce.domains.category.entity.Category;
@@ -11,7 +13,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
-import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -51,6 +52,10 @@ public class Product extends SoftDeleteEntity {
 
     @Column(name = "name", length = 255, nullable = false)
     private String name;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "return_policy", length = 32)
+    private ReturnPolicy returnPolicy;
 
     @Column(name = "slug", length = 255, nullable = false, unique = true)
     private String slug;

@@ -11,8 +11,13 @@ import com.locnguyen.ecommerce.domains.order.dto.OrderListItemResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderPreviewResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
 import com.locnguyen.ecommerce.domains.promotion.dto.ValidateVoucherResponse;
+import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import org.springframework.data.domain.Pageable;
 
+import com.locnguyen.ecommerce.domains.order.dto.ExchangePriceSnapshot;
+import com.locnguyen.ecommerce.domains.order.dto.ReturnFinancialLine;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface OrderService {
@@ -26,6 +31,16 @@ public interface OrderService {
     PagedResponse<OrderListItemResponse> getMyOrders(Customer customer, OrderFilter filter, Pageable pageable);
 
     OrderResponse getOrderById(UUID orderId, Customer customer);
+
+    Optional<UUID> createExchangeReplacement(UUID orderId, UUID itemId, UUID exchangeId, UUID variantId, int quantity);
+
+    List<ReturnFinancialLine> getReturnFinancialLines(UUID orderId);
+
+    ExchangePriceSnapshot getExchangePriceSnapshot(UUID orderId, UUID itemId);
+
+    OrderStatus lockOrderForReturn(UUID orderId);
+
+    OrderResponse lockOwnedOrderForReturn(UUID orderId, Customer customer);
 
     OrderResponse getOrderByCode(String orderCode);
 

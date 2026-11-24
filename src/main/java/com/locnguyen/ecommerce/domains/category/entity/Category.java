@@ -1,5 +1,7 @@
 package com.locnguyen.ecommerce.domains.category.entity;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
+
 import com.locnguyen.ecommerce.common.auditing.SoftDeleteEntity;
 import com.locnguyen.ecommerce.domains.category.enums.CategoryStatus;
 import com.locnguyen.ecommerce.domains.product.entity.Product;
@@ -35,6 +37,10 @@ public class Category extends SoftDeleteEntity {
 
     @Column(name = "name", length = 100, nullable = false)
     private String name;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "return_policy", length = 32)
+    private ReturnPolicy returnPolicy;
 
     @Column(name = "slug", length = 255, nullable = false, unique = true)
     private String slug;

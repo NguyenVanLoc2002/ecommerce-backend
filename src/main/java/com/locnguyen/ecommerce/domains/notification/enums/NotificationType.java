@@ -12,6 +12,7 @@ public enum NotificationType {
     ORDER_SHIPPED,
     ORDER_DELIVERED,
     ORDER_COMPLETED,
+    RETURN_UPDATED,
 
     // ─── Review ─────────────────────────────────────────────────────────────
     REVIEW_SUBMITTED,

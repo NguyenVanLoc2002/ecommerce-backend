@@ -12,6 +12,8 @@ import java.util.UUID;
 
 public interface NotificationService {
 
+    void recordReturnUpdate(UUID customerId, UUID returnId, String message);
+
     void send(Customer customer, NotificationType type, String title, String body);
 
     void send(Customer customer, NotificationType type, String title, String body,

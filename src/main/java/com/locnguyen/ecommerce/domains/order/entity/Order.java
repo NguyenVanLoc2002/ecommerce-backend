@@ -16,6 +16,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.util.UUID;
 
 /**
@@ -42,6 +44,10 @@ public class Order extends BaseEntity {
 
     @Column(name = "customer_id", insertable = false, updatable = false)
     private UUID customerId;
+
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "replacement_for_order_id", updatable = false, length = 36)
+    private UUID replacementForOrderId;
 
     @Column(name = "order_code", length = 50, nullable = false, unique = true)
     private String orderCode;

@@ -10,6 +10,7 @@ import com.locnguyen.ecommerce.domains.product.enums.MediaType;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
 import java.math.BigDecimal;
 import java.util.stream.Collectors;
 
@@ -30,7 +31,14 @@ public interface ProductMapper {
 
     @Mapping(target = "minPrice", source = ".", qualifiedByName = "extractMinPrice")
     @Mapping(target = "maxPrice", source = ".", qualifiedByName = "extractMaxPrice")
+    @Mapping(target = "returnPolicy", source = ".", qualifiedByName = "resolveReturnPolicy")
     ProductDetailResponse toDetail(Product product);
+
+    @org.mapstruct.Named("resolveReturnPolicy")
+    default ReturnPolicy resolveReturnPolicy(Product product) {
+        return ReturnPolicy.resolve(product.getReturnPolicy(), product.getCategories().stream()
+                .filter(category -> !category.isDeleted()).map(category -> category.getReturnPolicy()));
+    }
 
     // ─── Helper methods ──────────────────────────────────────────────────────
 

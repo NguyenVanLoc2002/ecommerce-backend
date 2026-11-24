@@ -8,7 +8,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
 import java.math.BigDecimal;
+import java.util.Map;
+import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Order line item — immutable snapshot of product data at checkout time.
@@ -74,4 +79,12 @@ public class OrderItem extends BaseEntity {
 
     @Column(name = "net_line_amount", precision = 18, scale = 2)
     private BigDecimal netLineAmount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "return_policy_snapshot", updatable = false, length = 32)
+    private ReturnPolicy returnPolicySnapshot;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "exchange_base_prices", updatable = false)
+    private Map<UUID, BigDecimal> exchangeBasePrices;
 }

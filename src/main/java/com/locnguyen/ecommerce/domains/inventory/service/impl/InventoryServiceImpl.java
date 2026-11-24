@@ -28,10 +28,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import java.util.Optional;
 import java.util.UUID;
 @Slf4j
 @Service
@@ -210,7 +213,7 @@ public class InventoryServiceImpl implements InventoryService {
         validateVariant(variantId);
         warehouseService.findOrThrow(warehouseId);
 
-        Inventory inventory = inventoryRepository.findByVariantIdAndWarehouseId(variantId, warehouseId)
+        Inventory inventory = inventoryRepository.findByVariantIdAndWarehouseIdWithLock(variantId, warehouseId)
                 .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_NOT_FOUND));
         String actor = SecurityUtils.getCurrentUsernameOrSystem();
 
@@ -218,14 +221,11 @@ public class InventoryServiceImpl implements InventoryService {
         int beforeReserved = inventory.getReserved();
         int beforeAvailable = beforeOnHand - beforeReserved;
 
-        inventoryRepository.increaseOnHand(inventory.getId(), quantity);
-        inventoryRepository.flush();
-
-        Inventory refreshed = inventoryRepository.findById(inventory.getId()).orElseThrow();
+        inventory.setOnHand(Math.addExact(beforeOnHand, quantity));
         StockMovement movement = recordMovement(
                 inventory, StockMovementType.RETURN, quantity,
                 beforeOnHand, beforeReserved, beforeAvailable,
-                refreshed.getOnHand(), refreshed.getReserved(), refreshed.getAvailable(),
+                inventory.getOnHand(), inventory.getReserved(), inventory.getAvailable(),
                 "Returned stock", actor, referenceType, referenceId
         );
 
@@ -235,6 +235,44 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     // ─── Reservation operations ──────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public Optional<LocalDateTime> tryReserveExchangeStock(UUID variantId, UUID warehouseId, int quantity, UUID exchangeId) {
+        validateVariant(variantId);
+        warehouseService.findOrThrow(warehouseId);
+        var inventory = inventoryRepository.findByVariantIdAndWarehouseIdWithLock(variantId, warehouseId);
+        if (inventory.isEmpty() || inventory.get().getAvailable() < quantity) {
+            return Optional.empty();
+        }
+        ReserveStockRequest request = new ReserveStockRequest();
+        request.setVariantId(variantId);
+        request.setWarehouseId(warehouseId);
+        request.setQuantity(quantity);
+        request.setReferenceType("EXCHANGE");
+        request.setReferenceId(exchangeId.toString());
+        request.setExpiresAt(LocalDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).plusHours(48));
+        return Optional.of(reserveStock(request).getExpiresAt());
+    }
+
+    @Override
+    @Transactional
+    public Optional<ProductVariant> transferExchangeStock(UUID exchangeId, UUID variantId, int quantity, String orderCode) {
+        var hold = reservationRepository.findByReferenceTypeAndReferenceIdAndVariantIdAndStatus(
+                "EXCHANGE", exchangeId.toString(), variantId, ReservationStatus.PENDING);
+        if (hold.isEmpty()) {
+            return Optional.empty();
+        }
+        InventoryReservation reservation = hold.get();
+        if (reservation.getExpiresAt() == null || !reservation.getExpiresAt().isAfter(LocalDateTime.now(ZoneOffset.UTC))
+                || reservation.getQuantity() != quantity || reservation.getVariant().isDeleted()) {
+            return Optional.empty();
+        }
+        reservation.setReferenceType("ORDER");
+        reservation.setReferenceId(orderCode);
+        reservation.setExpiresAt(null);
+        return Optional.of(reservation.getVariant());
+    }
 
     /**
      * Reserve stock for an order. Increases reserved. Atomic check prevents oversell.
@@ -481,9 +519,12 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Transactional
     public int releaseExpiredReservations() {
-        List<InventoryReservation> expired = reservationRepository
-                .findExpiredReservations(LocalDateTime.now()).stream()
-                .filter(r -> !"ORDER".equals(r.getReferenceType())).toList();
+        List<InventoryReservation> expired = java.util.stream.Stream.concat(
+                reservationRepository.findExpiredReservations(LocalDateTime.now()).stream()
+                        .filter(reservation -> !"ORDER".equals(reservation.getReferenceType())
+                                && !"EXCHANGE".equals(reservation.getReferenceType())),
+                reservationRepository.findExpiredExchangeReservations(LocalDateTime.now(ZoneOffset.UTC)).stream())
+                .toList();
 
         if (expired.isEmpty()) {
             return 0;

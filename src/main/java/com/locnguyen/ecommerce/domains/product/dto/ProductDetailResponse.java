@@ -1,5 +1,7 @@
 package com.locnguyen.ecommerce.domains.product.dto;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
+
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.locnguyen.ecommerce.domains.brand.dto.BrandResponse;
 import com.locnguyen.ecommerce.domains.category.dto.CategoryResponse;
@@ -26,6 +28,7 @@ public class ProductDetailResponse implements Serializable {
 
     private final UUID id;
     private final String name;
+    private final ReturnPolicy returnPolicy;
     private final String slug;
     private final String shortDescription;
     private final String description;

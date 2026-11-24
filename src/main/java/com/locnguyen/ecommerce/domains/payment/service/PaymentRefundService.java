@@ -3,10 +3,20 @@ package com.locnguyen.ecommerce.domains.payment.service;
 import com.locnguyen.ecommerce.domains.payment.dto.RefundRequest;
 import com.locnguyen.ecommerce.domains.payment.dto.RefundResponse;
 
+import com.locnguyen.ecommerce.domains.payment.dto.ReturnRefundAllocation;
+import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
 
 public interface PaymentRefundService {
+
+    Optional<RefundResponse> findReturnRefund(UUID returnId);
+
+    List<ReturnRefundAllocation> getReservedReturnAllocations(UUID orderId);
+
+    RefundResponse initiateReturnRefund(UUID orderId, UUID returnId,
+                                        List<ReturnRefundAllocation> lines, BigDecimal shipping);
 
     RefundResponse initiateRefund(UUID paymentId, RefundRequest request);
 

@@ -20,6 +20,7 @@ public interface OrderMapper {
     @Mapping(target = "currentCustomerProfileAvailable", ignore = true)
     OrderResponse toResponse(Order order);
 
+    @Mapping(target = "variantId", source = "variant.id")
     @Mapping(target = "productId", source = "variant.product.id")
     @Mapping(target = "productSlug", source = "variant.product.slug")
     @Mapping(target = "brandName", source = "variant.product.brand.name")

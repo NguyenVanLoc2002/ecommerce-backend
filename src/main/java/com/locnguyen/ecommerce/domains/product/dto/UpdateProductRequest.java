@@ -1,5 +1,7 @@
 package com.locnguyen.ecommerce.domains.product.dto;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
+
 import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
@@ -14,6 +16,8 @@ public class UpdateProductRequest {
 
     @Size(max = 255)
     private String name;
+
+    private ReturnPolicy returnPolicy;
 
     @Size(max = 255)
     private String slug;

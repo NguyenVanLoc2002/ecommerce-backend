@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 import lombok.Getter;
 
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
 import java.math.BigDecimal;
 
 import java.util.UUID;
@@ -27,4 +28,5 @@ public class OrderItemResponse {
     private final BigDecimal salePrice;
     private final Integer quantity;
     private final BigDecimal lineTotal;
+    private final ReturnPolicy returnPolicySnapshot;
 }
