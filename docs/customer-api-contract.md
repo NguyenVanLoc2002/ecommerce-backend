@@ -604,7 +604,11 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
   - `ApiResponse<OrderResponse>`
 - Current service behavior:
   - customer cancellation is allowed only while the order can transition to `CANCELLED`
-  - service explicitly blocks `CONFIRMED`
+  - self-cancellation applies to `PENDING` or `AWAITING_PAYMENT`; the service blocks `CONFIRMED` and paid online orders
+  - derive customer action visibility from order and payment status and refresh order detail if the cancellation request fails
+  - checkout captures the shipping address, recipient, items and charges for the order. Editing a saved address does not change an existing order
+  - after the API confirms `CANCELLED`, customers can place a new order through checkout with current pricing, shipping, voucher eligibility and availability
+  - if self-cancellation is unavailable, direct the customer to support. A cancellation does not automatically refund a payment
 
 ---
 
