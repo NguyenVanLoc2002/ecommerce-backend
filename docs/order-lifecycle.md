@@ -130,6 +130,12 @@ POST /api/v1/admin/orders/{id}/refund
 
 ---
 
+## Changes after checkout
+
+Recipient, shipping address, item quantities and charges are fixed at successful checkout. Customers and staff follow the existing cancellation and checkout flows for corrections. Customer self-cancellation uses `POST /api/v1/orders/my/{id}/cancel` and is subject to the ownership, status and payment guards. For staff, a carrier cancellation awaiting reconciliation must be resolved before presenting the order as cancelled. Refunds follow the existing payment workflow.
+
+After confirmed cancellation, a new checkout recalculates the applicable pricing, shipping fee and voucher and reserves stock for the new order. The original order retains its checkout snapshot and cancellation history.
+
 ## 10. Business validation
 
 - `ORDER_NOT_FOUND`
