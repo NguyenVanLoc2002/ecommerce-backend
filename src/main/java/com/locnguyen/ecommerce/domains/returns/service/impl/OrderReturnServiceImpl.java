@@ -8,6 +8,8 @@ import com.locnguyen.ecommerce.domains.order.dto.OrderItemResponse;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
 import com.locnguyen.ecommerce.domains.returns.dto.CreateReturnRequest;
 import com.locnguyen.ecommerce.domains.returns.dto.ReturnResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import com.locnguyen.ecommerce.domains.returns.entity.OrderReturn;
 import com.locnguyen.ecommerce.domains.returns.entity.ReturnLine;
 import com.locnguyen.ecommerce.domains.returns.enums.ReturnStatus;
@@ -288,6 +290,12 @@ public class OrderReturnServiceImpl implements OrderReturnService {
             throw new AppException(ErrorCode.IDEMPOTENCY_KEY_TOO_LONG);
         }
         return key;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ReturnResponse> listForAdmin(ReturnStatus status, UUID orderId, Pageable pageable) {
+        return returnRepository.findForAdmin(status, orderId, pageable).map(this::toResponse);
     }
 
     private ReturnResponse toResponse(OrderReturn entry) {

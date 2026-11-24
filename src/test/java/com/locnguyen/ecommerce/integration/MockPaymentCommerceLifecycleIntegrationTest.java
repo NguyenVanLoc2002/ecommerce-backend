@@ -362,6 +362,14 @@ class MockPaymentCommerceLifecycleIntegrationTest {
                 .isInstanceOf(AppException.class).extracting("errorCode").isEqualTo(ErrorCode.ORDER_NOT_FOUND);
         var first = returnService.create(order.getId(), fixture.customer(), "first", request);
         assertThat(first.status()).isEqualTo(ReturnStatus.PENDING_DELIVERY_VERIFICATION);
+        var page = org.springframework.data.domain.PageRequest.of(0, 1);
+        assertThat(returnService.listForAdmin(first.status(), order.getId(), page).getContent())
+                .singleElement().satisfies(entry -> {
+                    assertThat(entry.id()).isEqualTo(first.id());
+                    assertThat(entry.items()).containsExactlyElementsOf(request.items());
+                });
+        assertThat(returnService.listForAdmin(ReturnStatus.APPROVED, order.getId(), page)).isEmpty();
+        assertThat(returnService.listForAdmin(null, UUID.randomUUID(), page)).isEmpty();
         var discretionary = new CreateReturnRequest(ReturnReason.CHANGED_MIND, "Changed my mind",
                 request.items(), true, true);
         assertThatThrownBy(() -> returnService.create(order.getId(), fixture.customer(), "policy", discretionary))
