@@ -27,6 +27,29 @@ public class AdminReturnController {
     private final OrderReturnService returnService;
     private final ExchangeService exchangeService;
     private final ReturnRefundService returnRefundService;
+    private final com.locnguyen.ecommerce.domains.payment.service.PaymentRefundService paymentRefundService;
+
+    @PostMapping("/refund/paypal/verify")
+    public ApiResponse<RefundResponse> verifyPaypalRefund(@PathVariable UUID orderId, @PathVariable UUID returnId,
+            @Valid @RequestBody SettlementReference request) {
+        return ApiResponse.success(paymentRefundService.verifyPaypalReturnRefund(orderId, returnId, request.reference().strip()));
+    }
+
+    @PostMapping("/refund/cod/evidence")
+    public ApiResponse<RefundResponse> submitCodEvidence(@PathVariable UUID orderId, @PathVariable UUID returnId,
+            @Valid @RequestBody SettlementReference request, Principal principal) {
+        return ApiResponse.success(paymentRefundService.submitCodReturnRefundEvidence(
+                orderId, returnId, request.reference().strip(), principal.getName()));
+    }
+
+    @PostMapping("/refund/cod/confirm")
+    public ApiResponse<RefundResponse> confirmCodRefund(@PathVariable UUID orderId, @PathVariable UUID returnId,
+            Principal principal) {
+        return ApiResponse.success(paymentRefundService.confirmCodReturnRefund(orderId, returnId, principal.getName()));
+    }
+
+    public record SettlementReference(@jakarta.validation.constraints.NotBlank
+                                      @jakarta.validation.constraints.Size(max = 180) String reference) {}
 
     @PostMapping("/refund")
     public ApiResponse<RefundResponse> prepareRefund(@PathVariable UUID orderId, @PathVariable UUID returnId) {

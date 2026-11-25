@@ -10,6 +10,12 @@ import java.util.List;
 import java.util.UUID;
 
 public interface PaymentRefundService {
+    RefundResponse verifyPaypalReturnRefund(UUID orderId, UUID returnId, String reference);
+
+    RefundResponse submitCodReturnRefundEvidence(UUID orderId, UUID returnId, String reference, String actor);
+
+    RefundResponse confirmCodReturnRefund(UUID orderId, UUID returnId, String actor);
+
 
     Optional<RefundResponse> findReturnRefund(UUID returnId);
 

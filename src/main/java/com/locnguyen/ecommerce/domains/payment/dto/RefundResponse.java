@@ -17,5 +17,8 @@ public record RefundResponse(
         LocalDateTime refundedAt,
         String requestedBy,
         String note,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String settlementReference,
+        String settlementSubmittedBy,
+        com.locnguyen.ecommerce.domains.order.enums.PaymentMethod paymentMethod
 ) {}

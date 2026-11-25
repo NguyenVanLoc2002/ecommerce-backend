@@ -29,6 +29,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
+import com.locnguyen.ecommerce.domains.payment.enums.PaymentProviderType;
+import com.locnguyen.ecommerce.infrastructure.payment.paypal.PaypalClient;
 import java.time.LocalDateTime;
 import com.locnguyen.ecommerce.domains.payment.dto.ReturnRefundAllocation;
 import java.util.Optional;
@@ -48,6 +52,7 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
     private final PaymentRefundMapper refundMapper;
     private final EntityManager entityManager;
     private final InvoiceService invoiceService;
+    private final PaypalClient paypalClient;
 
     @Override
     @Transactional
@@ -149,6 +154,108 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
 
     @Override
     @Transactional
+    public RefundResponse submitCodReturnRefundEvidence(UUID orderId, UUID returnId, String reference, String actor) {
+        var refund = lockReturnRefund(orderId, returnId);
+        requireMethod(refund, PaymentMethod.COD);
+        String key = "COD:" + reference;
+        if (key.equals(refund.getSettlementReference()) && actor.equals(refund.getSettlementSubmittedBy())) {
+            return refundMapper.toResponse(refund);
+        }
+        if (refund.getStatus() != RefundStatus.PENDING) throw invalidSettlement();
+        refund.setSettlementReference(key);
+        refund.setSettlementSubmittedBy(actor);
+        refund.setStatus(RefundStatus.PROCESSING);
+        return refundMapper.toResponse(refundRepository.saveAndFlush(refund));
+    }
+
+    @Override
+    @Transactional
+    public RefundResponse confirmCodReturnRefund(UUID orderId, UUID returnId, String actor) {
+        var refund = lockReturnRefund(orderId, returnId);
+        requireMethod(refund, PaymentMethod.COD);
+        String maker = refund.getSettlementSubmittedBy();
+        if (maker == null || maker.equalsIgnoreCase(actor) || refund.getSettlementReference() == null) {
+            throw invalidSettlement();
+        }
+        if (refund.getStatus() == RefundStatus.COMPLETED) return refundMapper.toResponse(refund);
+        if (refund.getStatus() != RefundStatus.PROCESSING) throw invalidSettlement();
+        return finalizeRefund(refund, refund.getPayment(), refund.getPayment().getOrder(), orderId,
+                refund.getSettlementReference().substring("COD:".length()));
+    }
+
+    @Override
+    @Transactional
+    public RefundResponse verifyPaypalReturnRefund(UUID orderId, UUID returnId, String reference) {
+        var refund = lockReturnRefund(orderId, returnId);
+        requireMethod(refund, PaymentMethod.ONLINE);
+        if (refund.getStatus() == RefundStatus.COMPLETED && reference.equals(refund.getProviderRefundId())) {
+            return refundMapper.toResponse(refund);
+        }
+        if (refund.getStatus() != RefundStatus.PENDING || !reference.matches("[A-Za-z0-9-]{1,100}")) {
+            throw invalidSettlement();
+        }
+        Payment payment = refund.getPayment();
+        BigDecimal rate = payment.getProviderExchangeRate();
+        if (rate == null || rate.signum() <= 0 || payment.getProviderCurrency() == null) {
+            throw new AppException(ErrorCode.RETURN_REFUND_REVIEW_REQUIRED);
+        }
+        var captureIds = transactionRepository.findByPaymentIdOrderByCreatedAtDesc(payment.getId()).stream()
+                .filter(txn -> txn.getProvider() == PaymentProviderType.PAYPAL && txn.getStatus() == TransactionStatus.SUCCESS
+                        && ("CAPTURE".equals(txn.getReferenceType()) || "LATE_SUCCESS_AFTER_CANCEL".equals(txn.getReferenceType())))
+                .map(PaymentTransaction::getProviderTxnId)
+                .filter(id -> id != null && id.matches("[A-Za-z0-9-]+"))
+                .distinct().toList();
+        if (captureIds.size() != 1) throw new AppException(ErrorCode.RETURN_REFUND_REVIEW_REQUIRED);
+
+        var verified = paypalClient.getRefund(reference);
+        var expectedAmount = refund.getAmount().divide(rate, 2, RoundingMode.HALF_UP);
+        String capturePath = "/v2/payments/captures/" + captureIds.get(0);
+        if (!reference.equals(verified.id()) || !refund.getRefundCode().equals(verified.invoiceId())
+                || verified.amount() == null || verified.amount().value() == null
+                || expectedAmount.signum() <= 0 || expectedAmount.compareTo(verified.amount().value()) != 0
+                || !payment.getProviderCurrency().equals(verified.amount().currency())
+                || verified.links() == null || verified.links().stream().noneMatch(link ->
+                        "up".equals(link.getRel()) && link.getHref() != null && link.getHref().endsWith(capturePath))) {
+            throw invalidSettlement();
+        }
+        if (!"COMPLETED".equals(verified.status())) return refundMapper.toResponse(refund);
+
+        requireUnusedProviderReference(payment.getId(), reference);
+        refund.setSettlementReference("PAYPAL:" + reference);
+        return finalizeRefund(refund, payment, payment.getOrder(), orderId, reference);
+    }
+
+    private void requireUnusedProviderReference(UUID paymentId, String reference) {
+        if (reference != null && refundRepository.findByPaymentIdAndStatusIn(paymentId, List.of(RefundStatus.COMPLETED))
+                .stream().anyMatch(row -> reference.equals(row.getProviderRefundId()))) {
+            throw new AppException(ErrorCode.CONFLICT, "This refund reference was already settled");
+        }
+    }
+
+    private PaymentRefund lockReturnRefund(UUID orderId, UUID returnId) {
+        Order order = orderRepository.findByIdWithLock(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        Payment payment = paymentRepository.findByOrderIdWithLock(orderId)
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_NOT_FOUND));
+        var refund = refundRepository.findByReturnId(returnId)
+                .filter(row -> payment.getId().equals(row.getPayment().getId()))
+                .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_REFUND_NOT_FOUND));
+        entityManager.refresh(refund, LockModeType.PESSIMISTIC_WRITE);
+        refund.setPayment(payment);
+        payment.setOrder(order);
+        return refund;
+    }
+
+    private void requireMethod(PaymentRefund refund, PaymentMethod expected) {
+        if (refund.getPayment().getMethod() != expected) throw invalidSettlement();
+    }
+
+    private AppException invalidSettlement() {
+        return new AppException(ErrorCode.PAYMENT_REFUND_INVALID_STATUS, "Return refund settlement evidence is invalid or conflicts with its current state");
+    }
+
+    @Override
+    @Transactional
     public RefundResponse completeRefund(String refundCode, String providerRefundId) {
         PaymentRefund refund = refundRepository.findByRefundCode(refundCode)
                 .orElseThrow(() -> new AppException(ErrorCode.PAYMENT_REFUND_NOT_FOUND));
@@ -181,6 +288,12 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
                     "Refund can only be completed from PENDING status, current: " + refund.getStatus());
         }
 
+        return finalizeRefund(refund, payment, lockedOrder, orderId, providerRefundId);
+    }
+
+    private RefundResponse finalizeRefund(PaymentRefund refund, Payment payment, Order lockedOrder,
+                                          UUID orderId, String providerRefundId) {
+        String refundCode = refund.getRefundCode();
         refund.setStatus(RefundStatus.COMPLETED);
         refund.setProviderRefundId(providerRefundId);
         refund.setRefundedAt(LocalDateTime.now());

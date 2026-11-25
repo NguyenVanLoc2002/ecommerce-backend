@@ -23,7 +23,10 @@ public interface PaymentRefundMapper {
                 refund.getRefundedAt(),
                 refund.getRequestedBy(),
                 refund.getNote(),
-                refund.getCreatedAt()
+                refund.getCreatedAt(),
+                refund.getSettlementReference(),
+                refund.getSettlementSubmittedBy(),
+                refund.getPayment().getMethod()
         );
     }
 

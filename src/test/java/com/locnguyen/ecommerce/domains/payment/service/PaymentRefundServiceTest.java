@@ -56,6 +56,8 @@ class PaymentRefundServiceTest {
     @Mock EntityManager entityManager;
     @Mock InvoiceService invoiceService;
 
+    @Mock com.locnguyen.ecommerce.infrastructure.payment.paypal.PaypalClient paypalClient;
+
     @InjectMocks PaymentRefundServiceImpl refundService;
 
     // ─── factories ─────────────────────────────────────────────────────────────
@@ -89,12 +91,85 @@ class PaymentRefundServiceTest {
         when(paymentRepository.findByIdWithLock(payment.getId())).thenReturn(Optional.of(payment));
     }
 
+    @Test
+    void codEvidenceMustBeConfirmedByAnotherOperator() {
+        var refund = refund("REF-COD", RefundStatus.PENDING);
+        var payment = refund.getPayment();
+        payment.setMethod(PaymentMethod.COD);
+        stubReturnLocks(refund);
+        when(refundRepository.saveAndFlush(refund)).thenReturn(refund);
+        when(refundRepository.save(refund)).thenReturn(refund);
+        when(refundRepository.findByPaymentIdAndStatusIn(eq(payment.getId()), anyList()))
+                .thenReturn(java.util.List.of(refund));
+
+        refundService.submitCodReturnRefundEvidence(uuid(20), uuid(2), "TRANSFER01", "maker");
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.PROCESSING);
+        assertThat(payment.getStatus()).isEqualTo(PaymentRecordStatus.PAID);
+        assertThatThrownBy(() -> refundService.confirmCodReturnRefund(uuid(20), uuid(2), "MAKER"))
+                .isInstanceOf(AppException.class);
+        refundService.confirmCodReturnRefund(uuid(20), uuid(2), "checker");
+        refundService.confirmCodReturnRefund(uuid(20), uuid(2), "checker");
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.COMPLETED);
+        verify(transactionRepository, times(1)).save(any());
+    }
+
+    @Test
+    void onlyMatchingCompletedPaypalEvidenceSettlesOnce() {
+        var refund = refund("REF-PP", RefundStatus.PENDING);
+        var payment = refund.getPayment();
+        payment.setProviderCurrency("USD");
+        payment.setProviderExchangeRate(BigDecimal.valueOf(25_000));
+        stubReturnLocks(refund);
+        var capture = new com.locnguyen.ecommerce.domains.payment.entity.PaymentTransaction();
+        capture.setProvider(com.locnguyen.ecommerce.domains.payment.enums.PaymentProviderType.PAYPAL);
+        capture.setStatus(TransactionStatus.SUCCESS);
+        capture.setReferenceType("CAPTURE");
+        capture.setProviderTxnId("CAPTURE-1");
+        when(transactionRepository.findByPaymentIdOrderByCreatedAtDesc(payment.getId()))
+                .thenReturn(java.util.List.of(capture));
+        var link = mock(com.locnguyen.ecommerce.infrastructure.payment.paypal.dto.PaypalLink.class);
+        when(link.getRel()).thenReturn("up");
+        when(link.getHref()).thenReturn("https://api.paypal.com/v2/payments/captures/CAPTURE-1");
+        when(paypalClient.getRefund("PS-1")).thenReturn(paypalDetails("PENDING", 4, link),
+                paypalDetails("COMPLETED", 3, link), paypalDetails("COMPLETED", 4, link));
+        when(refundRepository.save(refund)).thenReturn(refund);
+        when(refundRepository.findByPaymentIdAndStatusIn(eq(payment.getId()), anyList()))
+                .thenReturn(java.util.List.of(refund));
+        refundService.verifyPaypalReturnRefund(uuid(20), uuid(2), "PS-1");
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.PENDING);
+        assertThatThrownBy(() -> refundService.verifyPaypalReturnRefund(uuid(20), uuid(2), "PS-1"))
+                .isInstanceOf(AppException.class);
+        verify(transactionRepository, never()).save(any());
+        refundService.verifyPaypalReturnRefund(uuid(20), uuid(2), "PS-1");
+        refundService.verifyPaypalReturnRefund(uuid(20), uuid(2), "PS-1");
+        assertThat(refund.getStatus()).isEqualTo(RefundStatus.COMPLETED);
+        assertThat(refund.getProviderRefundId()).isEqualTo("PS-1");
+        verify(transactionRepository, times(1)).save(any());
+        verify(paypalClient, times(3)).getRefund("PS-1");
+    }
+
+    private com.locnguyen.ecommerce.infrastructure.payment.paypal.dto.PaypalRefundDetails paypalDetails(
+            String status, int amount, com.locnguyen.ecommerce.infrastructure.payment.paypal.dto.PaypalLink link) {
+        var money = new com.locnguyen.ecommerce.infrastructure.payment.paypal.dto.PaypalRefundDetails.Amount(
+                "USD", BigDecimal.valueOf(amount));
+        return new com.locnguyen.ecommerce.infrastructure.payment.paypal.dto.PaypalRefundDetails(
+                "PS-1", status, "REF-PP", money, java.util.List.of(link));
+    }
+
+    private void stubReturnLocks(PaymentRefund refund) {
+        Payment payment = refund.getPayment();
+        refund.setReturnId(uuid(2));
+        stubLocks(payment);
+        when(paymentRepository.findByOrderIdWithLock(uuid(20))).thenReturn(Optional.of(payment));
+        when(refundRepository.findByReturnId(uuid(2))).thenReturn(Optional.of(refund));
+    }
+
     private RefundResponse stubMapper(PaymentRefund refund) {
         RefundResponse resp = new RefundResponse(
                 refund.getId(), refund.getPayment().getId(),
                 refund.getRefundCode(), refund.getAmount(),
                 null, refund.getStatus(), refund.getProviderRefundId(),
-                refund.getRefundedAt(), refund.getRequestedBy(), null, null);
+                refund.getRefundedAt(), refund.getRequestedBy(), null, null, null, null, refund.getPayment().getMethod());
         when(refundMapper.toResponse(refund)).thenReturn(resp);
         return resp;
     }

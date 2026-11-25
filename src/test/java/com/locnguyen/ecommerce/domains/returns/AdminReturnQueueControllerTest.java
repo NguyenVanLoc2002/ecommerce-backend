@@ -13,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.locnguyen.ecommerce.domains.returns.controller.AdminReturnQueueController;
 import com.locnguyen.ecommerce.domains.returns.dto.CreateReturnRequest;
 import com.locnguyen.ecommerce.domains.returns.dto.ReturnResponse;
+import com.locnguyen.ecommerce.domains.returns.dto.ExchangeResponse;
+import com.locnguyen.ecommerce.domains.returns.enums.ExchangeStatus;
 import com.locnguyen.ecommerce.domains.returns.enums.ReturnReason;
 import com.locnguyen.ecommerce.domains.returns.enums.ReturnStatus;
 import com.locnguyen.ecommerce.domains.returns.service.OrderReturnService;
@@ -59,13 +61,16 @@ class AdminReturnQueueControllerTest {
                 ReturnReason.DEFECTIVE, "Damaged seam", LocalDateTime.of(2026, 11, 24, 12, 0), List.of());
         var receipt = new com.locnguyen.ecommerce.domains.returns.dto.AdminReturnDetail.Handling(
                 "Received one item", "Carrier", "TRACK-1", List.of());
+        var exchange = new ExchangeResponse(UUID.randomUUID(), returnId, UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), 1, ExchangeStatus.HOLD_EXPIRED, null, null);
         when(service.getForAdmin(orderId, returnId)).thenReturn(
-                new com.locnguyen.ecommerce.domains.returns.dto.AdminReturnDetail(entry, receipt, null, null));
+                new com.locnguyen.ecommerce.domains.returns.dto.AdminReturnDetail(entry, receipt, null, null, List.of(exchange)));
 
         mvc.perform(get(PATH + "/{orderId}/{returnId}", orderId, returnId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.request.status", is("INSPECTED")))
-                .andExpect(jsonPath("$.data.receipt.trackingNumber", is("TRACK-1")));
+                .andExpect(jsonPath("$.data.receipt.trackingNumber", is("TRACK-1")))
+                .andExpect(jsonPath("$.data.exchanges[0].status", is("HOLD_EXPIRED")));
     }
 
     @Test

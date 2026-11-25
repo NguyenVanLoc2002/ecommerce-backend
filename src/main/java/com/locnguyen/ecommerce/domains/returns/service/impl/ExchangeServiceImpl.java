@@ -209,6 +209,15 @@ public class ExchangeServiceImpl implements ExchangeService {
                 ? ExchangeStatus.HOLD_EXPIRED : row.getStatus();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<ExchangeResponse> listForReturn(UUID returnId) {
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        return exchangeRepository.findByReturnId(returnId).stream()
+                .map(row -> response(row, now))
+                .toList();
+    }
+
     private ExchangeResponse response(ReturnExchange row, LocalDateTime now) {
         return new ExchangeResponse(row.getId(), row.getReturnId(), row.getOrderItemId(), row.getVariantId(),
                 row.getWarehouseId(), row.getQuantity(), effectiveStatus(row, now), row.getExpiresAt(), row.getReplacementOrderId());
