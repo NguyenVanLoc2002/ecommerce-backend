@@ -88,6 +88,16 @@ public class OtpServiceImpl implements OtpService {
     @Override
     @Transactional
     public VerificationToken verifyOtp(String target, VerificationPurpose purpose, String rawOtp) {
+        return verify(target, purpose, rawOtp);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = AppException.class)
+    public VerificationToken verifyEmailOtp(String target, String rawOtp) {
+        return verify(target, VerificationPurpose.VERIFY_EMAIL, rawOtp);
+    }
+
+    private VerificationToken verify(String target, VerificationPurpose purpose, String rawOtp) {
         String normalizedTarget = normalizeEmail(target);
         otpRateLimiter.recordVerifyAttempt(purpose, normalizedTarget);
 

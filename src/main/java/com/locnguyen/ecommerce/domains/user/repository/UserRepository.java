@@ -4,6 +4,8 @@ import com.locnguyen.ecommerce.domains.user.entity.User;
 import com.locnguyen.ecommerce.domains.user.enums.RoleName;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -19,6 +21,10 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
     Optional<User> findByEmailAndDeletedFalse(String email);
 
     Optional<User> findByIdAndDeletedFalse(UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.email = :email and u.deleted = false")
+    Optional<User> findCurrentUserForEmailVerification(@Param("email") String email);
 
     boolean existsByEmail(String email);
 

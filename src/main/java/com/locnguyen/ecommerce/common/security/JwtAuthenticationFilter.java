@@ -42,6 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider tokenProvider;
     private final TokenBlacklistService tokenBlacklistService;
+    private final RefreshSessionService refreshSessionService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -77,6 +78,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String username = tokenProvider.extractUsername(token);
         List<String> roles = tokenProvider.extractRoles(token);
+
+        if (roles.contains("CUSTOMER") && refreshSessionService.isCustomerAccessRevoked(
+                username, tokenProvider.extractAccessTokenFamilyId(token))) {
+            return;
+        }
 
         // Build authorities — Spring Security expects "ROLE_" prefix
         List<SimpleGrantedAuthority> authorities = roles.stream()

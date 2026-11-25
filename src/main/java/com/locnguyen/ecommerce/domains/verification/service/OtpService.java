@@ -25,6 +25,8 @@ public interface OtpService {
      */
     VerificationToken verifyOtp(String target, VerificationPurpose purpose, String rawOtp);
 
+    VerificationToken verifyEmailOtp(String target, String rawOtp);
+
     /**
      * Issue a one-shot opaque reset token for an already-verified token row.
      * Returns the raw reset-token value to send to the client; the row stores
