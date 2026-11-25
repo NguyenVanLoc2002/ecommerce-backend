@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -49,6 +50,7 @@ public class OrderReturn extends BaseEntity {
     @Column(name = "status", nullable = false, length = 40)
     private ReturnStatus status;
 
+    @BatchSize(size = 32)
     @ElementCollection
     @CollectionTable(name = "order_return_lines", joinColumns = @JoinColumn(name = "return_id"))
     private List<ReturnLine> lines = new ArrayList<>();
