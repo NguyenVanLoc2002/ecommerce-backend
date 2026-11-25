@@ -20,10 +20,16 @@ public final class ReturnEligibility {
         if (deliveredAt == null) {
             return ReturnStatus.PENDING_DELIVERY_VERIFICATION;
         }
-        if (requestedAt.isBefore(deliveredAt) || requestedAt.isAfter(deliveredAt.plusDays(RETURN_WINDOW_DAYS))) {
+        if (!canSubmit(orderStatus, deliveredAt, requestedAt)) {
             throw new AppException(ErrorCode.RETURN_NOT_ELIGIBLE, "The request is outside the delivery return window");
         }
         return ReturnStatus.REQUESTED;
+    }
+
+    public static boolean canSubmit(OrderStatus status, LocalDateTime deliveredAt, LocalDateTime now) {
+        return (status == OrderStatus.DELIVERED || status == OrderStatus.COMPLETED)
+                && (deliveredAt == null || (!now.isBefore(deliveredAt)
+                        && !now.isAfter(deliveredAt.plusDays(RETURN_WINDOW_DAYS))));
     }
 
     public static void requireAvailableQuantity(int delivered, long claimed, int requested) {
