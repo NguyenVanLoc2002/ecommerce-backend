@@ -363,6 +363,14 @@ POST /api/v1/webhooks/payment/PAYPAL
 
 ### Refund settlement
 
+Return-linked refunds start with `POST /api/v1/admin/orders/{orderId}/returns/{returnId}/refund`.
+The following settlement routes share that prefix and require ADMIN or SUPER_ADMIN.
+
+- `POST /refund/paypal/verify` accepts `{ "reference": "<PayPal refund ID>" }`. It reads an already issued refund from PayPal and verifies refund ID, merchant invoice ID (the local refund code), original capture, currency and amount using the saved exchange rate. Only a matching COMPLETED result settles the local refund. The endpoint can be retried and does not initiate a transfer.
+- `POST /refund/cod/evidence` accepts `{ "reference": "<transfer reference>" }`. It records the operator and reserves the unique evidence reference, moving the refund to PROCESSING.
+- `POST /refund/cod/confirm` requires a different operator from the evidence submitter. It settles the recorded transfer and does not affect COD collection. The refund response exposes the evidence reference and submitter for independent review.
+- Missing historical PayPal capture/conversion data requires reconciliation. Return-linked refunds remain excluded from legacy manual completion.
+
 - Initiating a refund creates a `PENDING` refund and an `INITIATED` audit transaction. It reserves refundable balance but does not change Payment or Order payment status.
 - `PENDING` and `PROCESSING` refund amounts count against the remaining refundable balance. Refund requests serialize by Order and Payment, and read the current refund rows under a database lock.
 - Admin completion is allowed only after transfer confirmation. Completion records a `REFUNDED` transaction and derives Payment and Order payment status from confirmed refunds: `PAID`, `PARTIALLY_REFUNDED`, or `REFUNDED`.

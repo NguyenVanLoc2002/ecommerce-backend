@@ -9,6 +9,7 @@ import com.locnguyen.ecommerce.domains.order.service.OrderService;
 import com.locnguyen.ecommerce.domains.returns.dto.CreateReturnRequest;
 import com.locnguyen.ecommerce.domains.returns.dto.ReturnResponse;
 import com.locnguyen.ecommerce.domains.returns.dto.AdminReturnDetail;
+import com.locnguyen.ecommerce.domains.returns.service.ExchangeService;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentRefundService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -53,6 +54,7 @@ public class OrderReturnServiceImpl implements OrderReturnService {
     private final InventoryService inventoryService;
     private final NotificationService notificationService;
     private final PaymentRefundService paymentRefundService;
+    private final ExchangeService exchangeService;
 
     @Override
     @Transactional
@@ -307,7 +309,7 @@ public class OrderReturnServiceImpl implements OrderReturnService {
         var entry = findReturn(orderId, returnId);
         return new AdminReturnDetail(toResponse(entry), getHandling(returnId, ReturnStatus.RECEIVED),
                 getHandling(returnId, ReturnStatus.INSPECTED),
-                paymentRefundService.findReturnRefund(returnId).orElse(null));
+                paymentRefundService.findReturnRefund(returnId).orElse(null), exchangeService.listForReturn(returnId));
     }
 
     private AdminReturnDetail.Handling getHandling(UUID returnId, ReturnStatus status) {

@@ -68,6 +68,12 @@ public class PaymentRefund extends BaseEntity {
     @Column(name = "provider_refund_id", length = 200)
     private String providerRefundId;
 
+    @Column(name = "settlement_reference", length = 200)
+    private String settlementReference;
+
+    @Column(name = "settlement_submitted_by", length = 255)
+    private String settlementSubmittedBy;
+
     @Column(name = "refunded_at")
     private LocalDateTime refundedAt;
 

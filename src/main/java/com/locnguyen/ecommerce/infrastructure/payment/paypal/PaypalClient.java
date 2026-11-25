@@ -155,6 +155,23 @@ public class PaypalClient {
         }
     }
 
+    public com.locnguyen.ecommerce.infrastructure.payment.paypal.dto.PaypalRefundDetails getRefund(String refundId) {
+        PaypalResolvedPaymentConfig config = paypal();
+        String token = oAuthClient.getAccessToken();
+        try {
+            var response = restClientFactory.create(config.connectTimeoutMs(), config.readTimeoutMs()).get()
+                    .uri(config.baseUrl() + "/v2/payments/refunds/{refundId}", refundId)
+                    .headers(headers -> headers.setBearerAuth(token))
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(com.locnguyen.ecommerce.infrastructure.payment.paypal.dto.PaypalRefundDetails.class);
+            if (response != null) return response;
+        } catch (RestClientException ignored) {
+            // Verification can be retried without submitting a second refund.
+        }
+        throw new AppException(ErrorCode.PAYMENT_FAILED, "PayPal refund details could not be verified");
+    }
+
     private PaypalResolvedPaymentConfig paypal() {
         return configResolver.resolvePaypal();
     }

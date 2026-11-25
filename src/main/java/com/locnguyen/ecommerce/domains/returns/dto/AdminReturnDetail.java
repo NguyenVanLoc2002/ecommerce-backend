@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 public record AdminReturnDetail(ReturnResponse request, Handling receipt, Handling inspection,
-                                RefundResponse refund) {
+                                RefundResponse refund, List<ExchangeResponse> exchanges) {
     public record Handling(String note, String carrier, String trackingNumber, List<Line> items) {}
 
     public record Line(UUID orderItemId, int quantity, int restock, int damaged) {}
