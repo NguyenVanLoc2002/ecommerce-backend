@@ -89,6 +89,7 @@ import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -183,6 +184,10 @@ class MockPaymentCommerceLifecycleIntegrationTest {
         assertThat(refundOne.amount()).isEqualByComparingTo("99999");
         assertThat(refundTwo.amount()).isEqualByComparingTo("100000");
         assertThat(refundOne.status()).isEqualTo(RefundStatus.PENDING);
+        var customerRefund = returnService.getForCustomer(order.getId(), first.id(), fixture.customer());
+        assertThat(customerRefund.request().status()).isEqualTo(ReturnStatus.INSPECTED);
+        assertThat(customerRefund.refund().status()).isEqualTo(RefundStatus.PENDING);
+        assertThat(customerRefund.refund().amount()).isEqualByComparingTo(refundOne.amount());
         assertThat(returnRefundService.prepare(order.getId(), first.id()).refundCode())
                 .isEqualTo(refundOne.refundCode());
         var ledger = paymentRefundRepository.findByReturnId(first.id()).orElseThrow();
@@ -323,6 +328,9 @@ class MockPaymentCommerceLifecycleIntegrationTest {
         assertThat(replacement.status()).isEqualTo(ExchangeStatus.REPLACEMENT_CREATED);
         assertThat(exchangeService.createReplacement(order.getId(), entry.id(), nextHold.id())).isEqualTo(replacement);
         var child = orderService.getOrderById(replacement.replacementOrderId(), fixture.customer());
+        assertThat(returnService.getForCustomer(order.getId(), entry.id(), fixture.customer()).exchanges())
+                .filteredOn(value -> value.status() == ExchangeStatus.REPLACEMENT_CREATED)
+                .singleElement().satisfies(value -> assertThat(value.replacementOrderId()).isEqualTo(child.getId()));
         assertThat(child.getReplacementForOrderId()).isEqualTo(order.getId());
         assertThat(child.getTotalAmount()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(child.getPaymentMethod()).isEqualTo(PaymentMethod.EXCHANGE);
@@ -347,7 +355,7 @@ class MockPaymentCommerceLifecycleIntegrationTest {
     @Autowired private ReturnDecisionRepository returnDecisionRepository;
 
     @Test
-    void returnIntake_checksOwnershipAndSerializesCompetingClaims() {
+    void returnIntake_checksOwnershipAndSerializesCompetingClaims() throws Exception {
         CommerceFixture fixture = createFixture();
         addProductToCart(fixture);
         OrderResponse order = checkout(fixture);
@@ -358,10 +366,33 @@ class MockPaymentCommerceLifecycleIntegrationTest {
         var request = new CreateReturnRequest(ReturnReason.DEFECTIVE, "Damaged seam",
                 List.of(new CreateReturnRequest.Item(itemId, 1)));
 
-        assertThatThrownBy(() -> returnService.create(order.getId(), createFixture().customer(), "owner", request))
+        var otherCustomer = createFixture().customer();
+        assertThatThrownBy(() -> returnService.create(order.getId(), otherCustomer, "owner", request))
+                .isInstanceOf(AppException.class).extracting("errorCode").isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+        assertThatThrownBy(() -> returnService.listForCustomer(order.getId(), otherCustomer))
                 .isInstanceOf(AppException.class).extracting("errorCode").isEqualTo(ErrorCode.ORDER_NOT_FOUND);
         var first = returnService.create(order.getId(), fixture.customer(), "first", request);
         assertThat(first.status()).isEqualTo(ReturnStatus.PENDING_DELIVERY_VERIFICATION);
+        assertThatThrownBy(() -> returnService.getForCustomer(order.getId(), first.id(), otherCustomer))
+                .isInstanceOf(AppException.class).extracting("errorCode").isEqualTo(ErrorCode.ORDER_NOT_FOUND);
+        String returnsPath = "/api/v1/orders/{orderId}/returns";
+        var owner = user(fixture.customer().getUser().getEmail()).roles("CUSTOMER");
+        var stranger = user(otherCustomer.getUser().getEmail()).roles("CUSTOMER");
+        mockMvc.perform(get(returnsPath, order.getId()).with(stranger))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
+        mockMvc.perform(get(returnsPath + "/{returnId}", order.getId(), first.id()).with(stranger))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
+        mockMvc.perform(get(returnsPath, order.getId()).with(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requests[0].id").value(first.id().toString()))
+                .andExpect(jsonPath("$.data.eligibleItems[0].availableQuantity").value(1));
+        var summary = returnService.listForCustomer(order.getId(), fixture.customer());
+        assertThat(summary.requests()).extracting(entry -> entry.id()).containsExactly(first.id());
+        assertThat(summary.eligibleItems()).singleElement().satisfies(item -> {
+            assertThat(item.orderItemId()).isEqualTo(itemId);
+            assertThat(item.availableQuantity()).isEqualTo(1);
+            assertThat(item.allowedReasons()).contains(ReturnReason.DEFECTIVE).doesNotContain(ReturnReason.CHANGED_MIND);
+        });
         var page = org.springframework.data.domain.PageRequest.of(0, 1);
         assertThat(returnService.listForAdmin(first.status(), order.getId(), page).getContent())
                 .singleElement().satisfies(entry -> {
@@ -387,6 +418,7 @@ class MockPaymentCommerceLifecycleIntegrationTest {
         awaitStart(ready);
         start.countDown();
         assertThat(List.of(second.join(), third.join())).containsExactlyInAnyOrder("CREATED", "RETURN_QUANTITY_UNAVAILABLE");
+        assertThat(returnService.listForCustomer(order.getId(), fixture.customer()).eligibleItems()).isEmpty();
 
         String actor = "returns-admin@example.test";
         var decision = new ReturnDecisionRequest("Verified against delivery receipt",
@@ -428,6 +460,22 @@ class MockPaymentCommerceLifecycleIntegrationTest {
         assertThat(returnService.handle(order.getId(), first.id(), "inspect", actor, ReturnStatus.INSPECTED, inspection))
                 .isEqualTo(inspected);
         assertInventory(fixture.inventoryId(), INITIAL_ON_HAND + 1, ORDER_QUANTITY);
+        var customerDetail = returnService.getForCustomer(order.getId(), first.id(), fixture.customer());
+        assertThat(customerDetail.timeline()).extracting(event -> event.status())
+                .containsExactly(ReturnStatus.PENDING_DELIVERY_VERIFICATION, ReturnStatus.REQUESTED,
+                        ReturnStatus.APPROVED, ReturnStatus.RECEIVED, ReturnStatus.INSPECTED);
+        assertThat(customerDetail.tracking().trackingNumber()).isEqualTo("TRACK-1");
+        mockMvc.perform(get(returnsPath + "/{returnId}", order.getId(), first.id()).with(owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.request.status").value("INSPECTED"))
+                .andExpect(jsonPath("$.data.timeline[2].status").value("APPROVED"))
+                .andExpect(jsonPath("$.data.tracking.trackingNumber").value("TRACK-1"))
+                .andExpect(jsonPath("$.data.tracking.evidenceReference").doesNotExist());
+        assertThat(customerDetail.inspection()).singleElement().satisfies(line -> {
+            assertThat(line.orderItemId()).isEqualTo(itemId);
+            assertThat(line.quantity()).isEqualTo(1);
+            assertThat(line.restock()).isEqualTo(1);
+        });
         assertThat(notificationRepository.findByCustomerIdOrderByCreatedAtDesc(
                 fixture.customer().getId(), PageRequest.of(0, 100)).getContent())
                 .filteredOn(notification -> first.id().equals(notification.getReferenceId())).hasSize(5);
