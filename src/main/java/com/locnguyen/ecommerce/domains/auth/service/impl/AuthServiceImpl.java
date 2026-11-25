@@ -190,6 +190,7 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
         }
 
+        ensureCustomerFamilyNotRevoked(claims);
         RefreshSession storedSession = refreshSessionService.getSession(
                 claims.principalType(),
                 claims.principalId(),
@@ -206,6 +207,7 @@ public class AuthServiceImpl implements AuthService {
             throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
         }
 
+        refreshSessionService.indexCustomerFamily(storedSession);
         AuthenticatedPrincipal principal = loadPrincipal(claims.principalType(), claims.principalId());
         ensurePrincipalActive(principal);
 
@@ -215,12 +217,22 @@ public class AuthServiceImpl implements AuthService {
                 claims.principalType(), claims.principalId(), principal.user().getId());
 
         SessionTokenBundle tokens = issueSession(principal, clientMetadata, claims.familyId());
+        // Recheck after issuance so a concurrent rotation cannot revive a revoked family.
+        ensureCustomerFamilyNotRevoked(claims);
         return new TokenRefreshResponse(tokens.response(), tokens.refreshToken());
     }
 
     @Override
     public void revokeAllRefreshSessions(AuthPrincipalType principalType, UUID principalId) {
         refreshSessionService.revokeAllRefreshSessions(principalType, principalId);
+    }
+
+    private void ensureCustomerFamilyNotRevoked(JwtTokenProvider.RefreshTokenClaims claims) {
+        if (claims.principalType() == AuthPrincipalType.CUSTOMER
+                && refreshSessionService.isCustomerFamilyRevoked(claims.familyId())) {
+            refreshSessionService.revokeFamily(claims.principalType(), claims.principalId(), claims.familyId());
+            throw new AppException(ErrorCode.REFRESH_TOKEN_INVALID);
+        }
     }
 
     private SessionTokenBundle issueSession(AuthenticatedPrincipal principal,
@@ -231,9 +243,11 @@ public class AuthServiceImpl implements AuthService {
                 .map(role -> role.getName().name())
                 .collect(Collectors.toList());
 
-        String accessToken = tokenProvider.generateAccessToken(user.getEmail(), roleNames);
         String sessionId = UUID.randomUUID().toString();
         String familyId = existingFamilyId != null ? existingFamilyId : UUID.randomUUID().toString();
+        String accessToken = principal.principalType() == AuthPrincipalType.CUSTOMER
+                ? tokenProvider.generateAccessToken(user.getEmail(), roleNames, familyId)
+                : tokenProvider.generateAccessToken(user.getEmail(), roleNames);
         String refreshToken = tokenProvider.generateRefreshToken(
                 user.getEmail(),
                 principal.principalType(),

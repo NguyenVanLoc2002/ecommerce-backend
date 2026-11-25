@@ -28,6 +28,9 @@ public class UserProfileResponse {
     @Schema(description = "Email (login identifier)")
     private final String email;
 
+    @Schema(description = "Whether the current email has been verified through the email verification flow")
+    private final boolean emailVerified;
+
     @Schema(description = "First name")
     private final String firstName;
 

@@ -153,6 +153,20 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - Refresh tokens carry session identity (`jti`) plus principal and family claims for server-side validation and revocation.
 - `AuthService.revokeAllRefreshSessions(principalType, principalId)` is available for a future password-change integration.
 
+### GET `/api/v1/auth/sessions`
+
+- Access: CUSTOMER Bearer token. The optional HttpOnly refresh cookie identifies the current session. Browser clients use credentials to send this cookie.
+- Response: `ApiResponse<List<CustomerSessionResponse>>`. Each record has `id` (stable across rotation), `userAgent` (nullable display text), `lastRefreshedAt` (initial login or last refresh), `expiresAt` and `current`.
+- The response lists active refresh sessions for the authenticated customer. Without a matching active cookie, every entry has `current: false`. The current session sorts first, then the remaining sessions sort by most recent refresh.
+- The endpoint does not return IP addresses, geolocation, tokens or token hashes. Its response uses `Cache-Control: no-store`.
+
+### DELETE `/api/v1/auth/sessions/{sessionId}` and DELETE `/api/v1/auth/sessions`
+
+- Access: CUSTOMER Bearer token and a matching active HttpOnly refresh cookie. Send credentials. The single operation revokes the selected other session. The collection operation revokes all other sessions.
+- Response: `ApiResponse<Void>`. Missing, expired or mismatched current cookie or a request targeting the current session returns `400 BAD_REQUEST`. Use the existing logout endpoint for the current session. An unknown session ID is a no-op and does not disclose ownership.
+- After success, the targeted families' access and refresh tokens are rejected, including after concurrent refresh rotation. Requests that already passed authentication can finish.
+- During rollout, legacy access JWTs have no session identifier. The first device revocation blocks legacy access JWTs for that customer. The current and retained sessions can keep their refresh cookies and obtain new access JWTs by refreshing.
+
 ### POST `/api/v1/auth/password/forgot`
 
 - Access: public, no token required.
@@ -182,6 +196,19 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - Response: `ApiResponse<Void>`.
 - Errors: `RESET_TOKEN_INVALID`, `RESET_TOKEN_EXPIRED`, `PASSWORD_MISMATCH`, `PASSWORD_POLICY_VIOLATED`, `PASSWORD_REUSED`, `USER_NOT_FOUND`, `ACCOUNT_DISABLED`.
 
+### POST `/api/v1/account/email-verification`
+
+- Access: CUSTOMER Bearer token.
+- Sends a six-digit code to the authenticated account's existing email using the dedicated email-verification purpose. No request body is required.
+- Response: `ApiResponse<Void>`. Already-verified accounts return success without sending another code. OTP send rate limits apply.
+
+### POST `/api/v1/account/email-verification/confirm`
+
+- Access: CUSTOMER Bearer token.
+- Request: `{ "otp": "123456" }`.
+- On success, consumes the code and records verification for the current email. Response is `ApiResponse<Void>`. Read `GET /api/v1/me` to refresh the badge.
+- Invalid, expired, exhausted or mismatched codes follow the existing OTP error contract. Password-reset codes do not verify email.
+
 ### POST `/api/v1/account/password/change`
 
 - Access: authenticated (Bearer JWT).
@@ -205,6 +232,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - `UserProfileResponse`
   - `id`, `email`, `firstName`, `lastName`, `phoneNumber`
   - `status`, `roles`
+  - `emailVerified` (boolean, false until the dedicated OTP flow succeeds)
   - `customerId`, `gender`, `birthDate`, `avatarUrl`, `loyaltyPoints`
   - `createdAt`
 - `UpdateProfileRequest`

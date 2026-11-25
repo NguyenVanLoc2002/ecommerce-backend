@@ -92,6 +92,7 @@ public class UserServiceImpl implements UserService {
         UserProfileResponse.UserProfileResponseBuilder builder = UserProfileResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
+                .emailVerified(user.getEmailVerifiedAt() != null)
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .phoneNumber(user.getPhoneNumber())

@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -21,6 +22,7 @@ import java.util.Set;
  * <p>Relationship: User N ↔ N Role (via {@code user_roles} join table).
  */
 @Entity
+@DynamicUpdate
 @Table(name = "users")
 @Getter
 @Setter
@@ -45,6 +47,9 @@ public class User extends SoftDeleteEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 50, nullable = false)
     private UserStatus status = UserStatus.ACTIVE;
+
+    @Column(name = "email_verified_at")
+    private LocalDateTime emailVerifiedAt;
 
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;

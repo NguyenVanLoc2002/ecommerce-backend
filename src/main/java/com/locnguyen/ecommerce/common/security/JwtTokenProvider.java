@@ -56,12 +56,17 @@ public class JwtTokenProvider {
      * @param roles    list of role names WITHOUT "ROLE_" prefix (e.g., ["ADMIN", "STAFF"])
      */
     public String generateAccessToken(String username, List<String> roles) {
+        return generateAccessToken(username, roles, null);
+    }
+
+    public String generateAccessToken(String username, List<String> roles, String familyId) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + appProperties.getJwt().getAccessTokenExpiration());
 
         return Jwts.builder()
                 .subject(username)
                 .claim(ROLES_CLAIM, roles)
+                .claim(FAMILY_ID_CLAIM, familyId)
                 .claim(TOKEN_TYPE_CLAIM, ACCESS_TOKEN_TYPE)
                 .issuedAt(now)
                 .expiration(expiry)
@@ -209,6 +214,10 @@ public class JwtTokenProvider {
         } catch (ExpiredJwtException e) {
             return e.getClaims();
         }
+    }
+
+    public String extractAccessTokenFamilyId(String token) {
+        return parseClaims(token).get(FAMILY_ID_CLAIM, String.class);
     }
 
     public RefreshTokenClaims extractRefreshTokenClaims(String token) {
