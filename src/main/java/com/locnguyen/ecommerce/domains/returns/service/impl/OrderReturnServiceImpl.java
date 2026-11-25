@@ -8,6 +8,8 @@ import com.locnguyen.ecommerce.domains.order.dto.OrderItemResponse;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
 import com.locnguyen.ecommerce.domains.returns.dto.CreateReturnRequest;
 import com.locnguyen.ecommerce.domains.returns.dto.ReturnResponse;
+import com.locnguyen.ecommerce.domains.returns.dto.AdminReturnDetail;
+import com.locnguyen.ecommerce.domains.payment.service.PaymentRefundService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import com.locnguyen.ecommerce.domains.returns.entity.OrderReturn;
@@ -50,6 +52,7 @@ public class OrderReturnServiceImpl implements OrderReturnService {
     private final ReturnHandlingRepository handlingRepository;
     private final InventoryService inventoryService;
     private final NotificationService notificationService;
+    private final PaymentRefundService paymentRefundService;
 
     @Override
     @Transactional
@@ -296,6 +299,24 @@ public class OrderReturnServiceImpl implements OrderReturnService {
     @Transactional(readOnly = true)
     public Page<ReturnResponse> listForAdmin(ReturnStatus status, UUID orderId, Pageable pageable) {
         return returnRepository.findForAdmin(status, orderId, pageable).map(this::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminReturnDetail getForAdmin(UUID orderId, UUID returnId) {
+        var entry = findReturn(orderId, returnId);
+        return new AdminReturnDetail(toResponse(entry), getHandling(returnId, ReturnStatus.RECEIVED),
+                getHandling(returnId, ReturnStatus.INSPECTED),
+                paymentRefundService.findReturnRefund(returnId).orElse(null));
+    }
+
+    private AdminReturnDetail.Handling getHandling(UUID returnId, ReturnStatus status) {
+        return handlingRepository.findByReturnIdAndNextStatus(returnId, status)
+                .map(handling -> new AdminReturnDetail.Handling(handling.getNote(), handling.getCarrier(),
+                        handling.getTrackingNumber(), handling.getItems().stream()
+                                .map(line -> new AdminReturnDetail.Line(line.orderItemId(), line.quantity(),
+                                        line.restock(), line.damaged())).toList()))
+                .orElse(null);
     }
 
     private ReturnResponse toResponse(OrderReturn entry) {

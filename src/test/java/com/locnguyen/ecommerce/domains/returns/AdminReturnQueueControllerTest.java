@@ -52,6 +52,23 @@ class AdminReturnQueueControllerTest {
     }
 
     @Test
+    void returnsPersistedReceipt() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        UUID returnId = UUID.randomUUID();
+        var entry = new ReturnResponse(returnId, orderId, ReturnStatus.INSPECTED,
+                ReturnReason.DEFECTIVE, "Damaged seam", LocalDateTime.of(2026, 11, 24, 12, 0), List.of());
+        var receipt = new com.locnguyen.ecommerce.domains.returns.dto.AdminReturnDetail.Handling(
+                "Received one item", "Carrier", "TRACK-1", List.of());
+        when(service.getForAdmin(orderId, returnId)).thenReturn(
+                new com.locnguyen.ecommerce.domains.returns.dto.AdminReturnDetail(entry, receipt, null, null));
+
+        mvc.perform(get(PATH + "/{orderId}/{returnId}", orderId, returnId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.request.status", is("INSPECTED")))
+                .andExpect(jsonPath("$.data.receipt.trackingNumber", is("TRACK-1")));
+    }
+
+    @Test
     void rejectsUnknownStatusBeforeQuerying() throws Exception {
         mvc.perform(get(PATH).param("status", "UNKNOWN")).andExpect(status().isBadRequest());
         verifyNoInteractions(service);

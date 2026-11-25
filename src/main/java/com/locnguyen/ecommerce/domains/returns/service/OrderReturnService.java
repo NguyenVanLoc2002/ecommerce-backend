@@ -7,10 +7,13 @@ import com.locnguyen.ecommerce.domains.returns.dto.ReturnDecisionRequest;
 import com.locnguyen.ecommerce.domains.returns.enums.ReturnStatus;
 import com.locnguyen.ecommerce.domains.returns.dto.ReturnHandlingRequest;
 import java.util.UUID;
+import com.locnguyen.ecommerce.domains.returns.dto.AdminReturnDetail;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface OrderReturnService {
+    AdminReturnDetail getForAdmin(UUID orderId, UUID returnId);
+
     Page<ReturnResponse> listForAdmin(ReturnStatus status, UUID orderId, Pageable pageable);
     ReturnResponse decide(UUID orderId, UUID returnId, String key, String actor,
                           ReturnStatus next, ReturnDecisionRequest request);

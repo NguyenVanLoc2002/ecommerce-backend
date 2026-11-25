@@ -3,7 +3,9 @@ package com.locnguyen.ecommerce.domains.returns.controller;
 import com.locnguyen.ecommerce.common.constants.AppConstants;
 import com.locnguyen.ecommerce.common.response.ApiResponse;
 import com.locnguyen.ecommerce.common.response.PagedResponse;
+import com.locnguyen.ecommerce.domains.returns.dto.AdminReturnDetail;
 import com.locnguyen.ecommerce.domains.returns.dto.ReturnResponse;
+import org.springframework.web.bind.annotation.PathVariable;
 import com.locnguyen.ecommerce.domains.returns.enums.ReturnStatus;
 import com.locnguyen.ecommerce.domains.returns.service.OrderReturnService;
 import java.util.UUID;
@@ -23,6 +25,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping(AppConstants.API_V1 + "/admin/returns")
 public class AdminReturnQueueController {
     private final OrderReturnService returnService;
+
+    @GetMapping("/{orderId}/{returnId}")
+    public ApiResponse<AdminReturnDetail> detail(@PathVariable UUID orderId, @PathVariable UUID returnId) {
+        return ApiResponse.success(returnService.getForAdmin(orderId, returnId));
+    }
 
     @GetMapping
     public ApiResponse<PagedResponse<ReturnResponse>> list(
