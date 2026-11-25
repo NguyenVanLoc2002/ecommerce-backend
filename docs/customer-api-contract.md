@@ -757,6 +757,16 @@ An exchange replacement can appear in the order history with paymentMethod EXCHA
 - Orders with a delivery timestamp accept requests within 14 days of delivery. Delivered orders with a missing timestamp enter `PENDING_DELIVERY_VERIFICATION`.
 - The response contains the return record and submitted items. Submission reserves claimable quantity and leaves the original delivery history and payment intact.
 
+### GET `/api/v1/orders/{orderId}/returns`
+
+- Returns `eligibleItems[]` with `orderItemId`, `availableQuantity`, `allowedReasons[]` and `unopenedRequiredForChangedMind`, and `requests[]` with existing return summaries.
+- An empty eligibility list means no new request can be made at the time of the read. Existing requests remain visible. The submission endpoint revalidates the policy and quantity.
+
+### GET `/api/v1/orders/{orderId}/returns/{returnId}`
+
+- Returns `request`, `timeline[]` (persisted status and time), reverse `tracking` when recorded, `inspection[]`, linked `refund` and `exchanges[]` with any replacement order ID.
+- Both reads require order ownership. Refund status reflects the linked refund record independently of the return status. Internal tracking evidence, actors, and notes from Admin operations are omitted.
+
 ## 10. Shipment tracking
 
 ### DTOs
