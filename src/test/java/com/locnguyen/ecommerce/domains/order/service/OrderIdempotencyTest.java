@@ -2,7 +2,6 @@ package com.locnguyen.ecommerce.domains.order.service;
 
 import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
-import com.locnguyen.ecommerce.domains.address.entity.Address;
 import com.locnguyen.ecommerce.domains.address.repository.AddressRepository;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.cart.entity.Cart;
@@ -25,6 +24,7 @@ import com.locnguyen.ecommerce.domains.order.mapper.OrderMapper;
 import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.order.service.impl.OrderServiceImpl;
+import com.locnguyen.ecommerce.domains.order.service.tax.OrderTaxEstimates;
 import com.locnguyen.ecommerce.domains.payment.service.PaymentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -75,6 +75,7 @@ class OrderIdempotencyTest {
     @Mock NotificationService notificationService;
     @Mock IdempotencyService idempotencyService;
 
+    @Mock OrderTaxEstimates orderTaxEstimates;
     @InjectMocks OrderServiceImpl orderService;
 
     private Customer customer;

@@ -49,6 +49,7 @@ import com.locnguyen.ecommerce.domains.order.repository.OrderItemRepository;
 import com.locnguyen.ecommerce.domains.order.repository.OrderItemCountProjection;
 import com.locnguyen.ecommerce.domains.order.repository.OrderRepository;
 import com.locnguyen.ecommerce.domains.order.service.OrderService;
+import com.locnguyen.ecommerce.domains.order.service.tax.OrderTaxEstimates;
 import com.locnguyen.ecommerce.domains.order.service.OrderHoldService;
 import com.locnguyen.ecommerce.domains.order.service.CheckoutHoldPolicy;
 import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
@@ -106,6 +107,7 @@ public class OrderServiceImpl implements OrderService {
     private final VoucherService voucherService;
     private final ShipmentService shipmentService;
     private final InvoiceService invoiceService;
+    private final OrderTaxEstimates orderTaxEstimates;
 
     private static final int CUSTOMER_ORDER_ITEM_PREVIEW_LIMIT = 3;
     private static final Set<String> ADMIN_ORDER_SORT_FIELDS = Set.of("orderCode", "status", "createdAt", "totalAmount");
@@ -162,6 +164,10 @@ public class OrderServiceImpl implements OrderService {
         order = orderRepository.save(order);
         applyVoucherDuringCheckout(order, customer, request.getVoucherCode());
         applyShippingSelection(order, request.getCarrierId());
+        if (orderTaxEstimates.enabled()) {
+            orderRepository.flush();
+            orderTaxEstimates.capture(order);
+        }
 
         List<UUID> variantIds = draft.cartItems().stream()
                 .map(ci -> ci.getVariant().getId())
