@@ -80,6 +80,26 @@ class CarrierCheckoutServiceTest {
         assertThat(response.getCarrierId()).isEqualTo(uuid(9));
         assertThat(response.getCarrierCode()).isEqualTo("MOCK");
         assertThat(response.getShippingFee()).isEqualByComparingTo("40000");
+        assertThat(response.getDeliveryEstimate()).isNull();
+    }
+
+    @Test
+    void quote_keepsServiceAndFeeWhenEtaIsUnverified() {
+        Carrier carrier = carrier(uuid(9), "AHAMOVE", CarrierProviderType.AHAMOVE, CarrierStatus.ACTIVE);
+        CarrierConfig config = new CarrierConfig();
+        config.setEnabled(true);
+        config.setDefaultPickupWarehouseId(uuid(11));
+        Order order = new Order();
+        when(carrierRepository.findById(uuid(9))).thenReturn(Optional.of(carrier));
+        when(carrierProviderRegistry.find(CarrierProviderType.AHAMOVE.name())).thenReturn(Optional.of(carrierProvider));
+        when(carrierConfigRepository.findByCarrierId(uuid(9))).thenReturn(Optional.of(config));
+        when(carrierProvider.calculateRate(any(), any())).thenReturn(ShippingRateResult.builder()
+                .fee(new BigDecimal("40000")).currency("VND").serviceName("Bike").serviceCode("SGN-BIKE").build());
+        var response = carrierCheckoutService.quote(uuid(9), order);
+
+        assertThat(response.getDeliveryEstimate()).isNull();
+        assertThat(response.getShippingFee()).isEqualByComparingTo("40000");
+        assertThat(response.getServiceName()).isEqualTo("Bike");
     }
 
     @Test

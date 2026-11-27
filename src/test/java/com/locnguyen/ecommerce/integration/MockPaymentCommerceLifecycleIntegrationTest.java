@@ -16,7 +16,9 @@ import com.locnguyen.ecommerce.domains.inventory.service.InventoryScheduler;
 import com.locnguyen.ecommerce.domains.inventory.service.InventoryService;
 import com.locnguyen.ecommerce.domains.inventory.dto.ReserveStockRequest;
 import com.locnguyen.ecommerce.domains.inventory.repository.WarehouseRepository;
+import com.locnguyen.ecommerce.domains.carrier.dto.DeliveryEstimateResponse;
 import com.locnguyen.ecommerce.domains.order.dto.CreateOrderRequest;
+import com.locnguyen.ecommerce.domains.order.entity.OrderDeliverySla;
 import com.locnguyen.ecommerce.domains.order.dto.OrderFilter;
 import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
@@ -546,6 +548,24 @@ class MockPaymentCommerceLifecycleIntegrationTest {
                     assertThat(item.getNetLineAmount()).isEqualByComparingTo(
                             item.getLineTotal().subtract(order.getDiscountAmount()));
                 });
+    }
+
+    @Test
+    void checkoutDeliverySla_roundTripsThroughMariaDbAndPreservesPayableAmounts() {
+        CommerceFixture fixture = createFixture();
+        addProductToCart(fixture);
+        OrderResponse created = checkout(fixture);
+        assertThat(created.getDeliveryEstimate()).isNull();
+
+        var stored = orderRepository.findById(created.getId()).orElseThrow();
+        stored.setDeliverySla(new OrderDeliverySla("TEST-SERVICE", 1, 3));
+        orderRepository.saveAndFlush(stored);
+        entityManager.clear();
+
+        var reloaded = orderService.getOrderById(created.getId(), fixture.customer());
+        assertThat(reloaded.getDeliveryEstimate()).isEqualTo(DeliveryEstimateResponse.configuredSla("TEST-SERVICE", 1, 3));
+        assertThat(reloaded.getTotalAmount()).isEqualByComparingTo(created.getTotalAmount());
+        assertThat(reloaded.getShippingFee()).isEqualByComparingTo(created.getShippingFee());
     }
 
     @Test

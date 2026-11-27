@@ -12,6 +12,7 @@ import com.locnguyen.ecommerce.domains.admin.dto.AdminOrderListItemResponse;
 import com.locnguyen.ecommerce.domains.auditlog.enums.AuditAction;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.carrier.dto.CheckoutCarrierQuoteResponse;
+import com.locnguyen.ecommerce.domains.carrier.dto.DeliveryEstimateResponse;
 import com.locnguyen.ecommerce.domains.carrier.service.CarrierCheckoutService;
 import com.locnguyen.ecommerce.domains.cart.entity.Cart;
 import com.locnguyen.ecommerce.domains.cart.entity.CartItem;
@@ -40,6 +41,7 @@ import com.locnguyen.ecommerce.domains.order.dto.OrderListItemResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderPreviewResponse;
 import com.locnguyen.ecommerce.domains.order.dto.OrderResponse;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
+import com.locnguyen.ecommerce.domains.order.entity.OrderDeliverySla;
 import com.locnguyen.ecommerce.domains.order.entity.OrderItem;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
@@ -723,6 +725,7 @@ public class OrderServiceImpl implements OrderService {
             order.setCarrierCode(null);
             order.setCarrierName(null);
             order.setCarrierProviderType(null);
+            order.setDeliverySla(null);
             order.setShippingFee(BigDecimal.ZERO);
             order.setTotalAmount(order.getSubTotal().subtract(order.getDiscountAmount()));
             return null;
@@ -733,6 +736,9 @@ public class OrderServiceImpl implements OrderService {
         order.setCarrierCode(quote.getCarrierCode());
         order.setCarrierName(quote.getCarrierName());
         order.setCarrierProviderType(quote.getCarrierProviderType());
+        var estimate = quote.getDeliveryEstimate();
+        order.setDeliverySla(estimate == null ? null : new OrderDeliverySla(
+                estimate.serviceCode(), estimate.minBusinessDays(), estimate.maxBusinessDays()));
         order.setShippingFee(quote.getShippingFee() != null ? quote.getShippingFee() : BigDecimal.ZERO);
         order.setTotalAmount(order.getSubTotal()
                 .subtract(order.getDiscountAmount())
@@ -819,6 +825,7 @@ public class OrderServiceImpl implements OrderService {
                 .carrierName(order.getCarrierName())
                 .carrierProviderType(order.getCarrierProviderType())
                 .shippingServiceName(quote != null ? quote.getServiceName() : null)
+                .deliveryEstimate(quote != null ? quote.getDeliveryEstimate() : null)
                 .paymentMethod(order.getPaymentMethod())
                 .subTotal(order.getSubTotal())
                 .discountAmount(order.getDiscountAmount())
@@ -853,6 +860,7 @@ public class OrderServiceImpl implements OrderService {
                 .carrierCode(order.getCarrierCode())
                 .carrierName(order.getCarrierName())
                 .carrierProviderType(order.getCarrierProviderType())
+                .deliveryEstimate(savedDeliveryEstimate(order))
                 .subTotal(order.getSubTotal())
                 .discountAmount(order.getDiscountAmount())
                 .shippingFee(order.getShippingFee())
@@ -862,6 +870,12 @@ public class OrderServiceImpl implements OrderService {
                 .items(orderMapper.toItemResponses(items))
                 .createdAt(order.getCreatedAt())
                 .build();
+    }
+
+    private DeliveryEstimateResponse savedDeliveryEstimate(Order order) {
+        OrderDeliverySla snapshot = order.getDeliverySla();
+        return snapshot == null ? null : DeliveryEstimateResponse.configuredSla(
+                snapshot.getServiceCode(), snapshot.getMinBusinessDays(), snapshot.getMaxBusinessDays());
     }
 
     private OrderResponse buildAdminOrderResponse(Order order) {

@@ -73,6 +73,7 @@ public class AhamoveMapper {
                 .fee(fee)
                 .currency("VND")
                 .serviceName(selected.getServiceId())
+                .serviceCode(selected.getServiceId())
                 .build();
     }
 

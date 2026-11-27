@@ -90,6 +90,9 @@ public class SecurityConfig {
             "/api/v1/products/**",
             "/api/v1/categories/**",
             "/api/v1/brands/**",
+            "/api/v1/policies/shipping",
+            "/api/v1/locations/provinces",
+            "/api/v1/locations/provinces/*/wards",
             // Mock payment completion — dev/test only, enabled via app.payment.mock.enabled
             "/api/v1/payments/mock/**",
     };
