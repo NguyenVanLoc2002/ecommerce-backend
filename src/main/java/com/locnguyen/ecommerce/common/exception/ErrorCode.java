@@ -55,6 +55,7 @@ public enum ErrorCode {
             "Slug is already in use"),
 
     // ─── Product ────────────────────────────────────────────────────────────
+    PRODUCT_BADGE_CODE_ALREADY_EXISTS(HttpStatus.CONFLICT, "PRODUCT_BADGE_CODE_ALREADY_EXISTS", "Product badge code already exists"),
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "Product not found"),
     PRODUCT_MEDIA_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_MEDIA_NOT_FOUND", "Product media not found"),
     STORAGE_OBJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "STORAGE_OBJECT_NOT_FOUND", "Uploaded object not found"),

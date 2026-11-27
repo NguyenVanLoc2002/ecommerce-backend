@@ -2,6 +2,7 @@ package com.locnguyen.ecommerce.domains.product.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
+import com.locnguyen.ecommerce.domains.productbadge.dto.ProductBadgeModels.Display;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,7 +20,7 @@ import java.util.UUID;
  * Contains computed price range and thumbnail — no variant/media details.
  */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 @Jacksonized
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -36,6 +37,7 @@ public class ProductListItemResponse implements Serializable {
     private final BigDecimal maxPrice;
     private final ProductStatus status;
     private final boolean featured;
+    private final Display badge;
     private final String brandName;
     private final List<String> categoryNames;
     private final LocalDateTime createdAt;

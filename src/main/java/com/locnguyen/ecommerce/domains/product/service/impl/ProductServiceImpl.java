@@ -25,6 +25,7 @@ import com.locnguyen.ecommerce.domains.product.service.ProductSearchTextBuilder;
 import com.locnguyen.ecommerce.domains.product.service.ProductService;
 import com.locnguyen.ecommerce.domains.product.specification.ProductSpecification;
 import com.locnguyen.ecommerce.domains.productvariant.repository.ProductVariantRepository;
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -95,7 +96,7 @@ public class ProductServiceImpl implements ProductService {
             throw new AppException(ErrorCode.PRODUCT_INACTIVE);
         }
 
-        return toDetailResponse(product);
+        return toDetailResponse(product, productMapper.resolveReturnPolicy(product));
     }
 
     /**
@@ -112,7 +113,7 @@ public class ProductServiceImpl implements ProductService {
             throw new AppException(ErrorCode.PRODUCT_INACTIVE);
         }
 
-        return toDetailResponse(product);
+        return toDetailResponse(product, productMapper.resolveReturnPolicy(product));
     }
 
     // ─── Admin CRUD ────────────────────────────────────────────────────────────
@@ -151,6 +152,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Caching(evict = {
             @CacheEvict(value = AppConstants.CACHE_PRODUCT_DETAIL, key = "#id"),
+            @CacheEvict(value = AppConstants.CACHE_PRODUCT_DETAIL, key = "'slug:' + #result.slug"),
             @CacheEvict(value = AppConstants.CACHE_PRODUCTS, allEntries = true)
     })
     @Transactional
@@ -302,7 +304,12 @@ public class ProductServiceImpl implements ProductService {
     }
 
     private ProductDetailResponse toDetailResponse(Product product) {
+        return toDetailResponse(product, null);
+    }
+
+    private ProductDetailResponse toDetailResponse(Product product, ReturnPolicy returnPolicy) {
         return ProductDetailResponse.builder()
+                .returnPolicy(returnPolicy)
                 .id(product.getId())
                 .name(product.getName())
                 .slug(product.getSlug())

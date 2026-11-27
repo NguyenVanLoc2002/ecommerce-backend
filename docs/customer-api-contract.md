@@ -433,14 +433,16 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - Access: public
 - Description: get published product detail
 - Response:
-  - `ApiResponse<ProductDetailResponse>`
+  - `ApiResponse<ProductDetailResponse>` with the same effective `returnPolicy` as the slug lookup.
 
 ### GET `/api/v1/products/slug/{slug}`
 
 - Access: public
 - Description: resolve one published product by its canonical storefront slug.
 - Response:
-  - `ApiResponse<ProductDetailResponse>`
+  - `ApiResponse<ProductDetailResponse>` includes `returnPolicy` for discretionary returns. It is the strictest configured policy across the product and its non-deleted categories. If no policy is configured, the value is `REVIEW_REQUIRED`.
+  - Values are `STANDARD`, `SEALED_ONLY`, `REVIEW_REQUIRED`, and `CUSTOMIZED_FINAL_SALE`. The checkout flow evaluates the current catalog policy and the order retains the snapshot captured at purchase. Product faults and fulfillment errors follow the order return flow.
+  - Clients can omit the policy preview when reading an older response without this field.
 - Errors:
   - `PRODUCT_NOT_FOUND` when no active product has the slug
   - `PRODUCT_INACTIVE` when the matching product is not published
@@ -979,3 +981,11 @@ See [carrier lifecycle and exception contract](carrier-integration-flow.md#shipm
 Shipment responses add nullable `attention` (DELIVERY_FAILED, CARRIER_CANCELLED,
 RETURNED_HANDLING), available to Admin and the owning Customer. Booking does not
 mark the order SHIPPED; pickup does. COD collection remains a separate action.
+
+### Size guide and assigned catalog badges
+
+- Both product-detail lookups may return `sizeGuide`. It contains `id`, `name` and `content` with `measurement` (`BODY` or `GARMENT`), ordered `columns`, ordered `rows`, and optional HTTPS `measurementImageUrl` and `notes`.
+- Each column uses `{ key, label, unit }` with unit `CM`, `IN` or `KG`. Each row uses `{ size, values }`, keyed by column key. A cell `{ min, max? }` is either a fixed value or an inclusive range. Absence of `sizeGuide` hides the action. This information is advisory. Cart and inventory continue using catalog variant IDs.
+- The server resolves active guides in order Product → Category + Brand → Brand → Category → Shop default. Within a category scope the lower configured assignment priority wins, followed by category sort order and slug.
+- Product detail may contain `badges` with up to two `{ code, label }` entries. Product list items may contain a single `badge` of the same shape. These are explicitly assigned and active. Price and inventory states come from their own contract. `featured` continues to control product discovery.
+- The product detail shipping note describes when the existing quote is calculated. `CheckoutCarrierQuoteResponse` exposes `shippingFee` and no ETA field. `estimatedDeliveryDate` belongs to shipment tracking. VAT applicability is not available in the catalog, order or invoice contract, so PDP omits an inclusive-VAT label.

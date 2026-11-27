@@ -3,6 +3,8 @@ package com.locnguyen.ecommerce.domains.product.service;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.brand.mapper.BrandMapper;
 import com.locnguyen.ecommerce.domains.brand.repository.BrandRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.locnguyen.ecommerce.domains.category.entity.Category;
 import com.locnguyen.ecommerce.domains.category.mapper.CategoryMapper;
 import com.locnguyen.ecommerce.domains.category.repository.CategoryRepository;
 import com.locnguyen.ecommerce.domains.product.dto.ProductFilter;
@@ -16,6 +18,7 @@ import com.locnguyen.ecommerce.domains.product.mapper.ProductVariantMapper;
 import com.locnguyen.ecommerce.domains.product.repository.ProductRepository;
 import com.locnguyen.ecommerce.domains.product.service.impl.ProductServiceImpl;
 import com.locnguyen.ecommerce.domains.productvariant.repository.ProductVariantRepository;
+import com.locnguyen.ecommerce.domains.returns.enums.ReturnPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -165,6 +168,46 @@ class ProductSearchRoutingTest {
 
         assertThat(response.getMinPrice()).isEqualByComparingTo("250000");
         assertThat(response.getMaxPrice()).isEqualByComparingTo("320000");
+    }
+
+    @Test
+    void publicDetail_returnsEffectiveReturnPolicyBySlugAndId() {
+        Product product = new Product();
+        UUID id = UUID.randomUUID();
+        product.setSlug("policy-product");
+        product.setStatus(ProductStatus.PUBLISHED);
+        product.setReturnPolicy(ReturnPolicy.STANDARD);
+
+        Category category = new Category();
+        category.setReturnPolicy(ReturnPolicy.SEALED_ONLY);
+        Category deletedCategory = new Category();
+        deletedCategory.setReturnPolicy(ReturnPolicy.CUSTOMIZED_FINAL_SALE);
+        deletedCategory.softDelete("test");
+        product.getCategories().add(category);
+        product.getCategories().add(deletedCategory);
+
+        when(productRepository.findDetailBySlug(product.getSlug())).thenReturn(Optional.of(product));
+        when(productRepository.findDetailById(id)).thenReturn(Optional.of(product));
+        when(productMapper.resolveReturnPolicy(product)).thenCallRealMethod();
+
+        ProductDetailResponse bySlug = service.getProductBySlug(product.getSlug());
+        ProductDetailResponse byId = service.getProductById(id);
+        assertThat(bySlug.getReturnPolicy()).isEqualTo(ReturnPolicy.SEALED_ONLY);
+        assertThat(byId.getReturnPolicy()).isEqualTo(ReturnPolicy.SEALED_ONLY);
+        assertThat(new ObjectMapper().valueToTree(bySlug).get("returnPolicy").textValue())
+                .isEqualTo("SEALED_ONLY");
+    }
+
+    @Test
+    void publicDetail_requiresReviewWhenPolicyIsUnconfigured() {
+        Product product = new Product();
+        product.setSlug("unconfigured-product");
+        product.setStatus(ProductStatus.PUBLISHED);
+        when(productRepository.findDetailBySlug(product.getSlug())).thenReturn(Optional.of(product));
+        when(productMapper.resolveReturnPolicy(product)).thenCallRealMethod();
+
+        assertThat(service.getProductBySlug(product.getSlug()).getReturnPolicy())
+                .isEqualTo(ReturnPolicy.REVIEW_REQUIRED);
     }
 
     private static <T> T mock(Class<T> type) {

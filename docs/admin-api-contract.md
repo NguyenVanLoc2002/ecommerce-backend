@@ -2195,3 +2195,27 @@ See [carrier lifecycle and exception contract](carrier-integration-flow.md#shipm
 Shipment responses add nullable `attention` (DELIVERY_FAILED, CARRIER_CANCELLED,
 RETURNED_HANDLING), available to Admin and the owning Customer. Booking does not
 mark the order SHIPPED; pickup does. COD collection remains a separate action.
+
+## Catalog size guides and product badges
+
+Requires `ADMIN` or `SUPER_ADMIN`. Requests and responses use the existing API envelope. List endpoints use `page` and `size`.
+
+| Method and route under `/api/v1/admin` | Behavior |
+| --- | --- |
+| `GET /size-guides` | Paged summaries with optional `search` by name |
+| `GET /size-guides/{id}` | Guide name, state, version and full content |
+| `POST /size-guides`, `PUT /size-guides/{id}` | Create or update a guide. PUT requires current `version` |
+| `POST /size-guides/{id}/copy` | Copy content as an inactive guide without assignments |
+| `GET /size-guides/{id}/assignments` | Assigned scopes for this guide with IDs and available target names |
+| `PUT /size-guides/{id}/assignments` | Assign an active guide or atomically replace the guide in an existing scope |
+| `DELETE /size-guides/{id}/assignments/{key}` | Remove the assignment if it still belongs to this guide |
+| `GET /product-badges`, `GET /product-badges/{id}` | Paged list or single definition |
+| `POST /product-badges`, `PUT /product-badges/{id}` | Save code, label, active state and priority. PUT requires current `version` |
+| `GET /product-badges/{id}/products` | Paged assigned products |
+| `PUT /product-badges/{id}/products/{productId}`, `DELETE /product-badges/{id}/products/{productId}` | Idempotent assignment and removal |
+
+Size guide payload is `{ name, active, version?, content }`. Content has ordered `columns` and `rows`, `measurement: BODY | GARMENT`, optional `measurementImageUrl` (public HTTPS), and optional `notes`. Column shape is `{ key, label, unit }` with `CM | IN | KG`. Row shape is `{ size, values: { [columnKey]: { min, max? } } }`. Each size has one value per column. Limits are 12 columns and 40 rows. Reversed ranges, duplicate column keys and duplicate size labels fail validation.
+
+Assignment payload is `{ scope, productId?, categoryId?, brandId?, priority }` with `PRODUCT`, `CATEGORY_BRAND`, `BRAND`, `CATEGORY` and `SHOP`. Supply the target IDs for the selected scope. A lower priority wins within a scope when a product has more than one matching category. Reassigning a scope replaces its previous guide. Disabling a guide retains assignments for reactivation and the storefront falls back to the next eligible scope.
+
+A badge uses `{ code, label, active, priority, version? }`. Codes must be unique and use uppercase letters, numbers or underscores. Existing commerce-state codes are reserved. The storefront excludes inactive badges and sorts by priority ascending, then code. Creation and assignment are manual. No default badge is automatically linked to a product.

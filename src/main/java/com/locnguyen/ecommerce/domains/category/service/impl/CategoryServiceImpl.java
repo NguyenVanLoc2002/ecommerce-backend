@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -109,7 +110,11 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    @CacheEvict(value = AppConstants.CACHE_CATEGORIES, allEntries = true)
+    @Caching(evict = {
+            @CacheEvict(value = AppConstants.CACHE_CATEGORIES, allEntries = true),
+            @CacheEvict(value = AppConstants.CACHE_PRODUCT_DETAIL, allEntries = true,
+                    condition = "#request.returnPolicy != null")
+    })
     @Transactional
     public CategoryResponse updateCategory(UUID id, UpdateCategoryRequest request) {
         Category category = findOrThrow(id);
@@ -166,7 +171,7 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    @CacheEvict(value = AppConstants.CACHE_CATEGORIES, allEntries = true)
+    @CacheEvict(value = {AppConstants.CACHE_CATEGORIES, AppConstants.CACHE_PRODUCT_DETAIL}, allEntries = true)
     @Transactional
     public void deleteCategory(UUID id) {
         Category category = findOrThrow(id);

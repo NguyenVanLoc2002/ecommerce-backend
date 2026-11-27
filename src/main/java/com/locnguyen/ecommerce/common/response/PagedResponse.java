@@ -44,6 +44,10 @@ public class PagedResponse<T> {
         this.hasPrevious = page > 0;
     }
 
+    public <R> PagedResponse<R> map(java.util.function.Function<T, R> mapper) {
+        return new PagedResponse<>(items.stream().map(mapper).toList(), page, size, totalItems, totalPages);
+    }
+
     public static <T> PagedResponse<T> of(Page<T> page) {
         return new PagedResponse<>(
                 page.getContent(),
