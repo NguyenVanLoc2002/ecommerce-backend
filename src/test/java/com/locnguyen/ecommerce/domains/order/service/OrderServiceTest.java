@@ -6,6 +6,7 @@ import com.locnguyen.ecommerce.domains.address.entity.Address;
 import com.locnguyen.ecommerce.domains.address.repository.AddressRepository;
 import com.locnguyen.ecommerce.domains.auditlog.service.AuditLogService;
 import com.locnguyen.ecommerce.domains.carrier.dto.CheckoutCarrierQuoteResponse;
+import com.locnguyen.ecommerce.domains.carrier.dto.DeliveryEstimateResponse;
 import com.locnguyen.ecommerce.domains.carrier.enums.CarrierProviderType;
 import com.locnguyen.ecommerce.domains.carrier.service.CarrierCheckoutService;
 import com.locnguyen.ecommerce.domains.cart.entity.Cart;
@@ -711,9 +712,10 @@ class OrderServiceTest {
                             .shippingFee(new BigDecimal("25000"))
                             .currency("VND")
                             .serviceName("BIKE")
+                            .deliveryEstimate(DeliveryEstimateResponse.configuredSla("BIKE", 1, 2))
                             .build());
 
-            orderService.createOrder(cust, createRequest(uuid(10), "COD", carrierId), "idem-key");
+            OrderResponse response = orderService.createOrder(cust, createRequest(uuid(10), "COD", carrierId), "idem-key");
 
             ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
             verify(orderRepository).save(captor.capture());
@@ -722,6 +724,8 @@ class OrderServiceTest {
             assertThat(captor.getValue().getCarrierName()).isEqualTo("AhaMove");
             assertThat(captor.getValue().getCarrierProviderType()).isEqualTo(CarrierProviderType.AHAMOVE);
             assertThat(captor.getValue().getShippingFee()).isEqualByComparingTo("25000");
+            assertThat(captor.getValue().getDeliverySla().getMaxBusinessDays()).isEqualTo(2);
+            assertThat(response.getDeliveryEstimate()).isEqualTo(DeliveryEstimateResponse.configuredSla("BIKE", 1, 2));
             assertThat(captor.getValue().getTotalAmount()).isEqualByComparingTo("125000");
         }
 
@@ -892,22 +896,24 @@ class OrderServiceTest {
             when(carrierCheckoutService.quote(eq(carrierId), any(Order.class)))
                     .thenReturn(CheckoutCarrierQuoteResponse.builder()
                             .carrierId(carrierId)
-                            .carrierCode("MOCK")
-                            .carrierName("Mock Express")
-                            .carrierProviderType(CarrierProviderType.MOCK)
+                            .carrierCode("AHAMOVE")
+                            .carrierName("Ahamove")
+                            .carrierProviderType(CarrierProviderType.AHAMOVE)
                             .shippingFee(new BigDecimal("30000"))
                             .currency("VND")
-                            .serviceName("Mock same-day")
+                            .serviceName("Bike")
+                            .deliveryEstimate(DeliveryEstimateResponse.configuredSla("SGN-BIKE", 1, 2))
                             .build());
 
             OrderPreviewResponse response = orderService.previewOrder(
                     cust, createRequest(uuid(10), "ONLINE", carrierId));
 
             assertThat(response.getCarrierId()).isEqualTo(carrierId);
-            assertThat(response.getCarrierCode()).isEqualTo("MOCK");
+            assertThat(response.getCarrierCode()).isEqualTo("AHAMOVE");
             assertThat(response.getShippingFee()).isEqualByComparingTo("30000");
             assertThat(response.getTotalAmount()).isEqualByComparingTo("330000");
-            assertThat(response.getShippingServiceName()).isEqualTo("Mock same-day");
+            assertThat(response.getShippingServiceName()).isEqualTo("Bike");
+            assertThat(response.getDeliveryEstimate()).isEqualTo(DeliveryEstimateResponse.configuredSla("SGN-BIKE", 1, 2));
         }
 
         @Test

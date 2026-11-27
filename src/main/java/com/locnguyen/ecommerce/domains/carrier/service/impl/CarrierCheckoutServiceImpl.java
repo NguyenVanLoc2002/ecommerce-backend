@@ -4,6 +4,7 @@ import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.domains.carrier.dto.CheckoutCarrierOptionResponse;
 import com.locnguyen.ecommerce.domains.carrier.dto.CheckoutCarrierQuoteResponse;
+import com.locnguyen.ecommerce.domains.carrier.dto.DeliveryEstimateResponse;
 import com.locnguyen.ecommerce.domains.carrier.entity.Carrier;
 import com.locnguyen.ecommerce.domains.carrier.entity.CarrierConfig;
 import com.locnguyen.ecommerce.domains.carrier.enums.CarrierProviderType;
@@ -15,6 +16,7 @@ import com.locnguyen.ecommerce.domains.carrier.provider.ShippingRateResult;
 import com.locnguyen.ecommerce.domains.carrier.repository.CarrierConfigRepository;
 import com.locnguyen.ecommerce.domains.carrier.repository.CarrierRepository;
 import com.locnguyen.ecommerce.domains.carrier.service.CarrierCheckoutService;
+import com.locnguyen.ecommerce.domains.carrier.service.CheckoutDeliverySla;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,7 @@ public class CarrierCheckoutServiceImpl implements CarrierCheckoutService {
     private final CarrierRepository carrierRepository;
     private final CarrierConfigRepository carrierConfigRepository;
     private final CarrierProviderRegistry carrierProviderRegistry;
+    private final CheckoutDeliverySla deliverySla;
 
     @Override
     @Transactional(readOnly = true)
@@ -57,7 +60,18 @@ public class CarrierCheckoutServiceImpl implements CarrierCheckoutService {
                 .shippingFee(result.fee())
                 .currency(result.currency())
                 .serviceName(result.serviceName())
+                .deliveryEstimate(resolveDeliveryEstimate(context, result, order))
                 .build();
+    }
+
+    private DeliveryEstimateResponse resolveDeliveryEstimate(
+            CarrierProviderContext context, ShippingRateResult rate, Order order) {
+        if (context.config() == null || context.carrier().getProviderType() == CarrierProviderType.MOCK) {
+            return null;
+        }
+        return deliverySla.resolve(context.carrier().getCode(), rate.serviceCode(),
+                        context.config().getDefaultPickupWarehouseId(), order.getShippingCity(), order.getShippingDistrict())
+                .orElse(null);
     }
 
     private boolean isAvailableForCheckout(Carrier carrier) {

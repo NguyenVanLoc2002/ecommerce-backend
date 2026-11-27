@@ -1,6 +1,7 @@
 package com.locnguyen.ecommerce.domains.order.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.locnguyen.ecommerce.domains.carrier.dto.DeliveryEstimateResponse;
 import com.locnguyen.ecommerce.domains.carrier.enums.CarrierProviderType;
 import com.locnguyen.ecommerce.domains.order.enums.OrderStatus;
 import com.locnguyen.ecommerce.domains.order.enums.PaymentMethod;
@@ -48,6 +49,7 @@ public class OrderResponse {
     private final String carrierCode;
     private final String carrierName;
     private final CarrierProviderType carrierProviderType;
+    private final DeliveryEstimateResponse deliveryEstimate;
 
     // Pricing
     private final BigDecimal subTotal;

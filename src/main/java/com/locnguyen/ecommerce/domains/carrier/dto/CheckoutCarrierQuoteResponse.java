@@ -1,5 +1,6 @@
 package com.locnguyen.ecommerce.domains.carrier.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.locnguyen.ecommerce.domains.carrier.enums.CarrierProviderType;
 import lombok.Builder;
 import lombok.Getter;
@@ -17,4 +18,6 @@ public class CheckoutCarrierQuoteResponse {
     private final BigDecimal shippingFee;
     private final String currency;
     private final String serviceName;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private final DeliveryEstimateResponse deliveryEstimate;
 }

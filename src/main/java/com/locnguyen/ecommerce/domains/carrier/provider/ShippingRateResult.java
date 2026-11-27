@@ -8,5 +8,6 @@ import java.math.BigDecimal;
 public record ShippingRateResult(
         BigDecimal fee,
         String currency,
-        String serviceName
+        String serviceName,
+        String serviceCode
 ) {}

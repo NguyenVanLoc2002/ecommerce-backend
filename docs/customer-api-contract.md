@@ -543,6 +543,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
 - `OrderPreviewResponse`
   - `carrierId`, `carrierCode`, `carrierName`, `carrierProviderType`
   - `shippingServiceName`
+  - optional `deliveryEstimate` (configured working-day range from carrier handover)
   - `paymentMethod`
   - `subTotal`, `discountAmount`, `shippingFee`, `totalAmount`
   - `voucherCode`, `customerNote`
@@ -580,7 +581,7 @@ These non-admin paths exist in code but are admin/staff endpoints, not customer 
     - resolves the carrier through `CarrierCheckoutService`
     - calculates shipping fee server-side via the provider abstraction
     - applies the quote to `shippingFee` and `totalAmount`
-    - returns a carrier snapshot plus optional `shippingServiceName`
+    - returns a carrier snapshot plus optional `shippingServiceName` and `deliveryEstimate`
   - when `voucherCode` is provided, the backend validates it against the active cart and returns the calculated discount in `discountAmount`
 
 ### POST `/api/v1/orders`
@@ -988,4 +989,8 @@ mark the order SHIPPED; pickup does. COD collection remains a separate action.
 - Each column uses `{ key, label, unit }` with unit `CM`, `IN` or `KG`. Each row uses `{ size, values }`, keyed by column key. A cell `{ min, max? }` is either a fixed value or an inclusive range. Absence of `sizeGuide` hides the action. This information is advisory. Cart and inventory continue using catalog variant IDs.
 - The server resolves active guides in order Product → Category + Brand → Brand → Category → Shop default. Within a category scope the lower configured assignment priority wins, followed by category sort order and slug.
 - Product detail may contain `badges` with up to two `{ code, label }` entries. Product list items may contain a single `badge` of the same shape. These are explicitly assigned and active. Price and inventory states come from their own contract. `featured` continues to control product discovery.
-- The product detail shipping note describes when the existing quote is calculated. `CheckoutCarrierQuoteResponse` exposes `shippingFee` and no ETA field. `estimatedDeliveryDate` belongs to shipment tracking. VAT applicability is not available in the catalog, order or invoice contract, so PDP omits an inclusive-VAT label.
+- The product detail shipping note describes when the existing quote is calculated. The checkout quote exposes `shippingFee` and an optional approved `deliveryEstimate` sourced from an explicitly matched SLA. `estimatedDeliveryDate` belongs to shipment tracking. VAT applicability is not available in the catalog, order or invoice contract, so PDP omits an inclusive-VAT label.
+
+### Checkout delivery estimates
+
+`POST /api/v1/orders/preview` and order detail may return `deliveryEstimate` with `serviceCode`, `source: CONFIGURED_SLA`, `basis: CARRIER_HANDOVER`, `minBusinessDays` and `maxBusinessDays`. The field is omitted when no approved SLA matches. A persisted order reads its original snapshot. It is an estimate after handover and separate from order handling time or shipment tracking. The client continues using the existing quote inputs and Backend totals. [Configuration and rollout](issue-88-delivery-estimates.md)

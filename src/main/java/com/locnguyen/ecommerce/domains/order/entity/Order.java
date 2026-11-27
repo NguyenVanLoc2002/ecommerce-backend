@@ -101,6 +101,9 @@ public class Order extends BaseEntity {
     @Column(name = "carrier_provider_type", length = 100)
     private CarrierProviderType carrierProviderType;
 
+    @Embedded
+    private OrderDeliverySla deliverySla;
+
     // ─── Pricing ────────────────────────────────────────────────────────────
 
     @Column(name = "sub_total", precision = 18, scale = 2, nullable = false)
