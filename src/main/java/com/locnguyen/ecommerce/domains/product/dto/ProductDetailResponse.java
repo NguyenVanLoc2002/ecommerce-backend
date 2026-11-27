@@ -7,12 +7,14 @@ import com.locnguyen.ecommerce.domains.brand.dto.BrandResponse;
 import com.locnguyen.ecommerce.domains.category.dto.CategoryResponse;
 import com.locnguyen.ecommerce.domains.product.enums.ProductStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
+import com.locnguyen.ecommerce.domains.sizeguide.dto.SizeGuideModels.Display;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import com.locnguyen.ecommerce.domains.productbadge.dto.ProductBadgeModels;
 import java.util.List;
 
 import java.util.UUID;
@@ -20,7 +22,7 @@ import java.util.UUID;
  * Full product detail — includes brand, categories, variants (with attributes), and media.
  */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @Schema(description = "Product detail with variants and media")
 public class ProductDetailResponse implements Serializable {
@@ -29,6 +31,8 @@ public class ProductDetailResponse implements Serializable {
     private final UUID id;
     private final String name;
     private final ReturnPolicy returnPolicy;
+    private final Display sizeGuide;
+    private final List<ProductBadgeModels.Display> badges;
     private final String slug;
     private final String shortDescription;
     private final String description;
