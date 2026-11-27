@@ -4,7 +4,6 @@ import com.locnguyen.ecommerce.common.exception.AppException;
 import com.locnguyen.ecommerce.common.exception.ErrorCode;
 import com.locnguyen.ecommerce.domains.carrier.dto.CheckoutCarrierOptionResponse;
 import com.locnguyen.ecommerce.domains.carrier.dto.CheckoutCarrierQuoteResponse;
-import com.locnguyen.ecommerce.domains.carrier.dto.DeliveryEstimateResponse;
 import com.locnguyen.ecommerce.domains.carrier.entity.Carrier;
 import com.locnguyen.ecommerce.domains.carrier.entity.CarrierConfig;
 import com.locnguyen.ecommerce.domains.carrier.enums.CarrierProviderType;
@@ -41,7 +40,6 @@ class CarrierCheckoutServiceTest {
     @Mock CarrierConfigRepository carrierConfigRepository;
     @Mock CarrierProviderRegistry carrierProviderRegistry;
     @Mock CarrierProvider carrierProvider;
-    @Mock CheckoutDeliverySla deliverySla;
 
     @InjectMocks CarrierCheckoutServiceImpl carrierCheckoutService;
 
@@ -86,26 +84,20 @@ class CarrierCheckoutServiceTest {
     }
 
     @Test
-    void quote_resolvesSlaFromActualServiceAndSelectedAddressWithoutChangingFee() {
+    void quote_keepsServiceAndFeeWhenEtaIsUnverified() {
         Carrier carrier = carrier(uuid(9), "AHAMOVE", CarrierProviderType.AHAMOVE, CarrierStatus.ACTIVE);
         CarrierConfig config = new CarrierConfig();
         config.setEnabled(true);
         config.setDefaultPickupWarehouseId(uuid(11));
         Order order = new Order();
-        order.setShippingCity("Hồ Chí Minh");
-        order.setShippingDistrict("Quận 1");
-        var estimate = DeliveryEstimateResponse.configuredSla("SGN-BIKE", 1, 2);
         when(carrierRepository.findById(uuid(9))).thenReturn(Optional.of(carrier));
         when(carrierProviderRegistry.find(CarrierProviderType.AHAMOVE.name())).thenReturn(Optional.of(carrierProvider));
         when(carrierConfigRepository.findByCarrierId(uuid(9))).thenReturn(Optional.of(config));
         when(carrierProvider.calculateRate(any(), any())).thenReturn(ShippingRateResult.builder()
                 .fee(new BigDecimal("40000")).currency("VND").serviceName("Bike").serviceCode("SGN-BIKE").build());
-        when(deliverySla.resolve("AHAMOVE", "SGN-BIKE", uuid(11), "Hồ Chí Minh", "Quận 1"))
-                .thenReturn(Optional.of(estimate));
-
         var response = carrierCheckoutService.quote(uuid(9), order);
 
-        assertThat(response.getDeliveryEstimate()).isEqualTo(estimate);
+        assertThat(response.getDeliveryEstimate()).isNull();
         assertThat(response.getShippingFee()).isEqualByComparingTo("40000");
         assertThat(response.getServiceName()).isEqualTo("Bike");
     }

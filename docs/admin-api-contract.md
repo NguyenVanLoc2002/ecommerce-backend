@@ -2228,3 +2228,7 @@ Order detail may include the optional checkout delivery estimate captured at ord
 See [Shipping policy API](shipping-policy.md#api) for versioned publication, live visibility and permissions.
 
 See also [Vietnam province/ward lookup](address-catalog.md) for the independent reference-data APIs.
+
+See [shipping operating calendars](shipping-calendar.md) for calendar, audit and preview API contracts.
+
+See [delivery estimate rules](delivery-estimate-rules.md) for the two-level destination, priority and preview contract.
