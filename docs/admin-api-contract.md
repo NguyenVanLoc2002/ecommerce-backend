@@ -771,6 +771,18 @@ Carrier catalog and per-store carrier configuration used by shipment creation.
 
 ---
 
+### Shipping policy (#88)
+
+See [Shipping policy API](shipping-policy.md#api) for versioned publication, live visibility and permissions.
+
+See also [Vietnam province/ward lookup](address-catalog.md) for the independent reference-data APIs.
+
+See [shipping operating calendars](shipping-calendar.md) for calendar, audit and preview API contracts.
+
+See [delivery estimate rules](delivery-estimate-rules.md) for the two-level destination, priority and preview contract.
+
+Order detail may include the optional checkout delivery estimate captured at order creation. [Field semantics and Operations configuration](issue-88-delivery-estimates.md)
+
 ## 5. Inventory
 
 ### DTOs
@@ -2219,16 +2231,3 @@ Size guide payload is `{ name, active, version?, content }`. Content has ordered
 Assignment payload is `{ scope, productId?, categoryId?, brandId?, priority }` with `PRODUCT`, `CATEGORY_BRAND`, `BRAND`, `CATEGORY` and `SHOP`. Supply the target IDs for the selected scope. A lower priority wins within a scope when a product has more than one matching category. Reassigning a scope replaces its previous guide. Disabling a guide retains assignments for reactivation and the storefront falls back to the next eligible scope.
 
 A badge uses `{ code, label, active, priority, version? }`. Codes must be unique and use uppercase letters, numbers or underscores. Existing commerce-state codes are reserved. The storefront excludes inactive badges and sorts by priority ascending, then code. Creation and assignment are manual. No default badge is automatically linked to a product.
-
-Order detail may include the optional checkout delivery estimate captured at order creation. [Field semantics and Operations configuration](issue-88-delivery-estimates.md)
-
-
-## Shipping policy (#88)
-
-See [Shipping policy API](shipping-policy.md#api) for versioned publication, live visibility and permissions.
-
-See also [Vietnam province/ward lookup](address-catalog.md) for the independent reference-data APIs.
-
-See [shipping operating calendars](shipping-calendar.md) for calendar, audit and preview API contracts.
-
-See [delivery estimate rules](delivery-estimate-rules.md) for the two-level destination, priority and preview contract.
