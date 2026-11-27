@@ -30,3 +30,13 @@ Rates are fractions (0.08 for 8%). Start is inclusive and end is exclusive. Use 
 - The tax estimate is an interim record. It is not a final tax snapshot or an electronic invoice. Final transfer event, refund accounting, adjustment/replacement and production enablement require later validation.
 
 The read-only `GET /orders/{orderId}/final` returns the separate final snapshot. The internal capture method requires an approved transfer event ID, timestamp and reference. Locking the Order serializes final capture. Replaying the same evidence returns the same snapshot. No application event is bound to this boundary pending confirmation. `app.tax.finalization-enabled` defaults to false.
+
+## Dữ liệu kế toán và hóa đơn đã phát hành bên ngoài
+
+Contract có thêm các đường dẫn dưới `/api/v1/admin/tax/invoices/{invoiceId}`:
+
+- `GET /preparation` trả thông tin hóa đơn nội bộ, snapshot thuế chính thức và metadata hóa đơn đã ghi nhận, nếu có.
+- `GET /preparation.csv` xuất dòng giá, chiết khấu, nhóm thuế, VAT và tổng từ snapshot chính thức.
+- `PUT /external-record` lưu thông tin phát hành gồm `issuerReference`, `series`, `invoiceNumber`, `externalReference` và `issuedAt`. Retry cùng bằng chứng trả bản ghi đã có. Hóa đơn chỉ có một bản ghi gốc. Xung đột chứng từ trả 409.
+
+Quyền xem và ghi nhận độc lập với quyền cấu hình thuế. Cấp UUID qua `app.tax.invoices.readers` và `app.tax.invoices.recorders`. Bật ghi nhận qua `app.tax.invoices.recording-enabled`, mặc định tắt. Phần này chuẩn bị và đối soát dữ liệu. Việc ghi metadata không phát hành chứng từ điện tử và không thay đổi trạng thái của hóa đơn nội bộ. Quy trình chứng từ điều chỉnh/thay thế và quyết toán refund chưa được kết nối.

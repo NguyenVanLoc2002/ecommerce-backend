@@ -2,6 +2,7 @@ package com.locnguyen.ecommerce.domains.order.service.tax;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.locnguyen.ecommerce.common.exception.AppException;
+import com.locnguyen.ecommerce.domains.invoice.tax.TaxInvoiceDocuments;
 import com.locnguyen.ecommerce.domains.order.entity.Order;
 import com.locnguyen.ecommerce.domains.order.entity.OrderItem;
 import com.locnguyen.ecommerce.domains.order.service.tax.TaxInputs.*;
@@ -115,6 +116,29 @@ class VatConfigurationIntegrationTest {
                 .isInstanceOf(AppException.class).hasMessageContaining("different evidence");
         assertThat(config.audit("STANDARD_REDUCIBLE", 0)).hasSize(2);
         assertThat(config.get("STANDARD_REDUCIBLE").category().revision()).isEqualTo(2);
+
+        var documents = new TaxInvoiceDocuments(JdbcClient.create(jdbc), snapshot,
+                new TaxInvoiceDocuments.Settings(true, Set.of(), Set.of(adminId)), users);
+        UUID invoiceId = seedInvoice(order.getId());
+        assertThat(documents.preparation(invoiceId).snapshot()).isEqualTo(finalized);
+        assertThat(documents.exportCsv(invoiceId)).contains("invoice_code,order_id")
+                .contains("\"21600\",\"20000\",\"1600\"");
+        var invoiceEvidence = new TaxInvoiceDocuments.ExternalEvidence(
+                "test-issuer", "TEST", "00001", "external-test-1", evidence.transferredAt());
+        var external = tx.execute(status -> documents.record(invoiceId, invoiceEvidence));
+        assertThat(external.recordedBy()).isEqualTo(adminId);
+        var retry = tx.execute(status -> documents.record(invoiceId, invoiceEvidence));
+        assertThat(retry).isEqualTo(external);
+        assertThatThrownBy(() -> tx.execute(status -> documents.record(invoiceId,
+                new TaxInvoiceDocuments.ExternalEvidence("test-issuer", "TEST", "00002",
+                        "external-test-2", evidence.transferredAt()))))
+                .isInstanceOf(AppException.class).hasMessageContaining("already recorded");
+
+        var disabled = new TaxInvoiceDocuments(JdbcClient.create(jdbc), snapshot,
+                new TaxInvoiceDocuments.Settings(false, Set.of(adminId), Set.of(adminId)), users);
+        assertThat(disabled.preparation(invoiceId).canRecord()).isFalse();
+        assertThatThrownBy(() -> disabled.record(invoiceId, invoiceEvidence))
+                .isInstanceOf(AppException.class);
     }
 
     private static UserRepository authenticate(UUID id) {
@@ -163,5 +187,15 @@ class VatConfigurationIntegrationTest {
                 VALUES (?,?,?,'Fixture','0000000000','Test','Test','Test','Test',1630000,163000,21600,1488600,NOW(),NOW())
                 """, order, customer, order);
         return order;
+    }
+
+    private static UUID seedInvoice(UUID orderId) {
+        UUID invoice = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO invoices (id,order_id,invoice_code,customer_name,customer_email,billing_street,
+                    billing_ward,billing_district,billing_city,sub_total,total_amount,issued_at,created_at,updated_at)
+                VALUES (?,?,?,'Fixture','vat@example.test','Test','Test','Test','Test',1630000,1488600,NOW(),NOW(),NOW())
+                """, invoice.toString(), orderId.toString(), invoice.toString());
+        return invoice;
     }
 }
