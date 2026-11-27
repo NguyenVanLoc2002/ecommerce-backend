@@ -2221,3 +2221,10 @@ Assignment payload is `{ scope, productId?, categoryId?, brandId?, priority }` w
 A badge uses `{ code, label, active, priority, version? }`. Codes must be unique and use uppercase letters, numbers or underscores. Existing commerce-state codes are reserved. The storefront excludes inactive badges and sorts by priority ascending, then code. Creation and assignment are manual. No default badge is automatically linked to a product.
 
 Order detail may include the optional checkout delivery estimate captured at order creation. [Field semantics and Operations configuration](issue-88-delivery-estimates.md)
+
+
+## Shipping policy (#88)
+
+See [Shipping policy API](shipping-policy.md#api) for versioned publication, live visibility and permissions.
+
+See also [Vietnam province/ward lookup](address-catalog.md) for the independent reference-data APIs.

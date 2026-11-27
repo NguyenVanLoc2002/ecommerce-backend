@@ -994,3 +994,10 @@ mark the order SHIPPED; pickup does. COD collection remains a separate action.
 ### Checkout delivery estimates
 
 `POST /api/v1/orders/preview` and order detail may return `deliveryEstimate` with `serviceCode`, `source: CONFIGURED_SLA`, `basis: CARRIER_HANDOVER`, `minBusinessDays` and `maxBusinessDays`. The field is omitted when no approved SLA matches. A persisted order reads its original snapshot. It is an estimate after handover and separate from order handling time or shipment tracking. The client continues using the existing quote inputs and Backend totals. [Configuration and rollout](issue-88-delivery-estimates.md)
+
+
+## Shipping policy (#88)
+
+See [Shipping policy API](shipping-policy.md#api) for versioned publication, live visibility and permissions.
+
+See also [Vietnam province/ward lookup](address-catalog.md) for the independent reference-data APIs.
