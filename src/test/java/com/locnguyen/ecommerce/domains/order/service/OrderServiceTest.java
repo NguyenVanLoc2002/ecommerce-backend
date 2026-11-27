@@ -38,6 +38,7 @@ import com.locnguyen.ecommerce.domains.shipment.service.ShipmentService;
 import com.locnguyen.ecommerce.domains.shipment.service.ShipmentListSummary;
 import com.locnguyen.ecommerce.domains.shipment.enums.ShipmentStatus;
 import com.locnguyen.ecommerce.domains.order.service.impl.OrderServiceImpl;
+import com.locnguyen.ecommerce.domains.order.service.tax.OrderTaxEstimates;
 import com.locnguyen.ecommerce.domains.invoice.service.InvoiceService;
 import com.locnguyen.ecommerce.domains.idempotency.entity.IdempotencyKey;
 import com.locnguyen.ecommerce.domains.idempotency.enums.IdempotencyStatus;
@@ -112,6 +113,7 @@ class OrderServiceTest {
     @Mock ShipmentService shipmentService;
     @Mock InvoiceService invoiceService;
 
+    @Mock OrderTaxEstimates orderTaxEstimates;
     @InjectMocks OrderServiceImpl orderService;
 
     // ─── factories ───────────────────────────────────────────────────────────
